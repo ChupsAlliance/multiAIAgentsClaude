@@ -1,0 +1,103 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Base ─────────────────────────────────────────── */
+* { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  /* Reduce paint area — tell browser each layer is independent */
+  text-rendering: optimizeSpeed;
+}
+
+/* ── Layout isolation — prevents full-page reflow on small changes ── */
+#root {
+  contain: layout style;
+}
+
+/* ── Scrollbar ────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #1e1e1e; }
+::-webkit-scrollbar-thumb { background: #3e3e42; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #007acc; }
+
+/* ── GPU acceleration for scroll containers ──────── */
+.scrollbar-thin {
+  will-change: scroll-position;
+  contain: layout style;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── Prism.js VS Code Dark Theme ─────────────────── */
+code[class*="language-"],
+pre[class*="language-"] {
+  font-family: 'JetBrains Mono', Cascadia Code, Consolas, monospace;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  background: transparent;
+  color: #d4d4d4;
+  text-shadow: none;
+  white-space: pre;
+  word-spacing: normal;
+  word-break: normal;
+  tab-size: 2;
+}
+
+.token.comment, .token.prolog, .token.doctype, .token.cdata { color: #6a9955; }
+.token.punctuation { color: #d4d4d4; }
+.token.property, .token.tag, .token.boolean, .token.number, .token.constant, .token.symbol { color: #b5cea8; }
+.token.selector, .token.attr-name, .token.string, .token.char, .token.builtin { color: #ce9178; }
+.token.operator, .token.entity, .token.url { color: #d4d4d4; }
+.token.atrule, .token.attr-value, .token.keyword { color: #569cd6; }
+.token.function, .token.class-name { color: #dcdcaa; }
+.token.regex, .token.important, .token.variable { color: #9cdcfe; }
+.token.important, .token.bold { font-weight: bold; }
+.token.italic { font-style: italic; }
+
+/* ── Scroll ───────────────────────────────────────── */
+html { scroll-behavior: auto; }
+.scroll-mt-20 { scroll-margin-top: 5rem; }
+
+/* ── Terminal styles ──────────────────────────────── */
+.terminal-output {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: #d4d4d4;
+}
+.terminal-output .stdout { color: #d4d4d4; }
+.terminal-output .stderr { color: #f44747; }
+.terminal-output .info   { color: #007acc; }
+.terminal-output .success{ color: #4ec9b0; }
+
+/* ── Drag region for frameless window ────────────── */
+.drag-region { -webkit-app-region: drag; }
+.no-drag      { -webkit-app-region: no-drag; }
+
+/* ── Animations ─────────────────────────────────── */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+@keyframes progress-slide {
+  0%   { width: 0%; margin-left: 0%; }
+  50%  { width: 60%; margin-left: 20%; }
+  100% { width: 0%; margin-left: 100%; }
+}
+.animate-progress-slide {
+  animation: progress-slide 2s ease-in-out infinite;
+}

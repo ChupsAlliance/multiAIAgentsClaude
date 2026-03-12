@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities)",
+      "Bash(npm run build)",
+      "Bash(PATH=\"/c/Users/pnguyentrong.DESKTOP-S1NJLTS/.cargo/bin:$PATH\" cargo build)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill //PID 12948 //F)",
+      "Bash(taskkill //PID 16712 //F)",
+      "Bash(PATH=\"/c/Users/pnguyentrong.DESKTOP-S1NJLTS/.cargo/bin:$PATH\" npm run tauri dev)",
+      "Bash(taskkill //PID 27912 //F)",
+      "Bash(/c/Users/pnguyentrong.DESKTOP-S1NJLTS/.cargo/bin/cargo build)",
+      "Bash(export PATH=\"/c/Users/pnguyentrong.DESKTOP-S1NJLTS/.cargo/bin:$PATH\")",
+      "Bash(cargo build --manifest-path src-tauri/Cargo.toml)",
+      "Bash(npx vite build)"
+    ]
+  }
+}
