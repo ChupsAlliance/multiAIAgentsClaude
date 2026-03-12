@@ -7,8 +7,11 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "electron:dev": "vite build --config vite.config.electron.mjs && electron .",
+    "electron:build": "vite build --config vite.config.electron.mjs && electron-builder --win"
   },
+  "main": "electron/main.cjs",
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
@@ -29,6 +32,26 @@
     "autoprefixer": "^10.4.27",
     "postcss": "^8.5.8",
     "tailwindcss": "^3.4.19",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.internal.agent-teams-guide",
+    "productName": "Claude Agent Teams",
+    "directories": { "output": "release" },
+    "files": [
+      "dist-electron/**/*",
+      "electron/**/*",
+      "!electron/prompts/**/*"
+    ],
+    "extraResources": [
+      { "from": "electron/prompts", "to": "prompts" }
+    ],
+    "win": { "target": "nsis" },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

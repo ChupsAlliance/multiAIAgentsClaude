@@ -12,7 +12,18 @@
       "Bash(/c/Users/pnguyentrong.DESKTOP-S1NJLTS/.cargo/bin/cargo build)",
       "Bash(export PATH=\"/c/Users/pnguyentrong.DESKTOP-S1NJLTS/.cargo/bin:$PATH\")",
       "Bash(cargo build --manifest-path src-tauri/Cargo.toml)",
-      "Bash(npx vite build)"
+      "Bash(npx vite build)",
+      "Bash(ls \"d:\\\\multiAIAgentsClaude\\\\agent-teams-guide\\\\electron\"\" 2>/dev/null || dir \"d:multiAIAgentsClaudeagent-teams-guideelectron\"\")",
+      "Bash(node --check \"d:/multiAIAgentsClaude/agent-teams-guide/electron/ipc/mission.cjs\")",
+      "Bash(node -e \":*)",
+      "Bash(npm install)",
+      "Bash(npx vite build --config vite.config.electron.mjs)",
+      "Bash(node -c electron/main.cjs)",
+      "Bash(node -c electron/preload.cjs)",
+      "Bash(node -c electron/ipc/system.cjs)",
+      "Bash(node -c electron/ipc/files.cjs)",
+      "Bash(node -c electron/ipc/history.cjs)",
+      "Bash(node -c electron/ipc/mission.cjs)"
     ]
   }
 }
