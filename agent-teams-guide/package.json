@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "electron:dev": "vite build --config vite.config.electron.mjs && electron .",
-    "electron:build": "vite build --config vite.config.electron.mjs && electron-builder --win"
+    "electron:build": "vite build --config vite.config.electron.mjs && electron-builder --win",
+    "electron:patch": "node scripts/build-patch.cjs"
   },
   "main": "electron/main.cjs",
   "dependencies": {

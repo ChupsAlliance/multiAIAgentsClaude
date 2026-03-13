@@ -15,6 +15,7 @@ const ALLOWED_COMMANDS = [
   // mission
   'launch_mission', 'deploy_mission', 'continue_mission',
   'stop_mission', 'reset_mission', 'get_mission_state', 'update_agent_model',
+  'read_planning_template',
 ];
 
 // Events the backend can push to frontend (whitelist)

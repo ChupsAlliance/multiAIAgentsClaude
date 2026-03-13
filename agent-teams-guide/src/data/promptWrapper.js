@@ -6,13 +6,34 @@
  *   2. Claude CLI receives this prompt in -p (print) mode
  *   3. Lead agent analyzes, outputs JSON plan between === markers
  *   4. App parses plan → shows PlanReview UI
- *   5. User approves → Rust builds deploy prompt from .md template
+ *   5. User approves → backend builds deploy prompt from .md template
  *   6. New Claude CLI process spawns teammates via Agent tool
  *
- * Template: src/data/prompts/planning.md (edit that file to change the prompt)
+ * Template: electron/prompts/planning.md (editable at runtime after install)
+ * Fallback: src/data/prompts/planning.md (bundled, for Tauri mode)
  */
 
-import planningTemplate from './prompts/planning.md?raw'
+import bundledTemplate from './prompts/planning.md?raw'
+import { invoke } from '@tauri-apps/api/core'
+
+// Cache: load once from disk, reuse until app restart
+let _cachedTemplate = null
+
+/**
+ * Load planning template from disk (Electron) or use bundled (Tauri).
+ * Users can edit the .md file in the install directory and changes
+ * take effect on next app launch.
+ */
+async function loadPlanningTemplate() {
+  if (_cachedTemplate) return _cachedTemplate
+  try {
+    _cachedTemplate = await invoke('read_planning_template')
+  } catch {
+    // Fallback: Tauri mode or handler not available → use bundled
+    _cachedTemplate = bundledTemplate
+  }
+  return _cachedTemplate
+}
 
 /**
  * Detect if text contains Vietnamese characters.
@@ -30,9 +51,10 @@ function detectLanguageHint(text) {
   return null
 }
 
-export function buildMissionPrompt(requirement, options = {}) {
+export async function buildMissionPrompt(requirement, options = {}) {
   const { projectPath, teamHint, references = [] } = options
   const langHint = detectLanguageHint(requirement)
+  const planningTemplate = await loadPlanningTemplate()
 
   // Build reference materials section
   let referencesSection = ''

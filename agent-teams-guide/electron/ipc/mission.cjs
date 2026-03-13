@@ -1900,6 +1900,13 @@ module.exports = function registerMission(getMainWindow) {
     return null;
   });
 
+  // ── read_planning_template ─────────────────────────────────────
+  // Load planning.md from disk at RUNTIME so users can edit it
+  ipcMain.handle('read_planning_template', async () => {
+    const templatePath = promptPath('planning.md');
+    return fs.readFileSync(templatePath, 'utf8');
+  });
+
   // ── get_mission_state ──────────────────────────────────────────
   ipcMain.handle('get_mission_state', async () => {
     return missionState;

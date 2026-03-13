@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { Rocket, FolderOpen, Zap, History, Trash2, Cpu, Eye, EyeOff, Users, FlaskConical, Paperclip, FileText, Image, Folder, Upload, X, AtSign } from 'lucide-react'
 import { buildMissionPrompt } from '../../data/promptWrapper'
@@ -237,13 +237,15 @@ export function MissionLauncher({ onLaunch }) {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  const previewPrompt = useMemo(() => {
-    if (!requirement.trim()) return ''
-    return buildMissionPrompt(requirement, {
+  const [previewPrompt, setPreviewPrompt] = useState('')
+
+  useEffect(() => {
+    if (!requirement.trim()) { setPreviewPrompt(''); return }
+    buildMissionPrompt(requirement, {
       projectPath: projectPath || '(chưa chọn)',
       teamHint: `Use ${teamHint} teammates for this task`,
       references,
-    })
+    }).then(setPreviewPrompt).catch(() => setPreviewPrompt(''))
   }, [requirement, projectPath, teamHint, references])
 
   useEffect(() => {
@@ -262,7 +264,7 @@ export function MissionLauncher({ onLaunch }) {
     setLaunching(true)
 
     try {
-      const prompt = buildMissionPrompt(requirement, {
+      const prompt = await buildMissionPrompt(requirement, {
         projectPath,
         teamHint: `Use ${teamHint} teammates for this task`,
         references,
