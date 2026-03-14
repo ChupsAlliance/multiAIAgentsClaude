@@ -9,7 +9,7 @@ import { MissionHistoryPanel } from '../components/mission/MissionHistoryPanel'
 import { useMission } from '../hooks/useMission'
 
 export function MissionControlPage() {
-  const { missionState, isRunning, planReady, launch, deploy, continueM, stop, reset } = useMission()
+  const { missionState, isRunning, planReady, isReplanning, launch, deploy, continueM, stop, reset, replan } = useMission()
   const [elapsed, setElapsed] = useState('0:00')
   const [promptPreview, setPromptPreview] = useState(null) // { agents, tasks }
   const [historyView, setHistoryView] = useState(null)     // full MissionState snapshot from history
@@ -104,6 +104,8 @@ export function MissionControlPage() {
                 tasks={planReady.tasks}
                 onDeploy={handlePlanApproved}
                 onCancel={stop}
+                onReplan={replan}
+                isReplanning={isReplanning}
               />
             </div>
           </div>
@@ -119,7 +121,15 @@ export function MissionControlPage() {
                 setHistoryView(null)
               }}
               onNewMission={() => setHistoryView(null)}
-              elapsed={''}
+              elapsed={(() => {
+                const s = historyView.started_at
+                const e = historyView.ended_at
+                if (!s || !e) return ''
+                const diff = Math.floor((e - s) / 1000)
+                const m = Math.floor(diff / 60)
+                const sec = String(diff % 60).padStart(2, '0')
+                return `${m}:${sec}`
+              })()}
             />
           </div>
         ) : hasMission ? (

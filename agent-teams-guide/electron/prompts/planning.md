@@ -24,11 +24,32 @@ Wrap it with the markers shown below:
     { "name": "<agent_name>", "role": "<role>", "model": "<sonnet|opus|haiku>", "reason": "<why this model>" }
   ],
   "tasks": [
-    { "title": "<task>", "agent": "<agent_name>", "priority": "<high|medium|low>" }
+    {
+      "title": "<short task name>",
+      "detail": "<DETAILED implementation spec — see rules below>",
+      "agent": "<agent_name>",
+      "priority": "<high|medium|low>"
+    }
   ],
   "coordination": ["<shared files or deps>"]
 }
 === END PLAN ===
+
+### TASK DETAIL RULES (CRITICAL — do NOT output vague tasks):
+Every task MUST have a "detail" field that specifies:
+- **What** exactly to build (specific components, endpoints, functions)
+- **How** to build it (libraries, frameworks, techniques, patterns to use)
+- **Files** to create or modify
+- **Acceptance criteria** (what "done" means concretely)
+
+❌ BAD task (too vague):
+  { "title": "Create login form", "detail": "Build a login form" }
+
+✅ GOOD task (detailed):
+  { "title": "Create login form", "detail": "Build login form using React Hook Form + Zod schema validation. Fields: email (email format), password (min 8 chars). Use shadcn/ui Input + Button components. On submit → POST /api/auth/login with fetch. Handle 401 → show error toast. Files: src/components/LoginForm.tsx, src/schemas/auth.ts" }
+
+✅ GOOD task (backend):
+  { "title": "REST API endpoints", "detail": "Create Express.js router with: GET /api/quizzes (list all, paginated with ?page=&limit=), POST /api/quizzes (create, validate body with Joi), GET /api/quizzes/:id, DELETE /api/quizzes/:id. Use Mongoose ODM for MongoDB. Each quiz: { title, questions: [{ text, options: string[], correctIndex: number }] }. Files: src/routes/quiz.ts, src/models/Quiz.ts, src/validators/quiz.ts" }
 
 Model choices: "sonnet" (fast, good for straightforward code), "opus" (best for complex architecture/multi-step reasoning), "haiku" (cheap, good for simple repetitive tasks like docs or formatting)
 

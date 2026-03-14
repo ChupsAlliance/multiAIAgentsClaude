@@ -9,11 +9,12 @@ const ALLOWED_COMMANDS = [
   // files
   'pick_folder', 'pick_files', 'read_file_content', 'get_file_info',
   'save_clipboard_image', 'search_project_files', 'scaffold_project',
+  'read_skill_folder',
   // history
   'save_to_history', 'load_history', 'get_mission_history',
   'delete_history_entry', 'get_mission_detail',
   // mission
-  'launch_mission', 'deploy_mission', 'continue_mission',
+  'launch_mission', 'deploy_mission', 'continue_mission', 'replan_mission',
   'stop_mission', 'reset_mission', 'get_mission_state', 'update_agent_model',
   'read_planning_template',
 ];

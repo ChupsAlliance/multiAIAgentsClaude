@@ -23,6 +23,9 @@ function promptPath(filename) {
 const PROMPT_DEPLOY_AGENT_TEAMS = fs.readFileSync(promptPath('deploy_agent_teams.md'), 'utf8');
 const PROMPT_DEPLOY_STANDARD = fs.readFileSync(promptPath('deploy_standard.md'), 'utf8');
 const PROMPT_CONTINUE_MISSION = fs.readFileSync(promptPath('continue_mission.md'), 'utf8');
+const PROMPT_REPLAN = fs.existsSync(promptPath('replan.md'))
+  ? fs.readFileSync(promptPath('replan.md'), 'utf8')
+  : null;
 
 // ── Module-level state (equivalent to Rust's MissionManager) ───
 let missionState  = null;   // Option<MissionState>
@@ -338,13 +341,26 @@ function detectVietnamese(text) {
 
 // ─────────────────────────────────────────────────────────────────
 // saveMissionSnapshot — save full MissionState to ~/.claude/agent-teams-snapshots/
+// Preserves everything needed to fully restore the Dashboard UI at mission-end.
+// raw_output is truncated to last 500 lines to keep file size reasonable.
 // ─────────────────────────────────────────────────────────────────
 function saveMissionSnapshot(state) {
   try {
     const snapshotsDir = path.join(os.homedir(), '.claude', 'agent-teams-snapshots');
     fs.mkdirSync(snapshotsDir, { recursive: true });
     const filePath = path.join(snapshotsDir, `${state.id}.json`);
-    fs.writeFileSync(filePath, JSON.stringify(state, null, 2), 'utf8');
+
+    // Clone to avoid mutating live state; truncate raw_output for disk savings
+    const snap = Object.assign({}, state);
+    if (Array.isArray(snap.raw_output) && snap.raw_output.length > 500) {
+      snap.raw_output = snap.raw_output.slice(-500);
+    }
+    // Truncate log to last 2000 entries (still plenty for review)
+    if (Array.isArray(snap.log) && snap.log.length > 2000) {
+      snap.log = snap.log.slice(-2000);
+    }
+
+    fs.writeFileSync(filePath, JSON.stringify(snap, null, 2), 'utf8');
   } catch (e) {
     // Non-fatal
   }
@@ -760,6 +776,7 @@ function applyPlanToState(planJson, planNow, logMsg, sendToWindow) {
     newTasks.push({
       id: `task-${i}`,
       title: t.title || '',
+      detail: t.detail || '',
       status: 'pending',
       assigned_agent: t.agent || null,
       started_at: null,
@@ -890,6 +907,11 @@ function readProcessStdout_launch(proc, missionId, sendToWindow) {
                 if ((tool === 'Write' || tool === 'Edit') && efp && input) {
                   const fc = buildFileChangeFromInput(tool, input, 'Lead', ts);
                   upsertFileChange(fc);
+                  sendToWindow('mission:file-change', {
+                    path: fc.path, action: fc.action, agent: 'Lead', timestamp: ts,
+                    lines: fc.lines, content_preview: fc.content_preview,
+                    diff_old: fc.diff_old, diff_new: fc.diff_new,
+                  });
                 }
               }
               sendToWindow('mission:log', toolEntry);
@@ -974,13 +996,10 @@ function readProcessStdout_launch(proc, missionId, sendToWindow) {
             const entry = makeLogEntry(ts, 'Lead', `Result: ${display}`, 'result');
             if (missionState) {
               missionState.log.push(entry);
-              missionState.status = 'Completed';
-              missionState.phase  = 'Done';
-              const lead = missionState.agents.find(a => a.name === 'Lead');
-              if (lead) { lead.status = 'Done'; lead.current_task = 'Mission completed'; }
+              // Don't mark Completed here — let process exit handler do it
+              missionState._lastLeadResult = display;
             }
             sendToWindow('mission:log', entry);
-            sendToWindow('mission:status', { status: 'completed' });
           }
           break;
         }
@@ -1047,10 +1066,12 @@ function watchProcessExit_launch(proc, missionId, sendToWindow) {
 
     // Auto-save
     if (missionState) {
+      missionState.ended_at = ts;  // Persist ended_at in snapshot too
       const entry = {
         id: missionState.id,
         description: missionState.description,
         project_path: missionState.project_path,
+        execution_mode: missionState.execution_mode || 'standard',
         status: statusStr,
         started_at: missionState.started_at,
         ended_at: ts,
@@ -1424,15 +1445,16 @@ function readProcessStdout_deploy(proc, sendToWindow, isContMode) {
             }
             sendToWindow('mission:log', entry);
           } else {
-            // Lead result — mission done
+            // Lead result message — log it but do NOT mark mission completed yet.
+            // The mission is only truly done when the CLI process exits (handled by watchProcessExit_deploy).
+            // Marking completed here causes premature "Done" while CLI still runs bash commands.
             const entry = makeLogEntry(ts, 'Lead', `Result: ${display}`, 'result');
             if (missionState) {
               missionState.log.push(entry);
-              missionState.status = 'Completed';
-              missionState.phase  = 'Done';
-              for (const a of missionState.agents) {
-                if (a.status !== 'Error') a.status = 'Done';
-                if (a.name === 'Lead') a.current_task = 'Mission completed';
+              // Store the result text for summary, but keep status as Running
+              missionState._lastLeadResult = display;
+              if (missionState.agents.find(a => a.name === 'Lead')) {
+                missionState.agents.find(a => a.name === 'Lead').current_task = 'Finishing up...';
               }
             }
             sendToWindow('mission:log', entry);
@@ -1503,14 +1525,8 @@ function readProcessStdout_deploy(proc, sendToWindow, isContMode) {
       }
     } catch (_) {}
 
-    // Mark as completed if still running (no result message arrived)
-    if (missionState.status === 'Running') {
-      missionState.status = 'Completed';
-      missionState.phase  = 'Done';
-    }
-    if (!isContMode) {
-      sendToWindow('mission:status', { status: 'completed' });
-    }
+    // Don't mark completed here — let watchProcessExit_deploy handle it
+    // when the process actually exits. This prevents premature "Done" state.
   });
 }
 
@@ -1527,12 +1543,27 @@ function watchProcessExit_deploy(proc, missionId, sendToWindow) {
     }
     missionState.phase = 'Done';
 
+    // Mark all agents as Done/Error now that process has actually exited
+    for (const a of missionState.agents) {
+      if (a.status !== 'Error') a.status = 'Done';
+      if (a.name === 'Lead') a.current_task = missionState.status === 'Completed' ? 'Mission completed' : 'Mission failed';
+    }
+
+    // Mark remaining pending tasks
+    if (missionState.status === 'Completed') {
+      for (const task of missionState.tasks) {
+        if (task.status !== 'completed') { task.status = 'completed'; task.completed_at = ts; }
+      }
+    }
+
     // Auto-save
+    missionState.ended_at = ts;  // Persist ended_at in snapshot too
     const statusStr = missionState.status === 'Completed' ? 'completed' : 'failed';
     const entry = {
       id: missionState.id,
       description: missionState.description,
       project_path: missionState.project_path,
+      execution_mode: missionState.execution_mode || 'standard',
       status: statusStr,
       started_at: missionState.started_at,
       ended_at: ts,
@@ -1668,23 +1699,37 @@ module.exports = function registerMission(getMainWindow) {
       const agentModel = a.model     || 'sonnet';
       const custom    = a.customPrompt || '';
       const skillName = a.skillFile && a.skillFile.name;
+      const skillFileCount = a.skillFile && a.skillFile.fileCount;
 
       if (skillName) {
         // Log skill injection
-        const skillEntry = makeLogEntry(now(), 'System',
-          `Skill "${skillName}" loaded for agent "${name}" (${custom.length} chars)`, 'info');
+        const desc = skillFileCount
+          ? `Skill folder "${skillName}" loaded for agent "${name}" (${skillFileCount} files, ${custom.length} chars)`
+          : `Skill file "${skillName}" loaded for agent "${name}" (${custom.length} chars)`;
+        const skillEntry = makeLogEntry(now(), 'System', desc, 'info');
         missionState.log.push(skillEntry);
         sendToWindow('mission:log', skillEntry);
       }
 
       const agentTasks = tasks
         .filter(t => (t.assigned_agent || t.agent || '') === name)
-        .map(t => t.title || '');
+        .map(t => ({ title: t.title || '', detail: t.detail || '' }));
 
-      const tasksStr  = agentTasks.map((t, i) => `   ${i + 1}. ${t}`).join('\n');
-      const customStr = custom ? `\n   Custom: ${custom}` : '';
+      const tasksStr  = agentTasks.map((t, i) => {
+        const line = `   ${i + 1}. ${t.title}`;
+        return t.detail ? `${line}\n      Detail: ${t.detail}` : line;
+      }).join('\n');
 
-      return `### Agent: "${name}"\n- Role: ${role}\n- Model: ${agentModel}\n- Tasks:\n${tasksStr}${customStr}`;
+      // Separate skill content from custom instructions for clarity
+      let skillSection = '';
+      let customSection = '';
+      if (skillName && custom) {
+        skillSection = `\n- SKILL (MANDATORY — inject this VERBATIM into agent prompt):\n\`\`\`skill\n${custom}\n\`\`\``;
+      } else if (custom) {
+        customSection = `\n- Custom instructions: ${custom}`;
+      }
+
+      return `### Agent: "${name}"\n- Role: ${role}\n- Model: ${agentModel}\n- Tasks:\n${tasksStr}${customSection}${skillSection}`;
     });
 
     const proj      = projectPath.replace(/\\/g, '/');
@@ -1870,6 +1915,139 @@ module.exports = function registerMission(getMainWindow) {
     watchProcessExit_deploy(proc, missionId, sendToWindow);
 
     return null; // Ok(())
+  });
+
+  // ── replan_mission ────────────────────────────────────────────
+  // Incremental re-plan: manager edited tasks/agents, ask Lead to review changes
+  // Returns: { agents, tasks } or error string
+  ipcMain.handle('replan_mission', async (_event, args) => {
+    const { agents: currentAgents = [], tasks: currentTasks = [] } = args || {};
+
+    if (!PROMPT_REPLAN) return 'Re-plan prompt template not found';
+
+    // Build AGENTS summary
+    const agentsSummary = currentAgents.map(a =>
+      `- ${a.name} (${a.role || 'developer'}, model: ${a.model || 'sonnet'})`
+    ).join('\n');
+
+    // Build TASKS summary (with detail)
+    const tasksSummary = currentTasks.map(t => {
+      const detail = t.detail ? `\n    Detail: ${t.detail}` : '\n    Detail: (none — needs detail)';
+      return `- [${t.priority || 'medium'}] "${t.title}" → agent: ${t.assigned_agent || 'unassigned'}${detail}`;
+    }).join('\n');
+
+    // Build CHANGES description (what the manager changed — we don't have a diff, so describe current state)
+    const changes = `The manager has made edits to the plan. The current state of agents and tasks is shown above.
+Some tasks may be missing detail — you MUST fill in detailed implementation specs for any task that has "(none — needs detail)".
+Keep all existing tasks that already have detail EXACTLY as they are. Only modify tasks where the manager explicitly changed something or where detail is missing.`;
+
+    const replanPrompt = PROMPT_REPLAN
+      .replace('{{AGENTS}}', agentsSummary)
+      .replace('{{TASKS}}', tasksSummary)
+      .replace('{{CHANGES}}', changes);
+
+    // Use Lead model if available
+    const leadModel = missionState
+      ? (missionState.agents.find(a => a.name === 'Lead') || {}).model || 'sonnet'
+      : 'sonnet';
+
+    const projectPath = missionState ? missionState.project_path || '.' : '.';
+
+    sendToWindow('mission:log', {
+      timestamp: now(), agent: 'System',
+      message: 'Re-planning: sending changes to Lead for review...',
+      log_type: 'info',
+    });
+
+    return new Promise((resolve) => {
+      const proc = spawnClaude(
+        ['-p', '--dangerously-skip-permissions', '--model', leadModel,
+         '--output-format', 'stream-json', '--verbose', '--max-turns', '50'],
+        projectPath,
+        false
+      );
+
+      let fullText = '';
+      let resolved = false;
+
+      const rl = readline.createInterface({ input: proc.stdout, crlfDelay: Infinity });
+      rl.on('line', (line) => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        try {
+          const msg = JSON.parse(trimmed);
+          // Collect text from assistant messages
+          if (msg.type === 'assistant' && msg.message?.content) {
+            for (const block of msg.message.content) {
+              if (block.type === 'text' && block.text) {
+                fullText += block.text;
+              }
+            }
+          }
+          // Also collect from content_block_delta
+          if (msg.type === 'content_block_delta' && msg.delta?.text) {
+            fullText += msg.delta.text;
+          }
+          // result message often has final text
+          if (msg.type === 'result' && msg.result) {
+            fullText += '\n' + msg.result;
+          }
+        } catch (_) {
+          // Non-JSON line — just accumulate
+          fullText += trimmed + '\n';
+        }
+      });
+
+      proc.stderr.on('data', () => {}); // Drain stderr
+
+      proc.on('close', () => {
+        if (resolved) return;
+        resolved = true;
+
+        const parsed = tryParsePlanFromBuffer(fullText);
+        if (parsed && parsed.agents && parsed.tasks) {
+          sendToWindow('mission:log', {
+            timestamp: now(), agent: 'System',
+            message: `Re-plan complete: ${parsed.agents.length} agents, ${parsed.tasks.length} tasks`,
+            log_type: 'info',
+          });
+          resolve({ agents: parsed.agents, tasks: parsed.tasks });
+        } else {
+          sendToWindow('mission:log', {
+            timestamp: now(), agent: 'System',
+            message: 'Re-plan failed: could not parse updated plan from Lead response',
+            log_type: 'error',
+          });
+          resolve('Failed to parse re-plan output');
+        }
+      });
+
+      proc.on('error', (err) => {
+        if (resolved) return;
+        resolved = true;
+        resolve(`Re-plan process error: ${err.message}`);
+      });
+
+      // Send prompt
+      try {
+        proc.stdin.write(replanPrompt, 'utf8');
+        proc.stdin.end();
+      } catch (e) {
+        if (!resolved) {
+          resolved = true;
+          resolve(`Failed to write re-plan prompt: ${e.message}`);
+        }
+      }
+
+      // Timeout: 120 seconds
+      setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          try { proc.kill(); } catch (_) {}
+          resolve('Re-plan timed out after 120s');
+        }
+      }, 120000);
+    });
   });
 
   // ── stop_mission ───────────────────────────────────────────────

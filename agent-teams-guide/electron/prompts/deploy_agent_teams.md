@@ -21,13 +21,19 @@ For EACH agent listed above, call the Agent tool with:
 - subagent_type: "general-purpose"
 - model: the model specified for that agent
 - mode: "bypassPermissions"
-- prompt: Build EACH agent's prompt as follows:
+- prompt: Build EACH agent's prompt using this EXACT structure:
   "You are '<name>', a specialized developer in team 'mission'.
   Working directory: {{PROJECT_PATH}}
+
+  <IF the agent block has a SKILL section (inside ```skill``` fences):
+   Copy-paste the ENTIRE content between the ```skill``` fences here.
+   This is a mandatory operational skill — it defines HOW this agent works.
+   Do NOT summarize, truncate, or omit any part of it. Paste it VERBATIM.>
+
   Tasks:
   <list ALL tasks for this agent>
 
-  *** CRITICAL: If the agent block above contains a 'Custom:' section, include that ENTIRE text VERBATIM here. ***
+  <IF the agent block has 'Custom instructions:', include that text here as well.>
 
   EXECUTION PHASES:
   A) SETUP: cd into {{PROJECT_PATH}}. Check what files already exist. Read existing code before writing.
@@ -53,7 +59,10 @@ For EACH agent listed above, call the Agent tool with:
   - After each task, re-run the build to catch regressions.
   {{LANG_RULE}}"
 
-⚠ SKILL CONTENT RULE: Each agent block may have a 'Custom:' field. That field MUST be included verbatim in the agent's prompt — it is skill/reference documentation, not optional.
+⚠ SKILL INJECTION (CRITICAL — agents will NOT follow their skill if you skip this):
+- If an agent block contains a ```skill``` section, you MUST paste that ENTIRE content into the agent's prompt BEFORE the task list.
+- The skill content is typically 500-5000 chars. Do NOT truncate it.
+- To verify: after building each prompt, check that it contains the skill text. If it doesn't, you did it wrong.
 
 Spawn ALL agents in the SAME message (parallel). Print "[Lead] Spawning <name>" for each.
 

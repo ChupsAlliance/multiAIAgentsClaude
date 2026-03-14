@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { Clock, ChevronDown, ChevronRight, CheckCircle2, XCircle, StopCircle, Folder, Users, ListTodo, RefreshCw, Eye } from 'lucide-react'
+import { Clock, ChevronDown, ChevronRight, CheckCircle2, XCircle, StopCircle, Folder, Users, ListTodo, RefreshCw, Eye, FlaskConical } from 'lucide-react'
 
 function timeAgo(ts) {
   if (!ts) return ''
@@ -46,6 +46,12 @@ function HistoryItem({ item, onViewDetail, onReplay }) {
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {item.execution_mode === 'agent_teams' && (
+            <span className="flex items-center gap-0.5 shrink-0 text-[8px] font-mono px-1 py-0.5 rounded bg-yellow-500/15 text-yellow-400 border border-yellow-500/20">
+              <FlaskConical size={7} />
+              Teams
+            </span>
+          )}
           {item.ended_at && item.started_at && (
             <span className="text-[10px] font-mono text-vs-muted">
               {formatDuration(item.started_at, item.ended_at)}

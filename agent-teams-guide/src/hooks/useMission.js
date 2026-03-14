@@ -49,10 +49,44 @@ export function useMission() {
         newRawOutput = [...prev.raw_output, ...rawLines].slice(-5000)
       }
 
-      // Merge file changes
+      // Merge file changes — group by path, keep full edit history
       let newFileChanges = prev.file_changes
       if (fileChanges.length > 0) {
-        newFileChanges = [...prev.file_changes, ...fileChanges].slice(-500)
+        const map = new Map()
+        // Load existing grouped entries into map
+        for (const fc of prev.file_changes) {
+          map.set(fc.path, fc)
+        }
+        // Upsert new changes — append to history array
+        for (const fc of fileChanges) {
+          const key = fc.path
+          const existing = map.get(key)
+          if (existing) {
+            const entry = {
+              timestamp: fc.timestamp, agent: fc.agent, action: fc.action,
+              lines: fc.lines, content_preview: fc.content_preview,
+              diff_old: fc.diff_old, diff_new: fc.diff_new,
+            }
+            existing.history = [...(existing.history || []), entry]
+            // Update top-level fields to latest
+            existing.timestamp = fc.timestamp
+            existing.lines = fc.lines ?? existing.lines
+            existing.content_preview = fc.content_preview ?? existing.content_preview
+            existing.diff_old = fc.diff_old ?? existing.diff_old
+            existing.diff_new = fc.diff_new ?? existing.diff_new
+            existing.action = fc.action || existing.action
+            existing.agent = fc.agent || existing.agent
+          } else {
+            // First time seeing this file — init with history
+            const entry = {
+              timestamp: fc.timestamp, agent: fc.agent, action: fc.action,
+              lines: fc.lines, content_preview: fc.content_preview,
+              diff_old: fc.diff_old, diff_new: fc.diff_new,
+            }
+            map.set(key, { ...fc, history: [entry] })
+          }
+        }
+        newFileChanges = Array.from(map.values())
       }
 
       // Merge agent status updates
@@ -423,53 +457,141 @@ export function useMission() {
 
   const launch = useCallback(async ({ projectPath, prompt, description, model, executionMode }) => {
     setPlanReady(null)
-    const initialState = await invoke('launch_mission', {
-      projectPath,
-      prompt,
-      description,
-      model: model || 'sonnet',
-      executionMode: executionMode || 'standard',
-    })
-    setMissionState(initialState)
-    setIsRunning(true)
+    try {
+      const initialState = await invoke('launch_mission', {
+        projectPath,
+        prompt,
+        description,
+        model: model || 'sonnet',
+        executionMode: executionMode || 'standard',
+      })
+      setMissionState(initialState)
+      setIsRunning(true)
+    } catch (err) {
+      console.error('[launch] Error:', err)
+      setMissionState({
+        id: `m-${Date.now()}`,
+        description: description || 'Mission',
+        project_path: projectPath,
+        status: 'Failed',
+        phase: 'Done',
+        agents: [],
+        tasks: [],
+        log: [{
+          timestamp: Date.now(), agent: 'System',
+          message: `Launch failed: ${err?.message || err}`, log_type: 'error',
+        }],
+        file_changes: [],
+        raw_output: [],
+        messages: [],
+        started_at: Date.now(),
+      })
+    }
   }, [])
 
   const deploy = useCallback(async (agents, tasks) => {
     setPlanReady(null)
-    await invoke('deploy_mission', {
-      agents: agents.map(a => ({
-        name: a.name,
-        role: a.role,
-        model: a.model || 'sonnet',
-        customPrompt: a.customPrompt || '',
-      })),
-      tasks: tasks.map(t => ({
-        title: t.title,
-        assigned_agent: t.assigned_agent || t.agent,
-        priority: t.priority || 'medium',
-      })),
-    })
-    setMissionState(prev => prev ? {
-      ...prev,
-      phase: 'Deploying',
-      status: 'Running',
-    } : prev)
+    try {
+      await invoke('deploy_mission', {
+        agents: agents.map(a => ({
+          name: a.name,
+          role: a.role,
+          model: a.model || 'sonnet',
+          customPrompt: a.customPrompt || '',
+          skillFile: a.skillFile || null,
+        })),
+        tasks: tasks.map(t => ({
+          title: t.title,
+          detail: t.detail || '',
+          assigned_agent: t.assigned_agent || t.agent,
+          priority: t.priority || 'medium',
+        })),
+      })
+      setMissionState(prev => prev ? {
+        ...prev,
+        phase: 'Deploying',
+        status: 'Running',
+      } : prev)
+    } catch (err) {
+      console.error('[deploy] Error:', err)
+      setMissionState(prev => prev ? {
+        ...prev,
+        status: 'Failed',
+        phase: 'Done',
+        log: [...(prev.log || []), {
+          timestamp: Date.now(), agent: 'System',
+          message: `Deploy failed: ${err?.message || err}`, log_type: 'error',
+        }],
+      } : prev)
+    }
   }, [])
 
-  const continueM = useCallback(async (message, historyContext = null) => {
+  const continueM = useCallback(async (message, agentsOrContext = null) => {
+    // agentsOrContext can be:
+    //   - null (normal intervention from current mission)
+    //   - an array of agents (intervention with custom agents — InterventionPanel)
+    //   - a history state object (continue from history)
+    const isHistoryContext = agentsOrContext && !Array.isArray(agentsOrContext) && agentsOrContext.id
+    const historyContext = isHistoryContext ? agentsOrContext : null
+    const customAgents = Array.isArray(agentsOrContext) ? agentsOrContext : null
+
+    // Build message with agent config if provided
+    let fullMessage = message
+    if (customAgents && customAgents.length > 0) {
+      const agentLines = customAgents
+        .filter(a => a.name && a.task)
+        .map(a => `- Agent "${a.name}" (model: ${a.model || 'sonnet'}): ${a.task}`)
+        .join('\n')
+      if (agentLines) {
+        fullMessage += `\n\nSpawn these specific agents:\n${agentLines}`
+      }
+    }
+
     const contextJson = historyContext ? JSON.stringify(historyContext) : ''
-    await invoke('continue_mission', { message, contextJson })
-    setIsRunning(true)
-    setMissionState(historyContext ? {
-      ...historyContext,
-      phase: 'Continuing',
-      status: 'Running',
-      messages: [],
-    } : (prev => prev ? {
-      ...prev,
-      phase: 'Continuing',
-      status: 'Running',
-    } : prev))
+
+    try {
+      const result = await invoke('continue_mission', { message: fullMessage, contextJson })
+      // Backend returns error string on failure
+      if (typeof result === 'string' && result.length > 0) {
+        console.error('[continueM] Backend error:', result)
+        setMissionState(prev => prev ? {
+          ...prev,
+          log: [...(prev.log || []), {
+            timestamp: Date.now(), agent: 'System',
+            message: `Continue failed: ${result}`, log_type: 'error',
+          }],
+        } : prev)
+        return
+      }
+
+      setIsRunning(true)
+
+      if (historyContext) {
+        setMissionState({
+          ...historyContext,
+          phase: 'Continuing',
+          status: 'Running',
+          messages: [],
+        })
+      } else {
+        setMissionState(prev => prev ? {
+          ...prev,
+          phase: 'Continuing',
+          status: 'Running',
+        } : prev)
+      }
+    } catch (err) {
+      console.error('[continueM] Exception:', err)
+      setMissionState(prev => prev ? {
+        ...prev,
+        status: 'Failed',
+        phase: 'Done',
+        log: [...(prev.log || []), {
+          timestamp: Date.now(), agent: 'System',
+          message: `Continue failed: ${err?.message || err}`, log_type: 'error',
+        }],
+      } : prev)
+    }
   }, [])
 
   const stop = useCallback(async () => {
@@ -485,5 +607,33 @@ export function useMission() {
     setPlanReady(null)
   }, [])
 
-  return { missionState, isRunning, planReady, launch, deploy, continueM, stop, reset }
+  // ── Re-plan: send modified agents/tasks to Lead for incremental update ──
+  const [isReplanning, setIsReplanning] = useState(false)
+
+  const replan = useCallback(async (agents, tasks) => {
+    setIsReplanning(true)
+    try {
+      const result = await invoke('replan_mission', { agents, tasks })
+      if (typeof result === 'string') {
+        // Error string returned
+        console.error('[replan] Error:', result)
+        setIsReplanning(false)
+        return null
+      }
+      // result = { agents: [...], tasks: [...] }
+      if (result && result.agents && result.tasks) {
+        setPlanReady(result)
+        setIsReplanning(false)
+        return result
+      }
+      setIsReplanning(false)
+      return null
+    } catch (err) {
+      console.error('[replan] Exception:', err)
+      setIsReplanning(false)
+      return null
+    }
+  }, [])
+
+  return { missionState, isRunning, planReady, isReplanning, launch, deploy, continueM, stop, reset, replan }
 }

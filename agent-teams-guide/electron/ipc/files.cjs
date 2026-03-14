@@ -184,5 +184,99 @@ module.exports = function registerFiles(getMainWindow) {
     };
   });
 
+  // ─── read_skill_folder ─────────────────────────────────────────
+  // Read ALL files in a skill folder and bundle them into a single content string.
+  // Skill folders can contain: .md prompts, .sh/.bat/.ps1 scripts, .json configs, etc.
+  // Returns { name, path, size, fileCount, content, files: [{name,size,ext}] }
+  ipcMain.handle('read_skill_folder', async (_event, args) => {
+    const folderPath = args.path || args;
+    if (!fs.existsSync(folderPath) || !fs.statSync(folderPath).isDirectory()) {
+      throw new Error('Invalid skill folder path');
+    }
+
+    const folderName = path.basename(folderPath);
+    const textExts = ['.md', '.txt', '.sh', '.bat', '.ps1', '.py', '.js', '.cjs', '.mjs',
+                      '.ts', '.json', '.yaml', '.yml', '.toml', '.cfg', '.ini', '.env',
+                      '.html', '.css', '.sql', '.rb', '.go', '.rs', '.java', '.xml',
+                      '.dockerfile', '.conf', '.properties'];
+    const skipDirs = ['node_modules', '.git', '__pycache__', '.venv'];
+    const maxFileSize = 100 * 1024; // 100KB per file max
+    const maxTotalSize = 500 * 1024; // 500KB total max
+
+    const fileList = [];
+    const contentParts = [];
+    let totalSize = 0;
+
+    function walk(dir, relBase) {
+      let entries;
+      try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+
+      // Sort: .md files first, then alphabetical
+      entries.sort((a, b) => {
+        const aIsMd = a.name.endsWith('.md') ? 0 : 1;
+        const bIsMd = b.name.endsWith('.md') ? 0 : 1;
+        if (aIsMd !== bIsMd) return aIsMd - bIsMd;
+        return a.name.localeCompare(b.name);
+      });
+
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        const relPath = path.join(relBase, entry.name);
+
+        if (entry.isDirectory()) {
+          if (skipDirs.includes(entry.name) || entry.name.startsWith('.')) continue;
+          walk(fullPath, relPath);
+        } else {
+          const ext = path.extname(entry.name).toLowerCase();
+          let fileSize;
+          try { fileSize = fs.statSync(fullPath).size; } catch { continue; }
+
+          fileList.push({ name: relPath, size: fileSize, ext: ext.replace('.', '') });
+
+          // Only read text files within size limits
+          if (textExts.includes(ext) || entry.name === 'Dockerfile' || entry.name === 'Makefile') {
+            if (fileSize > maxFileSize) {
+              contentParts.push(`\n### File: ${relPath} (${(fileSize/1024).toFixed(1)} KB — TOO LARGE, skipped)\n`);
+              continue;
+            }
+            if (totalSize + fileSize > maxTotalSize) {
+              contentParts.push(`\n### File: ${relPath} (skipped — total size limit reached)\n`);
+              continue;
+            }
+
+            try {
+              const content = fs.readFileSync(fullPath, 'utf-8');
+              // Use appropriate code fence language
+              const lang = ext.replace('.', '') || 'text';
+              contentParts.push(`\n### File: ${relPath}\n\`\`\`${lang}\n${content}\n\`\`\``);
+              totalSize += fileSize;
+            } catch {
+              contentParts.push(`\n### File: ${relPath} (binary or unreadable, skipped)\n`);
+            }
+          } else {
+            contentParts.push(`\n### File: ${relPath} (binary file, ${(fileSize/1024).toFixed(1)} KB — not inlined)\n`);
+          }
+        }
+      }
+    }
+
+    walk(folderPath, '');
+
+    const bundledContent = `# Skill: ${folderName}\n` +
+      `## Files in this skill (${fileList.length} files)\n` +
+      fileList.map(f => `- ${f.name} (${(f.size/1024).toFixed(1)} KB)`).join('\n') +
+      '\n\n## File Contents\n' +
+      contentParts.join('\n');
+
+    return {
+      name: folderName,
+      path: folderPath,
+      size: totalSize,
+      fileCount: fileList.length,
+      content: bundledContent,
+      files: fileList,
+    };
+  });
+
   console.log('[IPC] files OK');
 };

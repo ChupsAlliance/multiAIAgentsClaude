@@ -77,12 +77,19 @@ export const MissionDashboard = memo(function MissionDashboard({ state, isRunnin
       {/* History view banner */}
       {isHistoryView && (
         <div className="flex items-center justify-between px-4 py-1.5 bg-vs-accent/10 border-b border-vs-accent/30 shrink-0">
-          <span className="text-[11px] font-mono text-vs-accent">
-            📋 Đang xem mission history (read-only)
-          </span>
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="text-[11px] font-mono text-vs-accent shrink-0">
+              📋 Mission History
+            </span>
+            {state?.started_at && (
+              <span className="text-[10px] font-mono text-vs-muted truncate">
+                {new Date(state.started_at).toLocaleString('vi-VN', { hour12: false })}
+              </span>
+            )}
+          </div>
           <button
             onClick={onNewMission}
-            className="text-[10px] font-mono text-vs-muted hover:text-white transition-colors px-2 py-0.5 rounded border border-vs-border hover:border-vs-accent"
+            className="text-[10px] font-mono text-vs-muted hover:text-white transition-colors px-2 py-0.5 rounded border border-vs-border hover:border-vs-accent shrink-0"
           >
             ← Quay lại
           </button>
@@ -164,12 +171,14 @@ export const MissionDashboard = memo(function MissionDashboard({ state, isRunnin
         </div>
       </div>
 
-      {/* Intervention panel */}
-      <InterventionPanel
-        onSend={onContinue}
-        isRunning={isRunning}
-        disabled={!state}
-      />
+      {/* Intervention panel — in history view, acts as "continue from history" */}
+      {!isHistoryView && (
+        <InterventionPanel
+          onSend={onContinue}
+          isRunning={isRunning}
+          disabled={!state}
+        />
+      )}
 
       {/* Raw output (collapsible at bottom) */}
       <RawOutput lines={rawOutput} />
