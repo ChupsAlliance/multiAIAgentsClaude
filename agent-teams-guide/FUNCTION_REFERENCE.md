@@ -1,14 +1,14 @@
-# Function Reference - Agent Teams Guide Tauri App
+# Function Reference - Claude Agent Teams (Electron)
 
-**Version**: 1.0
-**Last Updated**: 2026-03-05
+**Version**: 2.1
+**Last Updated**: 2026-03-14
 **Language**: English
 **Audience**: Developers & Integrators
 
 ## Table of Contents
 
 1. [Architecture Overview](#architecture-overview)
-2. [Tauri IPC Commands](#tauri-ipc-commands)
+2. [IPC Commands](#ipc-commands)
 3. [Event System](#event-system)
 4. [Frontend Hooks API](#frontend-hooks-api)
 5. [Data Structures](#data-structures)
@@ -28,7 +28,7 @@
 │                     Agent Teams Guide App                        │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│  Frontend (React + Tauri JS)                                     │
+│  Frontend (React + Electron IPC)                                   │
 │  ┌────────────────┐  ┌──────────────┐  ┌──────────────┐        │
 │  │   Pages        │  │  Components  │  │   Hooks      │        │
 │  │ - Dashboard    │  │ - Dashboard  │  │ - useMission │        │
@@ -39,21 +39,21 @@
 │                              ↓                                   │
 │  State Management & Event Listeners                              │
 │  - React Context (MissionState)                                  │
-│  - Tauri Event Listeners                                         │
+│  - Electron IPC Event Listeners                                    │
 │  - Local Storage (history, snapshots)                            │
 │                              ↓                                   │
 ├─────────────────────────────────────────────────────────────────┤
-│                     Tauri Core Bridge                             │
+│                     Electron IPC Bridge                              │
 │  ┌──────────────────────────────────────────────────────┐       │
-│  │ IPC Commands (invoke)  ←→  Rust Handlers             │       │
-│  │ Event System (listen)  ←→  Event Emitters            │       │
+│  │ IPC Commands (invoke)  ←→  Node.js Handlers          │       │
+│  │ Event System (listen)  ←→  webContents.send           │       │
 │  └──────────────────────────────────────────────────────┘       │
 │                              ↓                                   │
 ├─────────────────────────────────────────────────────────────────┤
-│                    Rust Backend (Tauri)                          │
+│                    Node.js Backend (Electron)                       │
 │  ┌────────────────┐  ┌──────────────┐  ┌──────────────┐        │
-│  │ Command        │  │ State Mgmt   │  │  Process     │        │
-│  │ Handlers       │  │ (Arc<RwLock>)│  │  Spawner     │        │
+│  │ IPC Handlers   │  │ State Mgmt   │  │  Process     │        │
+│  │                │  │ (module-lvl) │  │  Spawner     │        │
 │  │ - System info  │  │ MissionState │  │              │        │
 │  │ - File ops     │  │              │  │ Phase 1: Plan│        │
 │  │ - Process mgmt │  │              │  │ Phase 3: Exec│        │
@@ -85,13 +85,13 @@
    - **Phase 3 (Execution)**: Full-featured Claude process with team spawning
 
 2. **Event-Driven Updates**
-   - All state changes propagate via Tauri events
+   - All state changes propagate via Electron IPC events
    - Frontend listens for updates and re-renders
    - No polling required for real-time updates
 
 3. **State Management**
-   - **Backend**: `Arc<RwLock<MissionState>>` for thread-safe state
-   - **Frontend**: React hooks + local listeners on Tauri events
+   - **Backend**: Module-level JS objects (missionState, childProcess)
+   - **Frontend**: React hooks + local listeners on Electron IPC events
    - **Persistence**: JSON files in `~/.claude/agent-teams-*`
 
 4. **Output Parsing**
@@ -100,7 +100,7 @@
 
 ---
 
-## Tauri IPC Commands
+## IPC Commands
 
 All commands are invoked via `window.__TAURI__.invoke(commandName, args)` or the Tauri JS library.
 
@@ -413,6 +413,25 @@ await window.__TAURI__.invoke('save_to_history', { entry: missionEntry });
 
 **Returns**: Array of all saved missions (most recent first)
 
+Each entry contains:
+```typescript
+{
+  id: string,
+  description: string,
+  project_path: string,
+  execution_mode: 'standard' | 'agent_teams',
+  forked_from: string | null,       // Parent mission ID if forked
+  forked_from_desc: string | null,   // Parent description if forked
+  status: 'completed' | 'failed' | 'stopped',
+  started_at: number,
+  ended_at: number,
+  agent_count: number,
+  task_summary: string[],
+  file_changes: FileChange[],
+  log_count: number
+}
+```
+
 **Example**:
 ```javascript
 const history = await window.__TAURI__.invoke('load_history');
@@ -714,23 +733,36 @@ await window.__TAURI__.invoke('update_agent_model', {
 
 ---
 
-### 20. continue_mission(message)
+### 20. continue_mission(message, contextJson?)
 
-**Purpose**: Send additional instructions to running mission
+**Purpose**: Send additional instructions to running mission, or fork a new mission from history
 
 **Parameters**:
 - `message` (String): Additional instruction to send agents
+- `contextJson` (String, optional): JSON-stringified history snapshot — triggers **fork mode**
 
-**Return Type**: `void`
+**Return Type**: `null` (success) or `String` (error)
 
-**Behavior**:
-1. Adds message to execution prompt context
-2. Sends to current Claude process
-3. Claude relays to agents
-4. Agents adjust their execution based on new instruction
-5. Logs the instruction
+**Behavior — Normal Mode** (no contextJson):
+1. Builds summary from current missionState (tasks + recent logs + file changes)
+2. Detects project type, builds continue prompt from template
+3. Resets Lead agent status, kills old subprocess
+4. Spawns new Claude process with continue prompt
+5. Logs the intervention
 
-**Example**:
+**Behavior — Fork Mode** (contextJson provided):
+1. Parses history snapshot from contextJson
+2. Creates **NEW missionState** with fresh ID (`mission-{Date.now()}`)
+   - `forked_from` = parent mission ID
+   - `forked_from_desc` = parent mission description
+   - Inherits `project_path`, `description`, `execution_mode` from parent
+   - Fresh agents, tasks, log, file_changes arrays
+3. Kills any running process
+4. Builds rich summary from parent snapshot (tasks + logs + files)
+5. Spawns new Claude process with continue prompt
+6. New mission appears in history with fork badge upon completion
+
+**Example — Normal Intervention**:
 ```javascript
 await window.__TAURI__.invoke('continue_mission', {
   message: 'Please add comprehensive error handling to all functions'
@@ -738,11 +770,22 @@ await window.__TAURI__.invoke('continue_mission', {
 // Agents receive instruction and adjust their work
 ```
 
+**Example — Fork from History**:
+```javascript
+const snapshot = await window.__TAURI__.invoke('get_mission_detail', { missionId: 'mission-123' });
+await window.__TAURI__.invoke('continue_mission', {
+  message: 'Add dark mode support',
+  contextJson: JSON.stringify(snapshot)
+});
+// NEW mission created, linked to parent mission-123
+```
+
 **When to Use**:
-- Mid-mission adjustments
+- Mid-mission adjustments (normal mode)
 - Clarifying requirements
 - Adding additional checks
-- Changing priority
+- Continuing work from a completed mission (fork mode)
+- Iterating on a previous mission's output
 
 ---
 
@@ -773,7 +816,9 @@ unsubscribe();
 **Payload**:
 ```typescript
 {
-  status: "running" | "completed" | "stopped" | "failed" | "reset"
+  status: "running" | "completed" | "stopped" | "failed" | "reset",
+  mission_id?: string,     // Present on fork/completion
+  forked_from?: string     // Parent mission ID (present when forked from history)
 }
 ```
 
@@ -799,7 +844,7 @@ unsubscribe();
 
 #### 2. mission:agent-spawned
 
-**Emitted When**: A new agent is created and ready
+**Emitted When**: A new agent is created/activated and ready
 
 **Payload**:
 ```typescript
@@ -807,6 +852,7 @@ unsubscribe();
   agent_name: string,
   role: string,
   timestamp: string,      // ISO 8601
+  model?: string,         // Agent's model ("sonnet" | "opus" | "haiku") — from user's plan selection
   reset?: boolean         // true if this is a retry after reset
 }
 ```
@@ -816,9 +862,15 @@ unsubscribe();
 {
   agent_name: "code-reviewer",
   role: "Senior Developer",
-  timestamp: "2026-03-05T13:45:22Z"
+  timestamp: "2026-03-05T13:45:22Z",
+  model: "opus"
 }
 ```
+
+**Frontend handling**:
+- If agent already exists in state (from plan): updates `status` to 'Working', preserves user-selected `model`
+- If agent is new: adds to agents array with provided `model`
+- If `reset=true`: replaces entire agents array with just this agent
 
 ---
 

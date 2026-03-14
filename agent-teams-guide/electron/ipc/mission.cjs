@@ -199,7 +199,10 @@ function handleParsedEvent(event, sendToWindow) {
         }
         missionState.log.push(makeLogEntry(ts, 'System', `Agent '${agentName}' spawned (${role})`, 'spawn'));
       }
-      sendToWindow('mission:agent-spawned', { agent_name: agentName, role, timestamp: ts });
+      sendToWindow('mission:agent-spawned', {
+        agent_name: agentName, role, timestamp: ts,
+        model: (missionState && (missionState.agents.find(x => x.name === agentName) || {}).model) || null,
+      });
       break;
     }
 
@@ -1357,6 +1360,7 @@ function readProcessStdout_deploy(proc, sendToWindow, isContMode) {
 
                 sendToWindow('mission:agent-spawned', {
                   agent_name: agentName, role: desc, timestamp: ts,
+                  model: (missionState && missionState.agents.find(x => x.name === agentName) || {}).model || modelStr || null,
                 });
               }
 
@@ -1564,6 +1568,8 @@ function watchProcessExit_deploy(proc, missionId, sendToWindow) {
       description: missionState.description,
       project_path: missionState.project_path,
       execution_mode: missionState.execution_mode || 'standard',
+      forked_from: missionState.forked_from || null,
+      forked_from_desc: missionState.forked_from_desc || null,
       status: statusStr,
       started_at: missionState.started_at,
       ended_at: ts,
@@ -1808,14 +1814,78 @@ module.exports = function registerMission(getMainWindow) {
 
     let projectPath, leadModel, completedSummary;
 
+    // ── Fork from history: create a NEW mission with context from snapshot ──
     if (historyState) {
       projectPath      = (historyState.project_path || '').toString();
       const leadEntry  = (historyState.agents || []).find(a => a.name === 'Lead') || {};
       leadModel        = (leadEntry.model || 'sonnet').toString();
-      completedSummary = (historyState.tasks || [])
-        .map(t => `- [${t.status || 'unknown'}] ${t.title || ''}`)
-        .join('\n');
+
+      // Build rich summary from history snapshot (tasks + logs + files)
+      const parts = [];
+      const hTasks = historyState.tasks || [];
+      const completed  = hTasks.filter(t => t.status === 'completed')
+        .map(t => `- [DONE] ${t.title} (by ${t.assigned_agent || 'unknown'})`);
+      const inProgress = hTasks.filter(t => t.status === 'in_progress')
+        .map(t => `- [IN PROGRESS] ${t.title} (by ${t.assigned_agent || 'unknown'})`);
+      const pending    = hTasks.filter(t => t.status === 'pending')
+        .map(t => `- [PENDING] ${t.title}`);
+      if (completed.length)  parts.push(`Completed:\n${completed.join('\n')}`);
+      if (inProgress.length) parts.push(`In Progress:\n${inProgress.join('\n')}`);
+      if (pending.length)    parts.push(`Pending:\n${pending.join('\n')}`);
+
+      const hLogs = (historyState.log || []).filter(l => l.log_type !== 'raw').slice(-30)
+        .map(l => `[${l.agent}] ${l.message}`);
+      if (hLogs.length) parts.push(`Recent activity:\n${hLogs.join('\n')}`);
+
+      const hFiles = (historyState.file_changes || []).map(f => `- ${f.path} (${f.action})`);
+      if (hFiles.length) parts.push(`Files created/modified:\n${hFiles.join('\n')}`);
+
+      completedSummary = parts.join('\n\n');
+
+      // ── FORK: create brand-new missionState, link to parent ──
+      const ts = now();
+      const parentId = (historyState.id || '').toString();
+      const parentDesc = (historyState.description || '').toString();
+      const forkedExecMode = historyState.execution_mode || 'standard';
+
+      // Kill any currently running mission
+      stopWatcher();
+      killChild();
+
+      missionState = {
+        id:              `mission-${ts}`,
+        description:     parentDesc,     // inherit description
+        project_path:    projectPath,
+        status:          'Running',
+        phase:           'Deploying',
+        execution_mode:  forkedExecMode,
+        started_at:      ts,
+        ended_at:        null,
+        forked_from:     parentId,        // ← parent link
+        forked_from_desc: parentDesc,     // ← for display
+        agents: [{
+          name: 'Lead', role: 'Orchestrator',
+          status: 'Working', current_task: 'Continuing from previous mission...',
+          model: leadModel, spawned_at: ts, model_reason: null,
+        }],
+        tasks:           [],
+        log:             [makeLogEntry(ts, 'System', `Forked from mission: ${parentId}`, 'info'),
+                          makeLogEntry(ts, 'User', `Intervention: ${message}`, 'info')],
+        file_changes:    [],
+        raw_output:      [],
+        messages:        [],
+        team_name:       null,
+      };
+
+      sendToWindow('mission:agent-spawned', {
+        agent_name: 'Lead', role: 'Orchestrator', timestamp: ts, reset: true,
+      });
+      sendToWindow('mission:log', { timestamp: ts, agent: 'System', message: `Forked from mission: ${parentId}`, log_type: 'info' });
+      sendToWindow('mission:log', { timestamp: ts, agent: 'User', message: `Intervention: ${message}`, log_type: 'info' });
+      sendToWindow('mission:status', { status: 'running', mission_id: missionState.id, forked_from: parentId });
+
     } else {
+      // ── Normal continue: mutate existing missionState ──
       if (!missionState) return 'No active mission to continue';
 
       leadModel   = (missionState.agents.find(a => a.name === 'Lead') || {}).model || 'sonnet';
@@ -1845,19 +1915,9 @@ module.exports = function registerMission(getMainWindow) {
       if (fileChanges.length) parts.push(`Files created/modified:\n${fileChanges.join('\n')}`);
 
       completedSummary = parts.join('\n\n');
-    }
 
-    const projectTypeHint = detectProjectTypeCont(projectPath);
-
-    const continuePrompt = PROMPT_CONTINUE_MISSION
-      .replace('{{PROJECT_PATH}}', projectPath.replace(/\\/g, '/'))
-      .replace('{{PROJECT_TYPE}}', projectTypeHint)
-      .replace('{{SUMMARY}}', completedSummary || 'No previous work recorded.')
-      .replace('{{MESSAGE}}', message);  // last — user content
-
-    // Log intervention
-    const ts = now();
-    if (missionState) {
+      // Log intervention
+      const ts = now();
       missionState.log.push(makeLogEntry(ts, 'User', `Intervention: ${message}`, 'info'));
       missionState.phase  = 'Deploying';
       missionState.status = 'Running';
@@ -1881,12 +1941,22 @@ module.exports = function registerMission(getMainWindow) {
           model: leadModel, spawned_at: ts, model_reason: null,
         });
       }
+
+      sendToWindow('mission:log', { timestamp: ts, agent: 'User', message: `Intervention: ${message}`, log_type: 'info' });
+      sendToWindow('mission:status', { status: 'running' });
     }
 
-    sendToWindow('mission:log', { timestamp: ts, agent: 'User', message: `Intervention: ${message}`, log_type: 'info' });
-    sendToWindow('mission:status', { status: 'running' });
+    // ── Common: build prompt + spawn process ──
 
-    // Kill existing process
+    const projectTypeHint = detectProjectTypeCont(projectPath);
+
+    const continuePrompt = PROMPT_CONTINUE_MISSION
+      .replace('{{PROJECT_PATH}}', projectPath.replace(/\\/g, '/'))
+      .replace('{{PROJECT_TYPE}}', projectTypeHint)
+      .replace('{{SUMMARY}}', completedSummary || 'No previous work recorded.')
+      .replace('{{MESSAGE}}', message);
+
+    // Kill existing process (no-op if already killed in fork path)
     killChild();
 
     // Spawn new claude process (no AGENT_TEAMS for continuation)

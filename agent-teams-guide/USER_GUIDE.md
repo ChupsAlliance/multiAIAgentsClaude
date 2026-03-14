@@ -16,7 +16,7 @@
 
 ## Tổng quan ứng dụng
 
-**Agent Teams Guide** là ứng dụng desktop xây dựng bằng Tauri, giúp bạn điều phối đội ngũ AI agents để thực hiện các dự án phần mềm phức tạp.
+**Agent Teams Guide** là ứng dụng desktop xây dựng bằng Electron, giúp bạn điều phối đội ngũ AI agents để thực hiện các dự án phần mềm phức tạp.
 
 ### Điểm nổi bật
 
@@ -42,10 +42,10 @@
 
 ### Yêu cầu hệ thống
 
-- **Windows, macOS, hoặc Linux** (Tauri supported)
+- **Windows 10/11** (64-bit)
 - **Claude CLI** đã cài (`claude --version` để kiểm tra)
 - **Node.js** (nếu project là Node.js/Vite/React)
-- **Rust/Cargo** (chỉ khi build từ source)
+- **Node.js >= 18** (chỉ khi build từ source)
 
 ### Khởi động
 
@@ -435,11 +435,30 @@ Hỗ trợ: code files, images (PNG/JPG), folders, documents
 
 **Mẹo**: Dùng Sonnet cho scaffolder/utility agents, Opus cho core logic agents.
 
+Model bạn chọn được đồng bộ chính xác: backend gửi đúng model tới Claude CLI, và dashboard hiển thị đúng model đã chọn cho từng agent.
+
 ### History & Re-run
 
 Launcher lưu 50 mission gần nhất:
 - Click lịch sử để re-run với cùng params
 - Xóa từng entry hoặc xóa hết
+
+### Continue từ History (Fork)
+
+Bạn có thể tiếp tục công việc từ bất kỳ mission cũ nào:
+
+1. Mở **Mission History** ở cuối trang Launcher
+2. Expand mission muốn tiếp tục → click **"Continue mission"**
+3. App hiển thị dashboard của mission cũ (read-only) kèm banner xanh:
+   > 🔀 Tiếp tục từ mission cũ — nhập yêu cầu mới ở ô bên dưới rồi gửi
+4. Nhập yêu cầu mới vào ô Intervention (ví dụ: "Add dark mode support")
+5. Gửi → hệ thống tạo **mission MỚI** (fork), liên kết với mission gốc
+
+**Lưu ý quan trọng:**
+- Mission mới có ID riêng, **không ghi đè** mission cũ
+- Trong History, mission fork hiện badge: `↳ từ: {tên mission gốc}`
+- Context từ mission gốc (tasks, logs, files) được truyền vào prompt mới
+- Model của Lead agent được kế thừa từ mission gốc
 
 ---
 
@@ -565,11 +584,17 @@ A: Không có timeout cố định. Mission chạy đến khi hoàn tất hoặc
 **Q: Lịch sử lưu ở đâu?**
 A: `~/.claude/agent-teams-history.json` — lưu tối đa 50 mission gần nhất.
 
+**Q: Tôi chọn Opus cho agent nhưng dashboard hiển thị Sonnet?**
+A: Bug này đã được fix. Model bạn chọn ở PlanReview giờ được đồng bộ chính xác vào cả backend lẫn frontend. Dashboard hiển thị đúng model bạn đã chọn.
+
+**Q: "Continue mission" từ history có ghi đè mission cũ không?**
+A: Không. Hệ thống tạo mission **hoàn toàn mới** (fork) với ID riêng. Mission cũ giữ nguyên. Mission mới hiện badge `↳ từ: ...` trong history.
+
 **Q: Làm sao biết mission thực sự thành công?**
 A: Kiểm tra log có `[Lead] INTEGRATION_VERIFIED: PASS` và `[Lead] Mission complete`. Nếu không có → mission có thể kết thúc sớm.
 
 ---
 
-**Phiên bản tài liệu**: 2.0
-**Cập nhật lần cuối**: 2026-03-12
+**Phiên bản tài liệu**: 2.1
+**Cập nhật lần cuối**: 2026-03-14
 **Ngôn ngữ**: Tiếng Việt

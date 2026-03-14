@@ -182,22 +182,36 @@ export function useMission() {
         listen('mission:agent-spawned', (e) => {
           const { agent_name, name, role, timestamp, reset } = e.payload
           const agentName = agent_name || name
+          const eventModel = e.payload.model || null
           setMissionState(prev => {
             if (reset) {
               const freshAgent = {
                 name: agentName,
                 role,
                 status: 'Running',
-                current_task: e.payload.model ? 'Starting continuation...' : 'Analyzing requirement...',
+                current_task: eventModel ? 'Starting continuation...' : 'Analyzing requirement...',
                 spawned_at: timestamp || Date.now(),
-                model: e.payload.model || null,
+                model: eventModel,
                 model_reason: null,
               }
               if (!prev) return { agents: [freshAgent], log: [], tasks: [], file_changes: [], raw_output: [], messages: [] }
               return { ...prev, agents: [freshAgent] }
             }
             if (!prev) return prev
-            if (prev.agents.some(a => a.name === agentName)) return prev
+            // If agent already exists (from plan), update its status instead of skipping
+            const existingIdx = prev.agents.findIndex(a => a.name === agentName)
+            if (existingIdx !== -1) {
+              const updated = [...prev.agents]
+              updated[existingIdx] = {
+                ...updated[existingIdx],
+                status: 'Working',
+                current_task: 'Starting...',
+                spawned_at: timestamp || updated[existingIdx].spawned_at,
+                // Preserve model from deploy (user's choice), only override if event has a model and agent doesn't
+                model: updated[existingIdx].model || eventModel,
+              }
+              return { ...prev, agents: updated }
+            }
             return {
               ...prev,
               agents: [...prev.agents, {
@@ -206,7 +220,7 @@ export function useMission() {
                 status: 'Spawning',
                 current_task: null,
                 spawned_at: timestamp,
-                model: null,
+                model: eventModel,
                 model_reason: null,
               }]
             }
@@ -507,11 +521,16 @@ export function useMission() {
           priority: t.priority || 'medium',
         })),
       })
-      setMissionState(prev => prev ? {
-        ...prev,
-        phase: 'Deploying',
-        status: 'Running',
-      } : prev)
+      // Update frontend state with user's confirmed agent models + task details
+      setMissionState(prev => {
+        if (!prev) return prev
+        const updatedAgents = prev.agents.map(a => {
+          const confirmed = agents.find(c => c.name === a.name)
+          if (confirmed) return { ...a, model: confirmed.model || a.model || 'sonnet' }
+          return a
+        })
+        return { ...prev, phase: 'Deploying', status: 'Running', agents: updatedAgents }
+      })
     } catch (err) {
       console.error('[deploy] Error:', err)
       setMissionState(prev => prev ? {
@@ -530,7 +549,7 @@ export function useMission() {
     // agentsOrContext can be:
     //   - null (normal intervention from current mission)
     //   - an array of agents (intervention with custom agents — InterventionPanel)
-    //   - a history state object (continue from history)
+    //   - a history state object (continue from history → FORK: creates new mission)
     const isHistoryContext = agentsOrContext && !Array.isArray(agentsOrContext) && agentsOrContext.id
     const historyContext = isHistoryContext ? agentsOrContext : null
     const customAgents = Array.isArray(agentsOrContext) ? agentsOrContext : null
@@ -567,12 +586,32 @@ export function useMission() {
       setIsRunning(true)
 
       if (historyContext) {
-        setMissionState({
-          ...historyContext,
-          phase: 'Continuing',
-          status: 'Running',
-          messages: [],
-        })
+        // Fork from history: backend created NEW missionState.
+        // Hydrate from backend to get the fresh forked state.
+        try {
+          const freshState = await invoke('get_mission_state')
+          if (freshState) {
+            setMissionState(freshState)
+          }
+        } catch (_) {
+          // Fallback: minimal state until events arrive
+          setMissionState({
+            id: `fork-${Date.now()}`,
+            description: historyContext.description || '',
+            project_path: historyContext.project_path || '',
+            phase: 'Executing',
+            status: 'Running',
+            execution_mode: historyContext.execution_mode || 'standard',
+            forked_from: historyContext.id,
+            agents: [{ name: 'Lead', role: 'Orchestrator', status: 'Working', current_task: 'Continuing...', model: 'sonnet', spawned_at: Date.now() }],
+            tasks: [],
+            log: [],
+            file_changes: [],
+            raw_output: [],
+            messages: [],
+            started_at: Date.now(),
+          })
+        }
       } else {
         setMissionState(prev => prev ? {
           ...prev,

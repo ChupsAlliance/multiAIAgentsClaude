@@ -13,6 +13,7 @@ export function MissionControlPage() {
   const [elapsed, setElapsed] = useState('0:00')
   const [promptPreview, setPromptPreview] = useState(null) // { agents, tasks }
   const [historyView, setHistoryView] = useState(null)     // full MissionState snapshot from history
+  const [historyViewMode, setHistoryViewMode] = useState('view') // 'view' | 'continue'
 
   // Elapsed timer
   useEffect(() => {
@@ -62,20 +63,23 @@ export function MissionControlPage() {
     try {
       const snapshot = await invoke('get_mission_detail', { missionId: item.id })
       setHistoryView(snapshot)
+      setHistoryViewMode('view')
     } catch {
-      // Snapshot not saved — just show the summary we already have
       setHistoryView(item)
+      setHistoryViewMode('view')
     }
   }, [])
 
-  // Continue from a history mission — restore context then open continue flow
+  // Continue from a history mission — show snapshot with intervention panel enabled
   const handleContinueFromHistory = useCallback(async (item) => {
     if (!item.id) return
     try {
       const snapshot = await invoke('get_mission_detail', { missionId: item.id })
       setHistoryView(snapshot)
+      setHistoryViewMode('continue')
     } catch {
       setHistoryView(item)
+      setHistoryViewMode('continue')
     }
   }, [])
 
@@ -110,27 +114,47 @@ export function MissionControlPage() {
             </div>
           </div>
         ) : historyView ? (
-          <div className="flex-1 p-4 min-h-0 overflow-hidden">
-            <MissionDashboard
-              state={historyView}
-              isRunning={false}
-              isHistoryView={true}
-              onStop={() => {}}
-              onContinue={(msg) => {
-                continueM(msg, historyView)
-                setHistoryView(null)
-              }}
-              onNewMission={() => setHistoryView(null)}
-              elapsed={(() => {
-                const s = historyView.started_at
-                const e = historyView.ended_at
-                if (!s || !e) return ''
-                const diff = Math.floor((e - s) / 1000)
-                const m = Math.floor(diff / 60)
-                const sec = String(diff % 60).padStart(2, '0')
-                return `${m}:${sec}`
-              })()}
-            />
+          <div className="flex-1 p-4 min-h-0 overflow-hidden flex flex-col">
+            {/* Continue-from-history banner */}
+            {historyViewMode === 'continue' && (
+              <div className="flex items-center justify-between px-4 py-2 mb-2 rounded-md bg-vs-accent/10 border border-vs-accent/30 shrink-0">
+                <span className="text-[11px] font-mono text-vs-accent">
+                  🔀 Tiếp tục từ mission cũ — nhập yêu cầu mới ở ô bên dưới rồi gửi
+                </span>
+                <button
+                  onClick={() => { setHistoryView(null); setHistoryViewMode('view') }}
+                  className="text-[10px] font-mono text-vs-muted hover:text-white transition-colors px-2 py-0.5 rounded border border-vs-border hover:border-vs-accent shrink-0"
+                >
+                  ← Hủy
+                </button>
+              </div>
+            )}
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <MissionDashboard
+                state={historyView}
+                isRunning={false}
+                isHistoryView={historyViewMode === 'view'}
+                onStop={() => {}}
+                onContinue={(msg) => {
+                  continueM(msg, historyView)
+                  setHistoryView(null)
+                  setHistoryViewMode('view')
+                }}
+                onNewMission={() => {
+                  setHistoryView(null)
+                  setHistoryViewMode('view')
+                }}
+                elapsed={(() => {
+                  const s = historyView.started_at
+                  const e = historyView.ended_at
+                  if (!s || !e) return ''
+                  const diff = Math.floor((e - s) / 1000)
+                  const m = Math.floor(diff / 60)
+                  const sec = String(diff % 60).padStart(2, '0')
+                  return `${m}:${sec}`
+                })()}
+              />
+            </div>
           </div>
         ) : hasMission ? (
           <div className="flex-1 p-4 min-h-0 overflow-hidden">

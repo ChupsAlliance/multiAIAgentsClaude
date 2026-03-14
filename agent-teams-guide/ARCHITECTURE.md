@@ -1,7 +1,7 @@
-# Architecture Documentation — Claude Agent Teams Guide
+# Architecture Documentation — Claude Agent Teams (Electron)
 
 > **Last updated:** 2026-03-14
-> **Version:** 0.1.0
+> **Version:** 2.1 (Electron)
 > **Codebase:** `d:\multiAIAgentsClaude\agent-teams-guide`
 
 ---
@@ -294,16 +294,19 @@ npm run electron:build   # Production: build + package .exe
 | Property | Value |
 |----------|-------|
 | **Hook** | `useMission()` — provides full mission state + actions |
-| **State** | `promptPreview` (prompt edit mode), `historyView` (history snapshot view) |
+| **State** | `promptPreview` (prompt edit mode), `historyView` (history snapshot view), `historyViewMode` ('view' or 'continue') |
 | **View Flow** | Launcher → PlanReview → PromptPreview → Dashboard ←→ HistoryView |
-| **History** | `handleViewHistory()` loads snapshot via `get_mission_detail`, renders read-only Dashboard |
+| **History** | `handleViewHistory()` loads snapshot read-only; `handleContinueFromHistory()` loads snapshot with InterventionPanel enabled |
+| **Fork** | Continue from history creates a **new mission** (fork) linked to parent via `forked_from` |
 | **Elapsed** | Live timer (running) or computed from `started_at`/`ended_at` (history) |
 
 **View selection logic:**
 ```
 if (promptPreview)       → PromptPreview
 if (planReady)           → PlanReview
-if (historyView)         → MissionDashboard (read-only, isHistoryView=true)
+if (historyView)         → Continue banner (if mode='continue') + MissionDashboard
+                           mode='view'     → read-only (isHistoryView=true)
+                           mode='continue' → InterventionPanel shown (isHistoryView=false)
 if (hasMission)          → MissionDashboard (live)
 else                     → MissionLauncher + MissionHistoryPanel
 ```
@@ -384,7 +387,7 @@ Main monitoring dashboard, renders:
 ├──────────────┴──────────────────────────────────┤
 │ ThinkingIndicator (when launching)              │
 ├─────────────────────────────────────────────────┤
-│ InterventionPanel (hidden in historyView)       │
+│ InterventionPanel (hidden in view-only historyView) │
 ├─────────────────────────────────────────────────┤
 │ RawOutput (collapsible)                         │
 └─────────────────────────────────────────────────┘
@@ -740,6 +743,8 @@ Non-whitelisted commands/events are rejected at the preload layer.
 ```javascript
 {
   id, description, project_path, execution_mode,
+  forked_from,        // parent mission ID (null if not a fork)
+  forked_from_desc,   // parent description (null if not a fork)
   status, started_at, ended_at,
   agent_count, task_summary: ["[status] title", ...],
   file_changes, log_count
@@ -802,6 +807,10 @@ interface MissionState {
   execution_mode: 'standard' | 'agent_teams'
   started_at: number            // Timestamp (ms)
   ended_at: number | null       // Timestamp (ms) — set on completion
+
+  // ─── Fork ───
+  forked_from: string | null    // Parent mission ID (set when forked from history)
+  forked_from_desc: string | null // Parent mission description (for display)
 
   // ─── Agents ───
   agents: Agent[]               // Grows across intervention cycles, never shrinks
@@ -981,6 +990,7 @@ deploy_mission() {
   4. Build agent blocks (name, role, model, tasks, custom instructions, skill files)
   5. Build deploy prompt from template (standard or agent_teams)
   6. Update phase='Deploying', Lead.status='Working'
+  6b. Sync agent models: update missionState.agents[].model from user's confirmed list
   7. Kill old subprocess
   8. Spawn: claude -p --dangerously-skip-permissions --model {leadModel}
             --output-format stream-json --verbose --max-turns 200
@@ -997,13 +1007,25 @@ deploy_mission() {
 continue_mission() {
   1. Parse optional contextJson (for history-based continuation)
   2. Build summary: completed tasks + recent logs + file changes
-  3. Detect project type → projectTypeHint
-  4. Build continue prompt from template
-  5. Mutate missionState:
+
+  ── IF contextJson (fork from history): ──
+  3a. Create NEW missionState with fresh ID ("mission-{Date.now()}")
+     - forked_from = parent mission ID
+     - forked_from_desc = parent description
+     - Inherit project_path, description, execution_mode
+     - Fresh agents=[Lead], tasks=[], log=[], etc.
+  3b. Kill old process + watcher
+
+  ── ELSE (normal intervention): ──
+  3a. Mutate existing missionState:
      - phase='Deploying', status='Running'
      - Lead.status='Working'
      - messages=[], team_name=null  (CLEARED)
      - Other agents: status unchanged (stay Done)
+
+  ── COMMON: ──
+  4. Detect project type → projectTypeHint
+  5. Build continue prompt from template
   6. Kill old subprocess
   7. Spawn: claude -p --dangerously-skip-permissions --model {leadModel}
             --output-format stream-json --verbose --max-turns 200
@@ -1198,7 +1220,7 @@ Frontend listens via `listen(channel, callback)` (Tauri API or shim).
 | Channel | Payload | Frequency | Description |
 |---------|---------|-----------|-------------|
 | `mission:status` | `{ status, mission_id? }` | Low | Phase/status change |
-| `mission:agent-spawned` | `{ agent_name, role, timestamp, reset? }` | Low | Agent added (reset=true clears all) |
+| `mission:agent-spawned` | `{ agent_name, role, timestamp, model?, reset? }` | Low | Agent added/activated (model from plan, reset=true clears all) |
 | `mission:log` | `LogEntry` | **Very High** | Log line (batched in frontend) |
 | `mission:file-change` | `{ path, action, agent, timestamp, lines?, content_preview?, diff_old?, diff_new? }` | **High** | File modification detected |
 | `mission:task-update` | `{ task_id?, agent?, status, description?, timestamp }` | Medium | Task status change |
@@ -1317,10 +1339,24 @@ Mission completes → saveToHistory(summary) + saveMissionSnapshot(full)
               (50 entry max)             (overwritten per mission)
                      ↓
               MissionHistoryPanel reads history.json on mount
-                     ↓ User clicks "Xem chi tiết"
-              get_mission_detail(id) → reads snapshot
                      ↓
-              MissionDashboard renders full snapshot (read-only)
+            ┌────────┴─────────────────────┐
+            ↓                              ↓
+  "Xem chi tiết" (view)         "Continue mission" (fork)
+            ↓                              ↓
+  get_mission_detail(id)         get_mission_detail(id)
+            ↓                              ↓
+  MissionDashboard               MissionDashboard
+  (read-only)                    + continue banner
+                                 + InterventionPanel
+                                           ↓ User types message
+                                 continue_mission(msg, contextJson)
+                                           ↓
+                                 NEW mission created (forked)
+                                 forked_from = parent ID
+                                           ↓
+                                 History shows fork badge:
+                                 "↳ từ: {parent description}"
 ```
 
 ---

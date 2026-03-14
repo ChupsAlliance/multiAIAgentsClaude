@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { Clock, ChevronDown, ChevronRight, CheckCircle2, XCircle, StopCircle, Folder, Users, ListTodo, RefreshCw, Eye, FlaskConical } from 'lucide-react'
+import { Clock, ChevronDown, ChevronRight, CheckCircle2, XCircle, StopCircle, Folder, Users, ListTodo, RefreshCw, Eye, FlaskConical, GitFork } from 'lucide-react'
 
 function timeAgo(ts) {
   if (!ts) return ''
@@ -44,6 +44,12 @@ function HistoryItem({ item, onViewDetail, onReplay }) {
           <p className="text-[10px] text-vs-muted font-mono truncate">
             {(item.project_path || '').split(/[/\\]/).pop() || item.project_path}
           </p>
+          {item.forked_from && (
+            <p className="text-[9px] text-cyan-400/70 font-mono truncate flex items-center gap-0.5">
+              <GitFork size={7} className="shrink-0" />
+              <span className="truncate">↳ từ: {item.forked_from_desc || item.forked_from}</span>
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {item.execution_mode === 'agent_teams' && (
