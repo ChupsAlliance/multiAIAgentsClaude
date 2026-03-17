@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { invoke } from '@tauri-apps/api/core'
-import { Bot, BookOpen, Play, LayoutDashboard, Menu, X, ChevronRight, Settings, Rocket } from 'lucide-react'
+import { Bot, BookOpen, Play, LayoutDashboard, Menu, X, ChevronRight, Settings, Rocket, Sparkles } from 'lucide-react'
 import { sections } from '../data/sections'
+import { APP_VERSION } from '../data/changelog'
 
 const navItems = [
   { path: '/',           label: 'Tài liệu',        icon: BookOpen },
@@ -160,7 +161,15 @@ export function Sidebar({ activeSection }) {
               </span>
             </div>
           </div>
-          <p className="text-[10px] text-vs-muted font-mono text-center">v1.1 · Internal Docs</p>
+          <button
+            onClick={() => window.__openChangelog?.()}
+            className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md
+                       text-[10px] font-mono text-vs-muted
+                       hover:text-vs-accent hover:bg-vs-accent/10 transition-colors no-drag"
+          >
+            <Sparkles size={10} />
+            v{APP_VERSION} &middot; What's New
+          </button>
         </div>
       </aside>
     </>

@@ -7,6 +7,7 @@ import { PlanReview } from '../components/mission/PlanReview'
 import { PromptPreview } from '../components/mission/PromptPreview'
 import { MissionHistoryPanel } from '../components/mission/MissionHistoryPanel'
 import { useMission } from '../hooks/useMission'
+import { buildMissionPrompt } from '../data/promptWrapper'
 
 export function MissionControlPage() {
   const { missionState, isRunning, planReady, isReplanning, launch, deploy, continueM, stop, reset, replan } = useMission()
@@ -90,7 +91,8 @@ export function MissionControlPage() {
         {/* Title bar drag region */}
         <div className="h-8 shrink-0 drag-region" />
 
-        {promptPreview ? (
+        {/* PromptPreview overlay (shown on top of PlanReview) */}
+        {promptPreview && (
           <div className="flex-1 p-4 min-h-0 overflow-y-auto">
             <PromptPreview
               agents={promptPreview.agents}
@@ -100,8 +102,11 @@ export function MissionControlPage() {
               onBack={handleBackFromPrompt}
             />
           </div>
-        ) : isPlanReview ? (
-          <div className="flex-1 p-4 min-h-0 overflow-hidden">
+        )}
+
+        {/* PlanReview: keep mounted (hidden) while PromptPreview is shown so local state survives Back */}
+        {isPlanReview && (
+          <div className={`flex-1 p-4 min-h-0 overflow-hidden ${promptPreview ? 'hidden' : ''}`}>
             <div className="h-full bg-vs-bg rounded-lg border border-vs-border overflow-hidden flex flex-col">
               <PlanReview
                 agents={planReady.agents}
@@ -113,13 +118,16 @@ export function MissionControlPage() {
               />
             </div>
           </div>
-        ) : historyView ? (
+        )}
+
+        {/* History view / Continue from history */}
+        {!promptPreview && !isPlanReview && historyView && (
           <div className="flex-1 p-4 min-h-0 overflow-hidden flex flex-col">
             {/* Continue-from-history banner */}
             {historyViewMode === 'continue' && (
               <div className="flex items-center justify-between px-4 py-2 mb-2 rounded-md bg-vs-accent/10 border border-vs-accent/30 shrink-0">
                 <span className="text-[11px] font-mono text-vs-accent">
-                  🔀 Tiếp tục từ mission cũ — nhập yêu cầu mới ở ô bên dưới rồi gửi
+                  🔀 Tiếp tục từ mission cũ — nhập yêu cầu mới bên dưới → Lead sẽ lên plan mới → bạn review trước khi deploy
                 </span>
                 <button
                   onClick={() => { setHistoryView(null); setHistoryViewMode('view') }}
@@ -135,10 +143,31 @@ export function MissionControlPage() {
                 isRunning={false}
                 isHistoryView={historyViewMode === 'view'}
                 onStop={() => {}}
-                onContinue={(msg) => {
-                  continueM(msg, historyView)
-                  setHistoryView(null)
-                  setHistoryViewMode('view')
+                onContinue={async (msg) => {
+                  // Full lifecycle: build planning prompt → launch new mission with history context
+                  const projectPath = historyView.project_path || ''
+                  const histModel = (historyView.agents || []).find(a => a.name === 'Lead')?.model || 'sonnet'
+                  const histExecMode = historyView.execution_mode || 'standard'
+                  try {
+                    const prompt = await buildMissionPrompt(msg, {
+                      projectPath,
+                      teamHint: 'Use 3-4 teammates for this task',
+                    })
+                    setHistoryView(null)
+                    setHistoryViewMode('view')
+                    await launch({
+                      projectPath,
+                      prompt,
+                      description: msg,
+                      model: histModel,
+                      executionMode: histExecMode,
+                      historyContext: JSON.stringify(historyView),
+                    })
+                  } catch (err) {
+                    console.error('[continueFromHistory] Error:', err)
+                    setHistoryView(null)
+                    setHistoryViewMode('view')
+                  }
                 }}
                 onNewMission={() => {
                   setHistoryView(null)
@@ -156,7 +185,10 @@ export function MissionControlPage() {
               />
             </div>
           </div>
-        ) : hasMission ? (
+        )}
+
+        {/* Active mission dashboard */}
+        {!promptPreview && !isPlanReview && !historyView && hasMission && (
           <div className="flex-1 p-4 min-h-0 overflow-hidden">
             <MissionDashboard
               state={missionState}
@@ -167,7 +199,10 @@ export function MissionControlPage() {
               elapsed={elapsed}
             />
           </div>
-        ) : (
+        )}
+
+        {/* Launcher (no active mission) */}
+        {!promptPreview && !isPlanReview && !historyView && !hasMission && (
           <div className="flex-1 flex flex-col min-h-0">
             <div className="flex-1 overflow-y-auto px-4 pb-4">
               <MissionLauncher onLaunch={launch} />

@@ -6,13 +6,14 @@
  * ═══════════════════════════════════════════════════════════════════
  *
  * Covers all recent changes:
- *   1. Fork from history (continue_mission with contextJson)
+ *   1. Fork from history (launch_mission with historyContext → full lifecycle)
  *   2. Agent model sync (deploy → frontend state)
  *   3. mission:agent-spawned event with model field
  *   4. MissionHistoryPanel forked_from badge
  *   5. MissionControlPage historyViewMode ('view' vs 'continue')
  *   6. Backend helper functions (detectVietnamese, detectProjectType, etc.)
  *   7. History save with forked_from fields
+ *   8. continue_mission execution_mode-aware template selection
  *
  * Usage:
  *   node tests/run_all.cjs                  # Run all tests
@@ -89,86 +90,73 @@ function readSource(relPath) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// SUITE 1: Backend — continue_mission fork logic
+// SUITE 1: Backend — continue_mission + launch_mission fork logic
 // ═══════════════════════════════════════════════════════════════
-suite('Backend: continue_mission fork logic', () => {
+suite('Backend: continue_mission & launch_mission fork logic', () => {
   const src = readSource('electron/ipc/mission.cjs');
 
   test('continue_mission handler exists', () => {
     assertIncludes(src, "ipcMain.handle('continue_mission'");
   });
 
-  test('contextJson parameter is destructured', () => {
-    assertIncludes(src, "contextJson = ''");
+  test('launch_mission accepts historyContext parameter', () => {
+    assertIncludes(src, 'historyContext');
   });
 
-  test('historyState parsed from contextJson', () => {
-    assertIncludes(src, 'historyState = JSON.parse(contextJson)');
+  test('launch_mission parses historyContext as historyState', () => {
+    assertIncludes(src, 'historyState = JSON.parse(historyContext)');
   });
 
-  test('Fork creates NEW missionState with fresh ID', () => {
-    assertIncludes(src, "`mission-${ts}`");
+  test('launch_mission builds previousWorkSection from history', () => {
+    assertIncludes(src, 'previousWorkSection');
+    assertIncludes(src, 'PREVIOUS WORK');
   });
 
-  test('forked_from field set to parent ID', () => {
-    assertIncludes(src, 'forked_from:     parentId');
+  test('launch_mission appends previousWorkSection to prompt', () => {
+    assertIncludes(src, 'fullPrompt');
+    assertIncludes(src, 'previousWorkSection');
   });
 
-  test('forked_from_desc field set to parent description', () => {
-    assertIncludes(src, 'forked_from_desc: parentDesc');
+  test('launch_mission sets forked_from when historyState present', () => {
+    assertIncludes(src, 'forked_from: historyState');
   });
 
-  test('Fork inherits project_path from history', () => {
-    assertIncludes(src, "projectPath      = (historyState.project_path || '').toString()");
+  test('launch_mission sets forked_from_desc when historyState present', () => {
+    assertIncludes(src, 'forked_from_desc: historyState');
   });
 
-  test('Fork inherits execution_mode from history', () => {
-    assertIncludes(src, 'historyState.execution_mode');
+  test('launch_mission kills existing process when forking', () => {
+    const launchSection = src.slice(src.indexOf("ipcMain.handle('launch_mission'"), src.indexOf("ipcMain.handle('deploy_mission'"));
+    assertIncludes(launchSection, 'stopWatcher()');
+    assertIncludes(launchSection, 'killChild()');
   });
 
-  test('Fork creates Lead agent with Working status', () => {
-    // The missionState creation block should have a Lead agent
-    assertIncludes(src, "name: 'Lead', role: 'Orchestrator'");
+  test('launch_mission history builds task summary (completed/in-progress/pending)', () => {
+    const launchSection = src.slice(src.indexOf("ipcMain.handle('launch_mission'"), src.indexOf("ipcMain.handle('deploy_mission'"));
+    assertIncludes(launchSection, 'historyState.tasks');
+    assertIncludes(launchSection, '[DONE]');
+    assertIncludes(launchSection, '[PENDING]');
   });
 
-  test('Fork emits mission:status with forked_from', () => {
-    assertIncludes(src, "forked_from: parentId");
-  });
-
-  test('Fork emits mission:agent-spawned with reset:true for Lead', () => {
-    assertIncludes(src, "agent_name: 'Lead', role: 'Orchestrator', timestamp: ts, reset: true");
-  });
-
-  test('Fork logs "Forked from mission" entry', () => {
-    assertIncludes(src, "Forked from mission: ${parentId}");
-  });
-
-  test('Fork kills existing process before creating new state', () => {
-    // stopWatcher() and killChild() should appear in the fork branch
-    const forkStart = src.indexOf('if (historyState) {');
-    const forkEnd   = src.indexOf('// ── Normal continue: mutate existing missionState');
-    const forkSection = src.slice(forkStart, forkEnd);
-    assertIncludes(forkSection, 'stopWatcher()');
-    assertIncludes(forkSection, 'killChild()');
-  });
-
-  test('Normal continue still requires active mission', () => {
+  test('continue_mission (normal) still requires active mission', () => {
     assertIncludes(src, "'No active mission to continue'");
   });
 
-  test('Normal continue does NOT set forked_from', () => {
-    // In the else branch, missionState should NOT be reassigned (only mutated)
-    const elseSection = src.slice(src.indexOf("// ── Normal continue: mutate existing missionState ──"), src.indexOf('// ── Common: build prompt + spawn process ──'));
-    assert(!elseSection.includes('forked_from'), 'Normal continue should not touch forked_from');
+  test('continue_mission respects execution_mode for AGENT_TEAMS env', () => {
+    const commonSection = src.slice(src.indexOf('// ── Common: build prompt + spawn process'));
+    assertIncludes(commonSection, 'useAgentTeams');
+    assertIncludes(commonSection, "execution_mode");
   });
 
-  test('Fork builds rich summary from history (tasks + logs + files)', () => {
-    const forkStart = src.indexOf('if (historyState) {');
-    const forkEnd   = src.indexOf('// ── Normal continue: mutate existing missionState');
-    const forkSection = src.slice(forkStart, forkEnd);
-    assertIncludes(forkSection, 'historyState.tasks');
-    assertIncludes(forkSection, 'historyState.log');
-    assertIncludes(forkSection, 'historyState.file_changes');
+  test('continue_mission selects template based on execution_mode', () => {
+    const commonSection = src.slice(src.indexOf('// ── Common: build prompt + spawn process'));
+    assertIncludes(commonSection, 'PROMPT_CONTINUE_AGENT_TEAMS');
+    assertIncludes(commonSection, 'PROMPT_CONTINUE_STANDARD');
+  });
+
+  test('continue_mission starts file watcher for agent_teams mode', () => {
+    const commonSection = src.slice(src.indexOf('// ── Common: build prompt + spawn process'));
+    assertIncludes(commonSection, 'startFileWatcher');
   });
 });
 
@@ -378,28 +366,21 @@ suite('Frontend: mission:agent-spawned handler', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-// SUITE 8: Frontend — useMission continueM fork flow
+// SUITE 8: Frontend — useMission launch with historyContext
 // ═══════════════════════════════════════════════════════════════
-suite('Frontend: continueM fork from history', () => {
+suite('Frontend: launch with historyContext', () => {
   const src = readSource('src/hooks/useMission.js');
 
-  test('continueM detects history context (non-array with id)', () => {
-    assertIncludes(src, 'isHistoryContext');
-    assertIncludes(src, '!Array.isArray(agentsOrContext)');
-    assertIncludes(src, 'agentsOrContext.id');
+  test('launch accepts historyContext parameter', () => {
+    assertIncludes(src, 'historyContext');
   });
 
-  test('continueM sends contextJson to backend when forking', () => {
-    assertIncludes(src, 'JSON.stringify(historyContext)');
+  test('launch passes historyContext to invoke', () => {
+    assertIncludes(src, "historyContext: historyContext || ''");
   });
 
-  test('Fork path hydrates from get_mission_state', () => {
-    assertIncludes(src, "invoke('get_mission_state')");
-    assertIncludes(src, 'setMissionState(freshState)');
-  });
-
-  test('Fork fallback creates minimal state with forked_from', () => {
-    assertIncludes(src, 'forked_from: historyContext.id');
+  test('continueM still works for normal interventions', () => {
+    assertIncludes(src, "invoke('continue_mission'");
   });
 
   test('Normal continue sets phase to Continuing', () => {
@@ -442,8 +423,10 @@ suite('Frontend: MissionControlPage historyViewMode', () => {
     assertIncludes(src, "isHistoryView={historyViewMode === 'view'}");
   });
 
-  test('onContinue calls continueM with historyView', () => {
-    assertIncludes(src, 'continueM(msg, historyView)');
+  test('onContinue calls launch via buildMissionPrompt for full lifecycle', () => {
+    assertIncludes(src, 'buildMissionPrompt(msg');
+    assertIncludes(src, 'launch(');
+    assertIncludes(src, 'historyContext: JSON.stringify(historyView)');
   });
 
   test('MissionHistoryPanel receives onContinueFromHistory', () => {
@@ -522,31 +505,35 @@ suite('Prompt templates', () => {
     assert(fs.existsSync(path.join(ROOT, 'electron/prompts/deploy_agent_teams.md')), 'deploy_agent_teams.md not found');
   });
 
-  test('continue_mission.md exists', () => {
-    assert(fs.existsSync(path.join(ROOT, 'electron/prompts/continue_mission.md')), 'continue_mission.md not found');
+  test('continue_agent_teams.md exists', () => {
+    assert(fs.existsSync(path.join(ROOT, 'electron/prompts/continue_agent_teams.md')), 'continue_agent_teams.md not found');
+  });
+
+  test('continue_standard.md exists', () => {
+    assert(fs.existsSync(path.join(ROOT, 'electron/prompts/continue_standard.md')), 'continue_standard.md not found');
   });
 
   test('planning.md exists', () => {
     assert(fs.existsSync(path.join(ROOT, 'electron/prompts/planning.md')), 'planning.md not found');
   });
 
-  test('continue_mission.md has {{SUMMARY}} placeholder', () => {
-    const tmpl = readSource('electron/prompts/continue_mission.md');
+  test('continue_agent_teams.md has {{SUMMARY}} placeholder', () => {
+    const tmpl = readSource('electron/prompts/continue_agent_teams.md');
     assertIncludes(tmpl, '{{SUMMARY}}');
   });
 
-  test('continue_mission.md has {{MESSAGE}} placeholder', () => {
-    const tmpl = readSource('electron/prompts/continue_mission.md');
+  test('continue_agent_teams.md has {{MESSAGE}} placeholder', () => {
+    const tmpl = readSource('electron/prompts/continue_agent_teams.md');
     assertIncludes(tmpl, '{{MESSAGE}}');
   });
 
-  test('continue_mission.md has {{PROJECT_PATH}} placeholder', () => {
-    const tmpl = readSource('electron/prompts/continue_mission.md');
+  test('continue_standard.md has {{PROJECT_PATH}} placeholder', () => {
+    const tmpl = readSource('electron/prompts/continue_standard.md');
     assertIncludes(tmpl, '{{PROJECT_PATH}}');
   });
 
-  test('continue_mission.md has {{PROJECT_TYPE}} placeholder', () => {
-    const tmpl = readSource('electron/prompts/continue_mission.md');
+  test('continue_standard.md has {{PROJECT_TYPE}} placeholder', () => {
+    const tmpl = readSource('electron/prompts/continue_standard.md');
     assertIncludes(tmpl, '{{PROJECT_TYPE}}');
   });
 
@@ -609,9 +596,11 @@ suite('Documentation: fork + model sync coverage', () => {
     assertIncludes(doc, 'fork from history');
   });
 
-  test('FUNCTION_REFERENCE.md documents continue_mission fork mode', () => {
+  test('FUNCTION_REFERENCE.md documents launch_mission or continue_mission fork mode', () => {
     const doc = readSource('FUNCTION_REFERENCE.md');
-    assertIncludes(doc, 'contextJson');
+    // Either contextJson (old) or historyContext (new) should be documented
+    const hasForkDocs = doc.includes('contextJson') || doc.includes('historyContext');
+    assert(hasForkDocs, 'FUNCTION_REFERENCE.md should document fork/history context');
     assertIncludes(doc, 'Fork Mode');
   });
 
@@ -705,25 +694,28 @@ suite('Data flow: fork from history end-to-end', () => {
     assertIncludes(pageSrc, "setHistoryViewMode('continue')");
   });
 
-  test('Step 4: Dashboard shows InterventionPanel (isHistoryView=false)', () => {
-    assertIncludes(pageSrc, "isHistoryView={historyViewMode === 'view'}");
+  test('Step 4: User types new requirement → onContinue builds prompt and calls launch()', () => {
+    assertIncludes(pageSrc, 'buildMissionPrompt(msg');
+    assertIncludes(pageSrc, 'historyContext: JSON.stringify(historyView)');
   });
 
-  test('Step 5: onContinue passes historyView to continueM', () => {
-    assertIncludes(pageSrc, 'continueM(msg, historyView)');
+  test('Step 5: launch() passes historyContext to backend', () => {
+    assertIncludes(hookSrc, 'historyContext');
+    assertIncludes(hookSrc, "invoke('launch_mission'");
   });
 
-  test('Step 6: continueM detects history context and sends contextJson', () => {
-    assertIncludes(hookSrc, 'isHistoryContext');
-    assertIncludes(hookSrc, 'JSON.stringify(historyContext)');
+  test('Step 6: Backend launch_mission builds previous work section from history', () => {
+    assertIncludes(backendSrc, 'previousWorkSection');
+    assertIncludes(backendSrc, 'PREVIOUS WORK');
   });
 
-  test('Step 7: Backend creates new missionState with forked_from', () => {
-    assertIncludes(backendSrc, 'forked_from:     parentId');
+  test('Step 7: Backend sets forked_from in new missionState', () => {
+    assertIncludes(backendSrc, 'forked_from: historyState');
   });
 
-  test('Step 8: Frontend hydrates from get_mission_state', () => {
-    assertIncludes(hookSrc, "invoke('get_mission_state')");
+  test('Step 8: Mission goes through Planning → ReviewPlan → Deploy (full lifecycle)', () => {
+    // launch_mission always starts in Planning phase
+    assertIncludes(backendSrc, "phase:  'Planning'");
   });
 });
 
@@ -734,37 +726,25 @@ suite('Edge cases: safety checks', () => {
   const backendSrc = readSource('electron/ipc/mission.cjs');
   const hookSrc    = readSource('src/hooks/useMission.js');
 
-  test('Backend fork handles missing historyState.agents gracefully', () => {
-    assertIncludes(backendSrc, "(historyState.agents || [])");
+  test('Backend launch_mission handles missing historyState.tasks gracefully', () => {
+    // launch_mission's history parsing uses || []
+    assertIncludes(backendSrc, "historyState.tasks || []");
   });
 
-  test('Backend fork handles missing historyState.tasks gracefully', () => {
-    const forkStart = backendSrc.indexOf('if (historyState) {');
-    const forkEnd   = backendSrc.indexOf('// ── Normal continue: mutate existing missionState');
-    const forkSection = backendSrc.slice(forkStart, forkEnd);
-    assertIncludes(forkSection, 'historyState.tasks || []');
+  test('Backend launch_mission handles missing historyState.log gracefully', () => {
+    assertIncludes(backendSrc, "historyState.log || []");
   });
 
-  test('Backend fork handles missing historyState.log gracefully', () => {
-    const forkStart = backendSrc.indexOf('if (historyState) {');
-    const forkEnd   = backendSrc.indexOf('// ── Normal continue: mutate existing missionState');
-    const forkSection = backendSrc.slice(forkStart, forkEnd);
-    assertIncludes(forkSection, 'historyState.log || []');
+  test('Backend launch_mission handles missing historyState.file_changes gracefully', () => {
+    assertIncludes(backendSrc, "historyState.file_changes || []");
   });
 
-  test('Backend fork handles missing historyState.file_changes gracefully', () => {
-    const forkStart = backendSrc.indexOf('if (historyState) {');
-    const forkEnd   = backendSrc.indexOf('// ── Normal continue: mutate existing missionState');
-    const forkSection = backendSrc.slice(forkStart, forkEnd);
-    assertIncludes(forkSection, 'historyState.file_changes || []');
+  test('Backend historyContext parse failure is caught', () => {
+    assertIncludes(backendSrc, 'try { historyState = JSON.parse(historyContext)');
   });
 
-  test('Frontend continueM handles invoke error', () => {
+  test('Frontend launch handles invoke error', () => {
     assertIncludes(hookSrc, "status: 'Failed'");
-  });
-
-  test('Frontend continueM has fallback state for hydration failure', () => {
-    assertIncludes(hookSrc, "id: `fork-${Date.now()}`");
   });
 
   test('Frontend agent-spawned handles prev=null', () => {
@@ -773,10 +753,6 @@ suite('Edge cases: safety checks', () => {
 
   test('Deploy error sets phase to Done', () => {
     assertIncludes(hookSrc, "phase: 'Done'");
-  });
-
-  test('Backend contextJson parse failure is caught', () => {
-    assertIncludes(backendSrc, 'try { historyState = JSON.parse(contextJson)');
   });
 });
 

@@ -469,7 +469,7 @@ export function useMission() {
     }
   }, [flushBuffers, scheduleFlush])
 
-  const launch = useCallback(async ({ projectPath, prompt, description, model, executionMode }) => {
+  const launch = useCallback(async ({ projectPath, prompt, description, model, executionMode, historyContext }) => {
     setPlanReady(null)
     try {
       const initialState = await invoke('launch_mission', {
@@ -478,6 +478,7 @@ export function useMission() {
         description,
         model: model || 'sonnet',
         executionMode: executionMode || 'standard',
+        historyContext: historyContext || '',
       })
       setMissionState(initialState)
       setIsRunning(true)

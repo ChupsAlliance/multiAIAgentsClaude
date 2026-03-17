@@ -703,11 +703,16 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
   // Track if manager changed anything (for re-plan button)
   const [hasChanges, setHasChanges] = useState(false)
 
-  // Sync when re-plan returns new data
+  // Sync when re-plan returns new data (preserve ALL local edits)
   useEffect(() => {
     setLocalAgents(agents.map(a => {
       const existing = localAgents.find(e => e.name === a.name)
-      return { ...a, customPrompt: existing?.customPrompt || '', skillFile: existing?.skillFile || null }
+      return {
+        ...a,
+        model: existing?.model || a.model || 'sonnet',
+        customPrompt: existing?.customPrompt || '',
+        skillFile: existing?.skillFile || null,
+      }
     }))
   }, [agents])
 
@@ -745,6 +750,7 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
     setLocalAgents(prev => prev.map(a =>
       a.name === agentName ? { ...a, model } : a
     ))
+    setHasChanges(true)
   }
 
   const handleCustomPromptChange = (agentName, prompt) => {
@@ -768,6 +774,7 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
 
   const handleSetAllModels = (model) => {
     setLocalAgents(prev => prev.map(a => ({ ...a, model })))
+    setHasChanges(true)
   }
 
   // ── Task CRUD ──
@@ -938,13 +945,16 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
               <span className="text-[10px] text-vs-muted font-mono mr-1">Set all:</span>
               {MODELS.map(m => {
                 const Icon = m.icon
+                const allMatch = localAgents.length > 0 && localAgents.every(a => (a.model || 'sonnet') === m.id)
                 return (
                   <button
                     key={m.id}
                     onClick={() => handleSetAllModels(m.id)}
-                    className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono
-                               bg-vs-bg border border-vs-border text-vs-muted
-                               hover:border-vs-accent hover:text-white transition-colors"
+                    className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono transition-colors ${
+                      allMatch
+                        ? 'bg-vs-accent/20 border border-vs-accent text-white'
+                        : 'bg-vs-bg border border-vs-border text-vs-muted hover:border-vs-accent hover:text-white'
+                    }`}
                   >
                     <Icon size={9} /> {m.label}
                   </button>

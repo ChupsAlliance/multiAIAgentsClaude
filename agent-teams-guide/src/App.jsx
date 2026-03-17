@@ -1,6 +1,7 @@
 import { useState, useEffect, lazy, Suspense } from 'react'
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import { invoke } from '@tauri-apps/api/core'
+import { useChangelog, ChangelogModal } from './components/ChangelogModal'
 
 // Lazy load all pages — only load what's needed
 const DocsPage = lazy(() => import('./pages/DocsPage').then(m => ({ default: m.DocsPage })))
@@ -23,6 +24,16 @@ export default function App() {
   const navigate = useNavigate()
   const location = useLocation()
   const [checked, setChecked] = useState(false)
+  const { showChangelog, shouldAutoShow, openChangelog, closeChangelog, markSeen } = useChangelog()
+
+  // Auto-show changelog on first visit after version update
+  useEffect(() => {
+    if (checked && shouldAutoShow) {
+      // Small delay so the app renders first
+      const t = setTimeout(() => openChangelog(), 600)
+      return () => clearTimeout(t)
+    }
+  }, [checked, shouldAutoShow, openChangelog])
 
   useEffect(() => {
     if (location.pathname === '/setup') {
@@ -56,6 +67,12 @@ export default function App() {
     }
   }, [location.pathname])
 
+  // Expose openChangelog globally so Sidebar can trigger it
+  useEffect(() => {
+    window.__openChangelog = openChangelog
+    return () => { delete window.__openChangelog }
+  }, [openChangelog])
+
   if (!checked) return <PageLoader />
 
   return (
@@ -67,6 +84,7 @@ export default function App() {
         <Route path="/dashboard"  element={<DashboardPage />} />
         <Route path="/mission"    element={<MissionControlPage />} />
       </Routes>
+      <ChangelogModal open={showChangelog} onClose={closeChangelog} />
     </Suspense>
   )
 }

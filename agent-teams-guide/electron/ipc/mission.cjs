@@ -22,7 +22,8 @@ function promptPath(filename) {
 }
 const PROMPT_DEPLOY_AGENT_TEAMS = fs.readFileSync(promptPath('deploy_agent_teams.md'), 'utf8');
 const PROMPT_DEPLOY_STANDARD = fs.readFileSync(promptPath('deploy_standard.md'), 'utf8');
-const PROMPT_CONTINUE_MISSION = fs.readFileSync(promptPath('continue_mission.md'), 'utf8');
+const PROMPT_CONTINUE_AGENT_TEAMS = fs.readFileSync(promptPath('continue_agent_teams.md'), 'utf8');
+const PROMPT_CONTINUE_STANDARD = fs.readFileSync(promptPath('continue_standard.md'), 'utf8');
 const PROMPT_REPLAN = fs.existsSync(promptPath('replan.md'))
   ? fs.readFileSync(promptPath('replan.md'), 'utf8')
   : null;
@@ -1602,7 +1603,7 @@ module.exports = function registerMission(getMainWindow) {
 
   // ── launch_mission ─────────────────────────────────────────────
   ipcMain.handle('launch_mission', async (_event, args) => {
-    const { projectPath, prompt, description, model, executionMode } = args || {};
+    const { projectPath, prompt, description, model, executionMode, historyContext } = args || {};
 
     // Prevent double-launch
     if (missionState &&
@@ -1610,10 +1611,53 @@ module.exports = function registerMission(getMainWindow) {
       return 'A mission is already running';
     }
 
+    // ── Parse optional history context (continue from history = new mission with context) ──
+    let historyState = null;
+    if (historyContext) {
+      try { historyState = JSON.parse(historyContext); } catch (_) {}
+    }
+
     const ts        = now();
     const missionId = `mission-${ts}`;
     const modelArg  = model || 'sonnet';
     const execMode  = executionMode || 'standard';
+
+    // Build "previous work" summary if continuing from history
+    let previousWorkSection = '';
+    if (historyState) {
+      const parts = [];
+      const hTasks = historyState.tasks || [];
+      const completed  = hTasks.filter(t => t.status === 'completed')
+        .map(t => `- [DONE] ${t.title} (by ${t.assigned_agent || 'unknown'})`);
+      const inProgress = hTasks.filter(t => t.status === 'in_progress')
+        .map(t => `- [IN PROGRESS] ${t.title} (by ${t.assigned_agent || 'unknown'})`);
+      const pending    = hTasks.filter(t => t.status === 'pending')
+        .map(t => `- [PENDING] ${t.title}`);
+      if (completed.length)  parts.push(`Completed tasks:\n${completed.join('\n')}`);
+      if (inProgress.length) parts.push(`In Progress:\n${inProgress.join('\n')}`);
+      if (pending.length)    parts.push(`Pending:\n${pending.join('\n')}`);
+
+      const hLogs = (historyState.log || []).filter(l => l.log_type !== 'raw').slice(-20)
+        .map(l => `[${l.agent}] ${l.message}`);
+      if (hLogs.length) parts.push(`Recent activity:\n${hLogs.join('\n')}`);
+
+      const hFiles = (historyState.file_changes || []).map(f => `- ${f.path} (${f.action})`);
+      if (hFiles.length) parts.push(`Files created/modified:\n${hFiles.join('\n')}`);
+
+      if (parts.length) {
+        previousWorkSection = '\n\n## PREVIOUS WORK (from earlier mission)\n' +
+          'This is a continuation of a previous mission. Below is what was accomplished:\n\n' +
+          parts.join('\n\n') +
+          '\n\nTake this context into account when planning. Reuse existing work where applicable. ' +
+          'Focus on what the NEW requirement asks — do NOT redo completed work unless the user explicitly wants changes.\n';
+      }
+    }
+
+    // Kill any existing process before starting new mission
+    if (historyState) {
+      stopWatcher();
+      killChild();
+    }
 
     // Initialize state
     missionState = {
@@ -1630,7 +1674,9 @@ module.exports = function registerMission(getMainWindow) {
       tasks: [],
       log: [{
         timestamp: ts, agent: 'System',
-        message: `Mission launched: ${description || ''}`,
+        message: historyState
+          ? `Mission launched (continuing from ${historyState.id || 'history'}): ${description || ''}`
+          : `Mission launched: ${description || ''}`,
         log_type: 'info',
       }],
       file_changes: [],
@@ -1639,6 +1685,8 @@ module.exports = function registerMission(getMainWindow) {
       team_name: null,
       messages: [],
       execution_mode: execMode,
+      forked_from: historyState ? (historyState.id || null) : undefined,
+      forked_from_desc: historyState ? (historyState.description || null) : undefined,
     };
 
     sendToWindow('mission:status', { mission_id: missionId, status: 'launching' });
@@ -1657,7 +1705,9 @@ module.exports = function registerMission(getMainWindow) {
 
     try {
       // Write prompt to stdin then close it
-      proc.stdin.write(prompt || '', 'utf8');
+      // If continuing from history, append previous work context to the prompt
+      const fullPrompt = (prompt || '') + previousWorkSection;
+      proc.stdin.write(fullPrompt, 'utf8');
       proc.stdin.end();
     } catch (e) {
       return `Failed to write prompt to stdin: ${e.message}`;
@@ -1950,7 +2000,13 @@ module.exports = function registerMission(getMainWindow) {
 
     const projectTypeHint = detectProjectTypeCont(projectPath);
 
-    const continuePrompt = PROMPT_CONTINUE_MISSION
+    // Determine execution mode: fork inherits from parent, normal uses current
+    const execMode = missionState ? missionState.execution_mode || 'standard' : 'standard';
+    const useAgentTeams = execMode === 'agent_teams';
+
+    // Select the appropriate continue prompt template based on execution mode
+    const continueTemplate = useAgentTeams ? PROMPT_CONTINUE_AGENT_TEAMS : PROMPT_CONTINUE_STANDARD;
+    const continuePrompt = continueTemplate
       .replace('{{PROJECT_PATH}}', projectPath.replace(/\\/g, '/'))
       .replace('{{PROJECT_TYPE}}', projectTypeHint)
       .replace('{{SUMMARY}}', completedSummary || 'No previous work recorded.')
@@ -1959,12 +2015,12 @@ module.exports = function registerMission(getMainWindow) {
     // Kill existing process (no-op if already killed in fork path)
     killChild();
 
-    // Spawn new claude process (no AGENT_TEAMS for continuation)
+    // Spawn new claude process — respect execution_mode for AGENT_TEAMS env
     const proc = spawnClaude(
       ['-p', '--dangerously-skip-permissions', '--model', leadModel,
        '--output-format', 'stream-json', '--verbose', '--max-turns', '200'],
       projectPath,
-      false  // no AGENT_TEAMS env for continue_mission
+      useAgentTeams  // enable AGENT_TEAMS if original mission used it
     );
 
     try {
@@ -1976,6 +2032,11 @@ module.exports = function registerMission(getMainWindow) {
 
     childProcess = proc;
     if (missionState) missionState.phase = 'Executing';
+
+    // Start file watcher if agent_teams mode (detect file changes from subagents)
+    if (useAgentTeams) {
+      startFileWatcher(projectPath, sendToWindow);
+    }
 
     // Wire up readers
     readProcessStdout_deploy(proc, sendToWindow, true);
