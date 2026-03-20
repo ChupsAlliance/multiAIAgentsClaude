@@ -1,7 +1,7 @@
 # Agent Question Protocol — Design Spec
 
 **Date:** 2026-03-20
-**Status:** Draft
+**Status:** Reviewed (v2 — all review issues resolved)
 **Author:** Brainstorming session
 
 ---
@@ -45,17 +45,55 @@ Three permission modes, selectable by the user before deploying a mission:
 
 **Current:** `child_process.spawn` with `stdio: ['pipe', 'pipe', 'pipe']`. After writing the prompt, `proc.stdin.end()` is called immediately.
 
-**Change:** When `permissionMode === 'interactive'`, keep stdin open:
+#### permissionMode Data-Flow Chain
+
+```
+MissionLauncher (UI)
+  → localStorage('permission_mode')
+  → useMission.launch({ ..., permissionMode })
+  → invoke('launch_mission', { ..., permissionMode })
+  → missionState.permissionMode = permissionMode   ← stored here
+
+MissionControlPage → handlePlanApproved()
+  → useMission.deploy({ agents, tasks })
+  → invoke('deploy_mission', { agents, tasks })
+  → deploy_mission reads missionState.permissionMode  ← reads from missionState
+
+continue_mission also reads missionState.permissionMode
+```
+
+`permissionMode` is set ONCE in `launch_mission` and stored in `missionState`. All subsequent handlers (`deploy_mission`, `continue_mission`) read it from there. The frontend `useMission.launch()` signature must be updated:
+
+```js
+// useMission.js — launch() signature change
+const launch = useCallback(async ({ projectPath, prompt, description, model, executionMode, historyContext, permissionMode }) => {
+  await invoke('launch_mission', { projectPath, prompt, description, model, executionMode, historyContext, permissionMode })
+  // ...
+})
+```
+
+```js
+// electron/ipc/mission.cjs — launch_mission
+ipcMain.handle('launch_mission', async (_, args) => {
+  const { projectPath, prompt, description, model, executionMode, historyContext, permissionMode = 'auto' } = args
+  // ...
+  missionState.permissionMode = permissionMode
+})
+```
+
+**Change in deploy_mission and continue_mission:** When spawning the Claude CLI process, check `missionState.permissionMode`:
 
 ```js
 proc.stdin.write(prompt + '\n')
-if (permissionMode === 'interactive') {
+if (missionState.permissionMode === 'interactive') {
   missionState.stdinOpen = true
   // Do NOT call proc.stdin.end()
 } else {
-  proc.stdin.end()  // current behavior
+  proc.stdin.end()  // current behavior for 'auto' and 'plan-only'
 }
 ```
+
+**This applies to both `deploy_mission` and `continue_mission`** — both handlers spawn Claude CLI processes and both must respect the permission mode for stdin handling.
 
 ### 2. Question Markers (Output Protocol)
 
@@ -103,19 +141,61 @@ App writes answers back to stdin:
 
 ### 4. Stream Parser Changes (Backend)
 
-In `readProcessStdout_deploy()`, add marker detection:
+#### Where Markers Appear
+
+Claude CLI runs with `--output-format stream-json --verbose`. All text output from the assistant (including question markers) appears **inside** `content_block_delta` events as `text` deltas. The markers are NOT raw stdout lines — they are embedded within the JSON stream.
+
+The existing parser in `readProcessStdout_deploy()` already accumulates text content via `fullTextBuf` (built from `content_block_delta.delta.text` fragments). The marker scanner must operate on this accumulated text buffer, not on raw lines.
+
+#### Marker Detection (on fullTextBuf)
 
 ```
-State machine:
-  NORMAL → detect "<<<QUESTION>>>" → COLLECTING_QUESTION
-  COLLECTING_QUESTION → detect "<<<END_QUESTION>>>" → parse JSON → emit event → NORMAL (or collect more)
+State machine (runs on fullTextBuf after each text delta append):
 
-  Detect end of question batch: if no new <<<QUESTION>>> within 500ms after last <<<END_QUESTION>>>, treat batch as complete.
+NORMAL
+  → fullTextBuf contains "<<<QUESTION>>>" → enter COLLECTING_QUESTION
+  → extract JSON between <<<QUESTION>>> and <<<END_QUESTION>>>
+  → parse JSON, push to questionBatch[]
+  → check for more <<<QUESTION>>> blocks in same buffer
+  → detect "<<<QUESTIONS_END>>>" → batch complete → emit event
+
+Note: <<<QUESTIONS_END>>> is an EXPLICIT terminal marker that Lead outputs
+after all questions. No timer-based detection.
+```
+
+**Prompt instructs Lead to always end with `<<<QUESTIONS_END>>>`:**
+
+```
+1. Output one or more question blocks:
+<<<QUESTION>>>
+{"from":"Lead",...}
+<<<END_QUESTION>>>
+
+2. After ALL questions, output the terminal marker:
+<<<QUESTIONS_END>>>
+
+3. STOP and WAIT for <<<ANSWER>>>
+```
+
+This is deterministic — no race condition from timer-based batch detection.
+
+#### State assignment for history
+
+When the batch is complete, before emitting the event:
+
+```js
+missionState._lastQuestions = questionBatch  // ← set here for answer_question to reference
+missionState.pendingQuestions = questionBatch
+mainWindow.webContents.send('mission:question', { questions: questionBatch, timestamp: Date.now() })
 ```
 
 **Events emitted:**
-- `mission:question` — `{ questions: [...], timestamp }` — batch of questions
+- `mission:question` — `{ questions: [...], timestamp }` — complete batch of questions
 - `mission:answer-sent` — `{ answers: [...] }` — confirmation after writing to stdin
+
+#### Note on IPC shim
+
+All `invoke()` and `listen()` calls in the frontend go through the Tauri shim layer (`src/lib/tauri-shim/core.js` → `window.electronAPI.invoke`, `event.js` wraps data as `{ payload: data }`). The new `answer_question` IPC and `mission:question`/`mission:answer-sent` events follow the same pattern as all existing IPC. The `mainWindow` reference used in `mainWindow.webContents.send()` is already in scope in the mission IPC module (passed via the module factory function).
 
 ### 5. IPC Handler (Backend)
 
@@ -238,6 +318,25 @@ Multi-question UI similar to Claude Code's `AskUserQuestion`:
 - **InterventionPanel**: Disabled while waiting for answer. Tooltip: `"Trả lời câu hỏi trước khi gửi intervention"`
 - **Elapsed timer**: Continues counting (shows total mission time including wait time)
 
+**Props changes:** `MissionDashboard` currently receives `{ state, isRunning, onStop, onContinue, onNewMission, elapsed, isHistoryView }`. Add two new props:
+
+```jsx
+export const MissionDashboard = memo(function MissionDashboard({
+  state, isRunning, onStop, onContinue, onNewMission, elapsed, isHistoryView,
+  pendingQuestions,  // NEW: [{ from, type, question, options?, context? }] or null
+  onAnswer,          // NEW: (answers) => Promise<void>
+}) {
+```
+
+The parent (`MissionControlPage`) must pass these from `useMission`:
+```jsx
+<MissionDashboard
+  {...existingProps}
+  pendingQuestions={pendingQuestions}
+  onAnswer={answerQuestion}
+/>
+```
+
 ### 4. State Management (useMission hook)
 
 New state fields:
@@ -293,7 +392,10 @@ that is not available in the provided documents, reference materials, or project
 
 2. You may output multiple <<<QUESTION>>> blocks if you have several questions.
 
-3. After all questions, STOP and WAIT for:
+3. After ALL questions, output the terminal marker:
+<<<QUESTIONS_END>>>
+
+4. Then STOP and WAIT for:
 <<<ANSWER>>>
 {"answers":[{"question_index":0,"answer":"...","note":"..."}]}
 <<<END_ANSWER>>>
@@ -306,6 +408,7 @@ RULES:
 - Only ask when you truly lack critical information that would lead to wrong decisions.
 - Prefer making informed decisions autonomously when possible.
 - If you've already asked multiple questions, strongly consider deciding on your own.
+- ALWAYS end your question batch with <<<QUESTIONS_END>>> marker.
 ```
 
 **When `auto`:**
@@ -371,15 +474,16 @@ When forking from history, inject Q&A into planning prompt so Lead knows previou
 
 | File | Change |
 |------|--------|
-| `electron/ipc/mission.cjs` | Stdin open logic, question marker parser, `answer_question` IPC, auto-answer handler |
-| `electron/prompts/deploy_agent_teams.md` | Add `QUESTION PROTOCOL` conditional section |
+| `electron/ipc/mission.cjs` | `launch_mission`: store `permissionMode` in missionState. `deploy_mission`: stdin open logic based on `missionState.permissionMode`, question marker parser on `fullTextBuf`, `answer_question` IPC handler, auto-answer handler. `continue_mission`: same stdin open logic + question marker parser (parallel to deploy_mission). |
+| `electron/prompts/deploy_agent_teams.md` | Add `QUESTION PROTOCOL` conditional section (interactive) or `AUTONOMOUS MODE` (auto) |
 | `electron/prompts/deploy_standard.md` | Same |
-| `electron/prompts/continue_agent_teams.md` | Same |
+| `electron/prompts/continue_agent_teams.md` | Same conditional injection |
 | `electron/prompts/continue_standard.md` | Same |
-| `src/hooks/useMission.js` | `pendingQuestions`, `permissionMode`, `questionHistory`, `answerQuestion()`, event listeners |
+| `src/hooks/useMission.js` | Add `permissionMode` param to `launch()`. New state: `pendingQuestions`, `questionHistory`. New action: `answerQuestion()`. New listeners: `mission:question`, `mission:answer-sent` |
 | `src/components/mission/QuestionCard.jsx` | **NEW** — Multi-question UI with tabs, options, free text, skip, submit |
-| `src/components/mission/MissionDashboard.jsx` | Render QuestionCard, disable Intervention, status bar changes |
-| `src/components/mission/MissionLauncher.jsx` | Permission Mode selector |
+| `src/components/mission/MissionDashboard.jsx` | Add `pendingQuestions` + `onAnswer` props. Render QuestionCard, disable Intervention, status bar changes |
+| `src/pages/MissionControlPage.jsx` | Pass `pendingQuestions` + `answerQuestion` from useMission to MissionDashboard |
+| `src/components/mission/MissionLauncher.jsx` | Permission Mode selector, pass `permissionMode` to launch() |
 | `src/components/mission/InterventionPanel.jsx` | Disable when pendingQuestions, show tooltip |
 | `src/data/changelog.js` | Add to Unreleased section |
 | `tests/run_all.cjs` | New test suites for question protocol |
