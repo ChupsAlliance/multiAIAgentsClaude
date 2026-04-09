@@ -17,18 +17,23 @@ For EACH agent listed above, call the Agent tool with:
 - subagent_type: "general-purpose"
 - model: the model specified for that agent
 - mode: "bypassPermissions"
-- prompt: Build EACH agent's prompt using this EXACT structure:
-  "You are a specialized developer. Working directory: {{PROJECT_PATH}}.
+- prompt:
+  IF the agent block contains a ```prompt``` section:
+    Use the EXACT content inside the ```prompt``` fences — character-for-character.
+    Do NOT add, remove, rephrase, or summarize anything. Paste it VERBATIM as the entire prompt.
+  OTHERWISE (no ```prompt``` section — legacy path):
+    Build the prompt using this structure:
+    "You are a specialized developer. Working directory: {{PROJECT_PATH}}.
 
-  <IF the agent block has a SKILL section (inside ```skill``` fences):
-   Copy-paste the ENTIRE content between the ```skill``` fences here.
-   This is a mandatory operational skill — it defines HOW this agent works.
-   Do NOT summarize, truncate, or omit any part of it. Paste it VERBATIM.>
+    <IF the agent block has a SKILL section (inside ```skill``` fences):
+     Copy-paste the ENTIRE content between the ```skill``` fences here.
+     This is a mandatory operational skill — it defines HOW this agent works.
+     Do NOT summarize, truncate, or omit any part of it. Paste it VERBATIM.>
 
-  Tasks:
-  <list ALL tasks for this agent>
+    Tasks:
+    <list ALL tasks for this agent>
 
-  <IF the agent block has 'Custom instructions:', include that text here as well.>
+    <IF the agent block has 'Custom instructions:', include that text here as well.>
 
   EXECUTION PHASES:
   A) SETUP: cd into {{PROJECT_PATH}}. Check what files already exist. Read existing code before writing.
@@ -47,28 +52,53 @@ For EACH agent listed above, call the Agent tool with:
      - '[<name>] FILES_WRITTEN: <comma-separated list of files you created/modified>'
      - '[<name>] Completed: <task>' for each finished task
 
+  ⚠ BLOCKING RULE — ASK LEAD WHEN UNCERTAIN:
+  If you encounter ambiguity, conflicting requirements, or missing critical information
+  that would lead to a wrong implementation:
+  1. STOP immediately. Do NOT guess and implement.
+  2. Print '[<name>] BLOCKED: <your specific question>'
+  3. Return your result — Lead will answer and resume you.
+  Examples of when to BLOCK:
+  - Unclear which library/framework to use and the choice affects architecture
+  - Conflicting requirements between tasks
+  - Need info from another agent's output (API endpoints, shared types, file structure)
+  - Unsure about project conventions that could cause integration failures
+  You WILL be resumed with the answer — your full context is preserved.
+  Only BLOCK for genuinely critical decisions. For minor choices, use your best judgment.
+
   CRITICAL RULES:
   - Do NOT report done if build fails. Fix it first.
   - Do NOT write empty files or stub functions.
   - After each task, re-run the build to catch regressions.
   {{LANG_RULE}}"
 
-⚠ SKILL INJECTION (CRITICAL — agents will NOT follow their skill if you skip this):
-- If an agent block contains a ```skill``` section, you MUST paste that ENTIRE content into the agent's prompt BEFORE the task list.
-- The skill content is typically 500-5000 chars. Do NOT truncate it.
-- To verify: after building each prompt, check that it contains the skill text. If it doesn't, you did it wrong.
+⚠ PROMPT INJECTION (CRITICAL):
+- If an agent block has a ```prompt``` section: use its content VERBATIM as the entire prompt — skill content is already included inside.
+- If an agent block has a ```skill``` section (legacy path only): paste skill content VERBATIM into the prompt BEFORE the task list. Do NOT truncate it.
 
 IMPORTANT: Spawn ALL agents in the SAME message (parallel spawn). Then WAIT for all to complete.
 Print "[Lead] Spawning <name> for <role>" for each agent.
 
-### Phase 2: Review Agent Results
+### Phase 2: Review Agent Results & Handle Blocked Agents
 Once all Agent tool calls return:
 1. For EACH agent's result, check:
-   - Did they print BUILD_RESULT: PASS? → Agent succeeded
-   - Did they print BUILD_RESULT: FAIL? → Agent failed, needs retry
-   - No BUILD_RESULT at all? → Assume build was NOT verified
-2. Print "[Lead] Agent results: X/{{TOTAL_AGENTS}} PASS, Y FAIL"
-3. If any agent FAILED:
+   - BUILD_RESULT: PASS? → Agent succeeded
+   - BUILD_RESULT: FAIL? → Agent failed, needs retry
+   - No BUILD_RESULT? → Assume build was NOT verified
+   - **BLOCKED?** → Agent is waiting for your answer (see step 3)
+2. Print "[Lead] Agent results: X/{{TOTAL_AGENTS}} PASS, Y FAIL, Z BLOCKED"
+
+3. **Handle BLOCKED agents (CRITICAL — do not skip):**
+   For each agent that returned BLOCKED:
+   a) Read their question carefully
+   b) If you can answer from project context, reference materials, or your knowledge:
+      → Resume the agent: Agent(resume=<agent_id>, prompt="Answer: <your answer>. Continue with your tasks.")
+   c) If you genuinely cannot answer and need user input (interactive mode only):
+      → Use the QUESTION PROTOCOL to ask the user
+      → After receiving the user's answer, resume the agent with it
+   d) Wait for resumed agents to complete, then check their results again
+
+4. If any agent FAILED (not BLOCKED):
    - Read their error output
    - Spawn a FIX agent to resolve the errors:
      Agent(name="fixer", model="sonnet", prompt="Fix these build errors in {{PROJECT_PATH}}: <errors>")
@@ -102,5 +132,7 @@ After all agents report PASS:
 - Build passes with 0 errors: {{PROJECT_TYPE}}
 - Integration test: all imports resolve, app starts without crash
 - README.md exists
+
+{{PERMISSION_MODE}}
 
 Begin now. Spawn all agents in parallel.
