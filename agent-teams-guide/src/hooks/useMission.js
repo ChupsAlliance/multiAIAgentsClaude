@@ -13,6 +13,7 @@ export function useMission() {
   const [missionState, setMissionState] = useState(null)
   const [isRunning, setIsRunning] = useState(false)
   const [planReady, setPlanReady] = useState(null)
+  const [pendingQuestions, setPendingQuestions] = useState(null)
   const unlistenersRef = useRef([])
 
   // ── Batch buffers (mutable refs, no re-render) ──
@@ -439,6 +440,16 @@ export function useMission() {
             }
           })
         }),
+
+        // ── Question protocol (rare — apply immediately) ──
+        listen('mission:question', (e) => {
+          const { questions } = e.payload
+          setPendingQuestions(questions)
+        }),
+
+        listen('mission:answer-sent', () => {
+          setPendingQuestions(null)
+        }),
       ])
 
       unlistenersRef.current = unlisteners
@@ -460,6 +471,10 @@ export function useMission() {
           const planAgents = fixedState.agents.filter(a => a.name !== 'Lead')
           setPlanReady({ agents: planAgents, tasks: fixedState.tasks })
         }
+        // Hydrate pending questions (interactive mode session resume)
+        if (fixedState.pendingQuestions && fixedState.pendingQuestions.length > 0) {
+          setPendingQuestions(fixedState.pendingQuestions)
+        }
       }
     }).catch(() => {})
 
@@ -469,8 +484,9 @@ export function useMission() {
     }
   }, [flushBuffers, scheduleFlush])
 
-  const launch = useCallback(async ({ projectPath, prompt, description, model, executionMode, historyContext }) => {
+  const launch = useCallback(async ({ projectPath, prompt, description, model, executionMode, historyContext, permissionMode }) => {
     setPlanReady(null)
+    setPendingQuestions(null)
     try {
       const initialState = await invoke('launch_mission', {
         projectPath,
@@ -479,6 +495,7 @@ export function useMission() {
         model: model || 'sonnet',
         executionMode: executionMode || 'standard',
         historyContext: historyContext || '',
+        permissionMode: permissionMode || 'auto',
       })
       setMissionState(initialState)
       setIsRunning(true)
@@ -504,7 +521,7 @@ export function useMission() {
     }
   }, [])
 
-  const deploy = useCallback(async (agents, tasks) => {
+  const deploy = useCallback(async (agents, tasks, agentPrompts = {}) => {
     setPlanReady(null)
     try {
       await invoke('deploy_mission', {
@@ -521,6 +538,7 @@ export function useMission() {
           assigned_agent: t.assigned_agent || t.agent,
           priority: t.priority || 'medium',
         })),
+        agentPrompts,
       })
       // Update frontend state with user's confirmed agent models + task details
       setMissionState(prev => {
@@ -675,5 +693,18 @@ export function useMission() {
     }
   }, [])
 
-  return { missionState, isRunning, planReady, isReplanning, launch, deploy, continueM, stop, reset, replan }
+  // ── Answer question: send answers back to Lead ──
+  const answerQuestion = useCallback(async (answers) => {
+    try {
+      const result = await invoke('answer_question', { answers })
+      if (typeof result === 'string') {
+        console.error('[answerQuestion] Error:', result)
+      }
+      setPendingQuestions(null)
+    } catch (err) {
+      console.error('[answerQuestion] Exception:', err)
+    }
+  }, [])
+
+  return { missionState, isRunning, planReady, setPlanReady, isReplanning, pendingQuestions, launch, deploy, continueM, stop, reset, replan, answerQuestion }
 }
