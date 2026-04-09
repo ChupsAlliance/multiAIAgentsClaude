@@ -499,17 +499,18 @@ function escapeRegex(str) {
  * @param {Object} agent      - { name, role, customPrompt, skillFile }
  * @param {Array}  agentTasks - [{ title, detail, priority }] — only this agent's tasks
  * @param {Object} meta       - { projectPath }
- * @returns {string} full prompt string
+ * @returns {string} full verbatim prompt for the sub-agent
  */
 export function buildAgentPrompt(agent, agentTasks, meta = {}) {
   const name = agent.name || 'agent'
   const role = agent.role || 'Developer'
   const proj = (meta.projectPath || '').replace(/\\/g, '/')
 
-  // Separate skill content (loaded from skillFile) from short custom instructions
-  const hasSkill = !!(agent.skillFile && agent.customPrompt)
-  const skillContent = hasSkill ? agent.customPrompt : ''
-  const customInstructions = (!hasSkill && agent.customPrompt) ? agent.customPrompt : ''
+  // agent.customPrompt is overloaded: holds skill file content when skillFile is
+  // present, or plain user-supplied instructions when no skillFile.
+  const hasSkill = !!(agent.skillFile)
+  const skillContent = hasSkill ? (agent.customPrompt || '') : ''
+  const customInstructions = !hasSkill ? (agent.customPrompt || '') : ''
 
   const lines = []
 
@@ -544,7 +545,7 @@ export function buildAgentPrompt(agent, agentTasks, meta = {}) {
   // ── Execution Protocol ──
   lines.push('## Execution Protocol')
   lines.push('')
-  lines.push(`A) SETUP      — cd into ${proj}. Read existing files before writing anything.`)
+  lines.push(`A) SETUP      — ${proj ? `cd into ${proj}. Read` : 'Read'} existing files before writing anything.`)
   lines.push( 'B) IMPLEMENT  — Write ALL files completely. No stubs, no TODOs, no placeholder functions.')
   lines.push( 'C) BUILD      — Run the project\'s build/verify command (npm run build, cargo build, pytest…).')
   lines.push( '                Read ENTIRE output. Fix errors and retry until 0 errors.')
