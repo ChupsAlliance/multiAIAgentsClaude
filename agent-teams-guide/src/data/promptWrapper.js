@@ -141,6 +141,28 @@ ${parts.join('\n\n')}
   // Build language hint section
   const langSection = langHint ? `\n## LANGUAGE REQUIREMENT\n${langHint}\n` : ''
 
+  // Shared interactive question protocol text (used by both 'interactive' and deep_plan fallback)
+  const INTERACTIVE_PERMISSION_TEXT = `Use the <<<QUESTION>>> protocol below. The app will show your questions to the user and resume the session with their answers.
+
+1. Output this EXACT format (one block per question):
+<<<QUESTION>>>
+{"from":"Lead","type":"clarification","question":"Your specific question here","options":["Option A","Option B"],"context":"Why you need this answered"}
+<<<END_QUESTION>>>
+
+2. You may output multiple <<<QUESTION>>> blocks if you have several questions.
+
+3. After ALL questions, output the terminal marker:
+<<<QUESTIONS_END>>>
+
+4. Then STOP. End your turn immediately after <<<QUESTIONS_END>>>.
+   The user will answer your questions and a new turn will begin with their answers.
+   After receiving answers, continue with Phase 1 analysis and output the plan.
+
+RULES:
+- Only ask when you truly lack critical information that would lead to wrong decisions.
+- Prefer making informed decisions autonomously when possible.
+- ALWAYS end your question batch with <<<QUESTIONS_END>>> marker.`
+
   // Build permission mode section for planning phase
   let permissionSection = ''
   let phase0Section = ''
@@ -177,48 +199,10 @@ When you have gathered enough context (maximum 5 questions), output:
     } else {
       // Skill not found — fall back to standard interactive section
       console.warn('[deep_plan] superpowers brainstorming skill not found — falling back to interactive mode')
-      permissionSection = `Use the <<<QUESTION>>> protocol below. The app will show your questions to the user and resume the session with their answers.
-
-1. Output this EXACT format (one block per question):
-<<<QUESTION>>>
-{"from":"Lead","type":"clarification","question":"Your specific question here","options":["Option A","Option B"],"context":"Why you need this answered"}
-<<<END_QUESTION>>>
-
-2. You may output multiple <<<QUESTION>>> blocks if you have several questions.
-
-3. After ALL questions, output the terminal marker:
-<<<QUESTIONS_END>>>
-
-4. Then STOP. End your turn immediately after <<<QUESTIONS_END>>>.
-   The user will answer your questions and a new turn will begin with their answers.
-   After receiving answers, continue with Phase 1 analysis and output the plan.
-
-RULES:
-- Only ask when you truly lack critical information that would lead to wrong decisions.
-- Prefer making informed decisions autonomously when possible.
-- ALWAYS end your question batch with <<<QUESTIONS_END>>> marker.`
+      permissionSection = INTERACTIVE_PERMISSION_TEXT
     }
   } else if (permissionMode === 'interactive') {
-    permissionSection = `Use the <<<QUESTION>>> protocol below. The app will show your questions to the user and resume the session with their answers.
-
-1. Output this EXACT format (one block per question):
-<<<QUESTION>>>
-{"from":"Lead","type":"clarification","question":"Your specific question here","options":["Option A","Option B"],"context":"Why you need this answered"}
-<<<END_QUESTION>>>
-
-2. You may output multiple <<<QUESTION>>> blocks if you have several questions.
-
-3. After ALL questions, output the terminal marker:
-<<<QUESTIONS_END>>>
-
-4. Then STOP. End your turn immediately after <<<QUESTIONS_END>>>.
-   The user will answer your questions and a new turn will begin with their answers.
-   After receiving answers, continue with Phase 1 analysis and output the plan.
-
-RULES:
-- Only ask when you truly lack critical information that would lead to wrong decisions.
-- Prefer making informed decisions autonomously when possible.
-- ALWAYS end your question batch with <<<QUESTIONS_END>>> marker.`
+    permissionSection = INTERACTIVE_PERMISSION_TEXT
   } else {
     permissionSection = `Make all decisions independently. Choose the most optimal approach.
 Do NOT output <<<QUESTION>>> markers. Proceed directly to Phase 1 analysis.`
