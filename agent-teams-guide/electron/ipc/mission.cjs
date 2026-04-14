@@ -2544,8 +2544,9 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
           const [bMaj, bMin, bPatch] = b.split('.').map(Number);
           return bMaj - aMaj || bMin - aMin || bPatch - aPatch;
         });
-    } catch {
+    } catch (err) {
       // superpowers not installed — directory doesn't exist
+      console.error('[read_superpowers_skill] Could not read superpowers base dir:', err.message);
       return null;
     }
 
@@ -2553,8 +2554,10 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
 
     const skillPath = path.join(superpowersBase, versions[0], 'skills', skillName, 'SKILL.md');
     try {
-      return fs.readFileSync(skillPath, 'utf8');
-    } catch {
+      const content = fs.readFileSync(skillPath, 'utf8');
+      return content || null;
+    } catch (err) {
+      console.error('[read_superpowers_skill] Could not read skill file:', skillPath, err.message);
       return null;
     }
   });
