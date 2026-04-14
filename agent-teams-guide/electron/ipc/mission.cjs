@@ -2521,6 +2521,44 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
     return fs.readFileSync(templatePath, 'utf8');
   });
 
+  // ── read_superpowers_skill ─────────────────────────────────────
+  // Reads a superpowers skill SKILL.md from the user's Claude plugins cache.
+  // Discovers the latest installed version automatically via semver sort.
+  // Returns the file content as a string, or null if not found.
+  ipcMain.handle('read_superpowers_skill', async (_event, args) => {
+    const { skillName } = args || {};
+    if (!skillName) return null;
+
+    const superpowersBase = path.join(
+      os.homedir(),
+      '.claude', 'plugins', 'cache', 'claude-plugins-official', 'superpowers'
+    );
+
+    // Find all semver-formatted subdirectories (e.g. "5.0.7")
+    let versions = [];
+    try {
+      versions = fs.readdirSync(superpowersBase)
+        .filter(d => /^\d+\.\d+\.\d+$/.test(d))
+        .sort((a, b) => {
+          const [aMaj, aMin, aPatch] = a.split('.').map(Number);
+          const [bMaj, bMin, bPatch] = b.split('.').map(Number);
+          return bMaj - aMaj || bMin - aMin || bPatch - aPatch;
+        });
+    } catch {
+      // superpowers not installed — directory doesn't exist
+      return null;
+    }
+
+    if (versions.length === 0) return null;
+
+    const skillPath = path.join(superpowersBase, versions[0], 'skills', skillName, 'SKILL.md');
+    try {
+      return fs.readFileSync(skillPath, 'utf8');
+    } catch {
+      return null;
+    }
+  });
+
   // ── get_mission_state ──────────────────────────────────────────
   ipcMain.handle('get_mission_state', async () => {
     return missionState;
