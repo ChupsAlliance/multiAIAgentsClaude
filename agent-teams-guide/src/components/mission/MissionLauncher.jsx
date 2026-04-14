@@ -618,6 +618,8 @@ export function MissionLauncher({ onLaunch }) {
                     permissionMode === mode.id
                       ? mode.id === 'interactive'
                         ? 'border-amber-500/60 bg-amber-500/10 text-white'
+                        : mode.id === 'deep_plan'
+                        ? 'border-purple-500/60 bg-purple-500/10 text-white'
                         : 'border-vs-accent bg-vs-accent/10 text-white'
                       : 'border-vs-border bg-vs-bg text-vs-muted hover:border-vs-text/30 hover:bg-white/5'
                   }`}
