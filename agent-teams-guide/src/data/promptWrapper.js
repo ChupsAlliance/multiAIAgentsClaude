@@ -178,29 +178,27 @@ RULES:
 
     if (skillContent) {
       phase0Section = buildPhase0Wrapper(skillContent)
-      // Custom permissionSection: actively encourages questions (brainstorming mode)
-      permissionSection = `The brainstorming skill above requires you to ask clarifying questions before planning.
-Use the <<<QUESTION>>> protocol:
+    } else {
+      console.warn('[deep_plan] superpowers brainstorming skill not found — using mandatory Q&A mode')
+    }
 
-1. Output ONE <<<QUESTION>>> block (one question only per turn):
+    // Deep Plan: MANDATE questions regardless of whether skill was found.
+    // This text must be strong enough that Claude cannot skip Q&A.
+    permissionSection = `**MANDATORY — Deep Plan mode**: You MUST ask the user at least 3 clarifying questions about the requirement BEFORE you analyze the codebase or generate any plan. Do NOT output the plan until you have completed the Q&A.
+
+Use this EXACT format — ONE question per turn:
 <<<QUESTION>>>
-{"from":"Lead","type":"clarification","question":"your question here","options":["Option A","Option B"],"context":"why you need this answered"}
+{"from":"Lead","type":"clarification","question":"<your question>","options":["<Option A>","<Option B>","<Option C>"],"context":"<why this matters for planning>"}
 <<<END_QUESTION>>>
-
-2. Immediately after, output:
 <<<QUESTIONS_END>>>
 
-3. Then STOP. The user will answer and you will be resumed with their answer.
-   Ask your next question in the next turn, or proceed to Phase 1 if you have enough information.
+Then STOP immediately. The user will answer and you will be resumed with their response. Ask your next question in the next turn.
 
-When you have gathered enough context (maximum 5 questions), output:
-- \`## MISSION UNDERSTANDING\` section summarising key decisions
-- Then the MISSION PLAN JSON (Phase 1)`
-    } else {
-      // Skill not found — fall back to standard interactive section
-      console.warn('[deep_plan] superpowers brainstorming skill not found — falling back to interactive mode')
-      permissionSection = INTERACTIVE_PERMISSION_TEXT
-    }
+After receiving answers to at least 3 questions (maximum 5), output:
+- A \`## MISSION UNDERSTANDING\` section (2–3 paragraphs summarising what you've learned and key decisions)
+- Then proceed to Phase 1 and output the MISSION PLAN JSON
+
+CRITICAL: Do NOT skip to the plan. Do NOT output \`=== MISSION PLAN ===\` until Q&A is complete.`
   } else if (permissionMode === 'interactive') {
     permissionSection = INTERACTIVE_PERMISSION_TEXT
   } else {

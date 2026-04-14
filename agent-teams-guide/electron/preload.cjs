@@ -16,7 +16,7 @@ const ALLOWED_COMMANDS = [
   // mission
   'launch_mission', 'deploy_mission', 'continue_mission', 'replan_mission',
   'stop_mission', 'reset_mission', 'get_mission_state', 'update_agent_model',
-  'read_planning_template',
+  'read_planning_template', 'answer_question', 'read_superpowers_skill',
 ];
 
 // Events the backend can push to frontend (whitelist)
@@ -24,7 +24,8 @@ const ALLOWED_EVENTS = [
   'mission:status', 'mission:agent-spawned', 'mission:log',
   'mission:file-change', 'mission:task-update', 'mission:raw-line',
   'mission:plan-ready', 'mission:agent-message', 'mission:team-event',
-  'mission:task-reassigned', 'claude-output',
+  'mission:task-reassigned', 'mission:question', 'mission:answer-sent',
+  'claude-output',
 ];
 
 contextBridge.exposeInMainWorld('electronAPI', {
