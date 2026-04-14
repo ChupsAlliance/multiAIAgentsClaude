@@ -57,26 +57,32 @@ function detectLanguageHint(text) {
  * @returns {string} Phase 0 section to prepend to the planning template
  */
 function buildPhase0Wrapper(skillContent) {
-  return `## PHASE 0: DEEP PLANNING — Execute NOW Before Planning
+  const skillSection = skillContent
+    ? `\n### Brainstorming Framework\nThe following skill provides structure for your questions:\n\n${skillContent}\n=== END BRAINSTORMING FRAMEWORK ===\n`
+    : ''
 
-You have been given the Brainstorming skill below. Execute it NOW before proceeding to Phase 1.
+  return `## ⚠ PHASE 0: MANDATORY Q&A — Read This BEFORE "Phase 1"
 
-### ADAPTATION RULES (these override any conflicting instructions inside the skill):
-1. "Write design doc" → output a \`## MISSION UNDERSTANDING\` section instead (brief summary)
-2. "Invoke writing-plans skill" → proceed directly to Phase 1 (output MISSION PLAN JSON below)
-3. "AskUserQuestion tool" → use the <<<QUESTION>>> protocol defined at the end of this prompt
-4. "Visual Companion" → skip entirely (not available in this context)
-5. "EnterPlanMode" / "ExitPlanMode" → skip
-6. Limit questions to 3–5 maximum — focus only on decisions critical to correct planning
+**STOP. Do NOT proceed to "Phase 1: Analyze & Plan" yet.**
 
-=== BRAINSTORMING SKILL (execute this) ===
-${skillContent}
-=== END BRAINSTORMING SKILL ===
+You are in Deep Plan mode. Before doing ANY analysis or planning, you MUST ask the user clarifying questions. Minimum 3 questions, maximum 5.
 
-After completing the brainstorming process above:
-- Output a \`## MISSION UNDERSTANDING\` section (1–3 paragraphs summarising key decisions)
-- Then proceed to Phase 1 below to output the MISSION PLAN JSON
+### How to ask a question (use EXACT format, ONE question per turn, then STOP):
 
+<<<QUESTION>>>
+{"from":"Lead","type":"clarification","question":"Your specific question here","options":["Option A","Option B","Option C"],"context":"Why this matters for correct planning"}
+<<<END_QUESTION>>>
+<<<QUESTIONS_END>>>
+
+After writing \`<<<QUESTIONS_END>>>\`, STOP IMMEDIATELY — do not write another word. You will be resumed with the user's answer. Then ask your next question (or proceed after 3–5 total).
+
+### After receiving answers to 3–5 questions:
+
+1. Write a \`## MISSION UNDERSTANDING\` section (2–3 paragraphs summarising key decisions)
+2. Then proceed to Phase 1 below — read the codebase and output the MISSION PLAN JSON
+
+**HARD RULE: Do NOT output \`=== MISSION PLAN ===\` until you have asked and received answers to at least 3 questions.**
+${skillSection}
 ---
 
 `
@@ -176,29 +182,16 @@ RULES:
       // IPC not available (Tauri mode or handler missing) — fall back gracefully
     }
 
-    if (skillContent) {
-      phase0Section = buildPhase0Wrapper(skillContent)
-    } else {
-      console.warn('[deep_plan] superpowers brainstorming skill not found — using mandatory Q&A mode')
+    // Always build Phase 0 — it's the hard gate that blocks Phase 1 until Q&A is done.
+    // Skill content adds brainstorming structure but Phase 0 works without it.
+    phase0Section = buildPhase0Wrapper(skillContent)
+    if (!skillContent) {
+      console.warn('[deep_plan] superpowers brainstorming skill not found — Phase 0 running without it')
     }
 
-    // Deep Plan: MANDATE questions regardless of whether skill was found.
-    // This text must be strong enough that Claude cannot skip Q&A.
-    permissionSection = `**MANDATORY — Deep Plan mode**: You MUST ask the user at least 3 clarifying questions about the requirement BEFORE you analyze the codebase or generate any plan. Do NOT output the plan until you have completed the Q&A.
-
-Use this EXACT format — ONE question per turn:
-<<<QUESTION>>>
-{"from":"Lead","type":"clarification","question":"<your question>","options":["<Option A>","<Option B>","<Option C>"],"context":"<why this matters for planning>"}
-<<<END_QUESTION>>>
-<<<QUESTIONS_END>>>
-
-Then STOP immediately. The user will answer and you will be resumed with their response. Ask your next question in the next turn.
-
-After receiving answers to at least 3 questions (maximum 5), output:
-- A \`## MISSION UNDERSTANDING\` section (2–3 paragraphs summarising what you've learned and key decisions)
-- Then proceed to Phase 1 and output the MISSION PLAN JSON
-
-CRITICAL: Do NOT skip to the plan. Do NOT output \`=== MISSION PLAN ===\` until Q&A is complete.`
+    // Minimal reminder at the bottom ({{PERMISSION_MODE}} slot).
+    // The full protocol is already in Phase 0 above; repeating it here would cause confusion.
+    permissionSection = `See Phase 0 instructions at the top of this prompt — Q&A is mandatory before planning. Use the <<<QUESTION>>> protocol defined there.`
   } else if (permissionMode === 'interactive') {
     permissionSection = INTERACTIVE_PERMISSION_TEXT
   } else {
