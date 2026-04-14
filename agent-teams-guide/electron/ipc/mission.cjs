@@ -952,6 +952,9 @@ function readProcessStdout_launch(proc, missionId, sendToWindow) {
                 planEmitted = true;
                 applyPlanToState(parsed, ts, 'Mission plan ready for review', sendToWindow);
                 fullTextBuf = '';
+                // Kill the planning process immediately — prevents Lead from continuing
+                // to Phase 3 (spawning agents) before the user reviews the plan.
+                try { proc.kill(); } catch (_) {}
               }
             }
 
@@ -1057,6 +1060,7 @@ function readProcessStdout_launch(proc, missionId, sendToWindow) {
                 planEmitted = true;
                 applyPlanToState(parsed, ts, 'Mission plan detected from result — ready for review', sendToWindow);
                 fullTextBuf = '';
+                try { proc.kill(); } catch (_) {}
               }
             }
 

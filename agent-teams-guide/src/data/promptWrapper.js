@@ -81,7 +81,9 @@ After writing \`<<<QUESTIONS_END>>>\`, STOP IMMEDIATELY — do not write another
 1. Write a \`## MISSION UNDERSTANDING\` section (2–3 paragraphs summarising key decisions)
 2. Then proceed to Phase 1 below — read the codebase and output the MISSION PLAN JSON
 
-**HARD RULE: Do NOT output \`=== MISSION PLAN ===\` until you have asked and received answers to at least 3 questions.**
+**HARD RULES:**
+- Do NOT output \`=== MISSION PLAN ===\` until you have asked and received answers to at least 3 questions.
+- After outputting \`=== END PLAN ===\`, STOP IMMEDIATELY. Do NOT spawn any agents or tools. The user must review and approve the plan first.
 ${skillSection}
 ---
 
