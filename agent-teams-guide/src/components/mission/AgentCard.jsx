@@ -68,8 +68,8 @@ export const AgentCard = memo(function AgentCard({ agent, logs = [], isSelected,
               {name.slice(0, 2).toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold text-white truncate">{name}</p>
-              <p className="text-[9px] text-vs-muted font-mono truncate">{role}</p>
+              <p className="text-xs font-semibold text-white break-words">{name}</p>
+              <p className="text-[9px] text-vs-muted font-mono break-words">{role}</p>
             </div>
           </div>
           <div className="flex items-center gap-1 shrink-0">

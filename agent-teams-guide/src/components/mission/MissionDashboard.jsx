@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, memo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react'
 import { AgentGrid } from './AgentGrid'
 import { TaskList } from './TaskList'
 import { ActivityLog } from './ActivityLog'
@@ -8,6 +8,7 @@ import { MissionHeader } from './MissionHeader'
 import { RawOutput } from './RawOutput'
 import { ThinkingIndicator } from './ThinkingIndicator'
 import { InterventionPanel } from './InterventionPanel'
+import { QuestionCard } from './QuestionCard'
 import { ListTodo, Activity, FolderOpen, User, MessageSquare } from 'lucide-react'
 
 const baseTabs = [
@@ -17,9 +18,42 @@ const baseTabs = [
   { id: 'files',    label: 'Files',    icon: FolderOpen },
 ]
 
-export const MissionDashboard = memo(function MissionDashboard({ state, isRunning, onStop, onContinue, onNewMission, elapsed, isHistoryView }) {
+export const MissionDashboard = memo(function MissionDashboard({ state, isRunning, onStop, onContinue, onNewMission, elapsed, isHistoryView, pendingQuestions, onAnswerQuestion }) {
   const [activeTab, setActiveTab] = useState('tasks')
   const [selectedAgent, setSelectedAgent] = useState(null)
+  const [sidebarWidth, setSidebarWidth] = useState(224) // px, default w-56
+  const isDragging = useRef(false)
+  const dragStartX = useRef(0)
+  const dragStartWidth = useRef(0)
+
+  const onDragStart = useCallback((e) => {
+    isDragging.current = true
+    dragStartX.current = e.clientX
+    dragStartWidth.current = sidebarWidth
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }, [sidebarWidth])
+
+  useEffect(() => {
+    const onMove = (e) => {
+      if (!isDragging.current) return
+      const delta = e.clientX - dragStartX.current
+      const next = Math.min(400, Math.max(160, dragStartWidth.current + delta))
+      setSidebarWidth(next)
+    }
+    const onUp = () => {
+      if (!isDragging.current) return
+      isDragging.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [])
 
   // Stable refs to state sub-arrays — avoid creating new array refs on every render
   const agents = useMemo(() => state?.agents || [], [state?.agents])
@@ -100,8 +134,8 @@ export const MissionDashboard = memo(function MissionDashboard({ state, isRunnin
 
       {/* Main content */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left: Agent Grid */}
-        <div className="w-56 shrink-0 border-r border-vs-border overflow-y-auto p-3 scrollbar-thin">
+        {/* Left: Agent Grid (resizable) */}
+        <div className="relative shrink-0 border-r border-vs-border overflow-y-auto p-3 scrollbar-thin" style={{ width: sidebarWidth }}>
           <AgentGrid
             agents={agents}
             logs={logs}
@@ -109,6 +143,13 @@ export const MissionDashboard = memo(function MissionDashboard({ state, isRunnin
             onSelectAgent={handleSelectAgent}
           />
         </div>
+
+        {/* Drag handle */}
+        <div
+          onMouseDown={onDragStart}
+          className="w-1 shrink-0 cursor-col-resize hover:bg-vs-accent/50 active:bg-vs-accent transition-colors"
+          title="Kéo để điều chỉnh độ rộng"
+        />
 
         {/* Right: Tabbed panel or Thinking indicator */}
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -171,12 +212,22 @@ export const MissionDashboard = memo(function MissionDashboard({ state, isRunnin
         </div>
       </div>
 
+      {/* Question card — shown when Lead asks questions */}
+      {!isHistoryView && pendingQuestions && pendingQuestions.length > 0 && (
+        <div className="px-4">
+          <QuestionCard
+            questions={pendingQuestions}
+            onSubmit={onAnswerQuestion}
+          />
+        </div>
+      )}
+
       {/* Intervention panel — in history view, acts as "continue from history" */}
       {!isHistoryView && (
         <InterventionPanel
           onSend={onContinue}
           isRunning={isRunning}
-          disabled={!state}
+          disabled={!state || (pendingQuestions && pendingQuestions.length > 0)}
         />
       )}
 
