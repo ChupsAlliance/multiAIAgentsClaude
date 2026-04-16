@@ -14,6 +14,7 @@ export function useMission() {
   const [isRunning, setIsRunning] = useState(false)
   const [planReady, setPlanReady] = useState(null)
   const [pendingQuestions, setPendingQuestions] = useState(null)
+  const [recoverableMission, setRecoverableMission] = useState(null)
   const unlistenersRef = useRef([])
 
   // ── Batch buffers (mutable refs, no re-render) ──
@@ -475,6 +476,13 @@ export function useMission() {
         if (fixedState.pendingQuestions && fixedState.pendingQuestions.length > 0) {
           setPendingQuestions(fixedState.pendingQuestions)
         }
+      } else {
+        // No active mission — check for crash-interrupted missions
+        invoke('get_incomplete_missions').then(incomplete => {
+          if (incomplete && incomplete.length > 0) {
+            setRecoverableMission(incomplete[0])
+          }
+        }).catch(() => {})
       }
     }).catch(() => {})
 
@@ -706,5 +714,5 @@ export function useMission() {
     }
   }, [])
 
-  return { missionState, isRunning, planReady, setPlanReady, isReplanning, pendingQuestions, launch, deploy, continueM, stop, reset, replan, answerQuestion }
+  return { missionState, isRunning, planReady, setPlanReady, isReplanning, pendingQuestions, recoverableMission, setRecoverableMission, launch, deploy, continueM, stop, reset, replan, answerQuestion }
 }

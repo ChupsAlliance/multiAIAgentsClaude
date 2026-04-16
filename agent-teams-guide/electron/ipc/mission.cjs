@@ -32,6 +32,7 @@ const PROMPT_REPLAN = fs.existsSync(promptPath('replan.md'))
 let missionState  = null;   // Option<MissionState>
 let childProcess  = null;   // Running claude subprocess
 let watcherInterval = null; // setInterval for file watcher
+let autosaveInterval = null; // setInterval for periodic snapshot saves
 
 // ─────────────────────────────────────────────────────────────────
 // Helper: current timestamp in milliseconds
@@ -446,6 +447,25 @@ function stopWatcher() {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// startAutosave / stopAutosave — periodic snapshot flush (every 10s)
+// ─────────────────────────────────────────────────────────────────
+function startAutosave() {
+  stopAutosave();
+  autosaveInterval = setInterval(() => {
+    if (missionState) {
+      saveMissionSnapshot(missionState);
+    }
+  }, 10_000);
+}
+
+function stopAutosave() {
+  if (autosaveInterval !== null) {
+    clearInterval(autosaveInterval);
+    autosaveInterval = null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
 // killChild — kill the running claude subprocess
 // ─────────────────────────────────────────────────────────────────
 function killChild() {
@@ -846,6 +866,7 @@ function applyPlanToState(planJson, planNow, logMsg, sendToWindow) {
     const lead = missionState.agents.find(a => a.name === 'Lead');
     if (lead) { lead.status = 'Idle'; lead.current_task = 'Plan ready — waiting for review'; }
     missionState.log.push(makeLogEntry(planNow, 'System', logMsg, 'plan-ready'));
+    saveMissionSnapshot(missionState); // milestone: plan ready
   }
 
   sendToWindow('mission:plan-ready', { agents: newAgents, tasks: newTasks });
@@ -1166,6 +1187,7 @@ function watchProcessExit_launch(proc, missionId, sendToWindow) {
     const finalStatus = (code === 0 || code === null) ? 'Completed' : 'Failed';
     const ts = now();
 
+    stopAutosave();
     if (missionState) {
       missionState.status = finalStatus;
       for (const a of missionState.agents) {
@@ -1227,6 +1249,7 @@ function handleQuestionBatch(questions, proc, sendToWindow) {
     missionState._lastQuestions = questions;
     missionState.pendingQuestions = questions;
     missionState.status = 'WaitingForAnswer';
+    saveMissionSnapshot(missionState); // milestone: waiting for answer
   }
   sendToWindow('mission:question', { questions, timestamp: ts });
   sendToWindow('mission:status', { status: 'waiting_for_answer' });
@@ -1738,6 +1761,7 @@ function watchProcessExit_deploy(proc, missionId, sendToWindow) {
       return;
     }
 
+    stopAutosave();
     if (missionState.status === 'Running') {
       missionState.status = code === 0 || code === null ? 'Completed' : 'Failed';
     }
@@ -1913,6 +1937,7 @@ module.exports = function registerMission(getMainWindow) {
 
     childProcess = proc;
     missionState.status = 'Running';
+    startAutosave();
     sendToWindow('mission:status', { mission_id: missionId, status: 'running' });
 
     // Wire up readers
@@ -2049,6 +2074,8 @@ module.exports = function registerMission(getMainWindow) {
 
     childProcess = proc;
     missionState.phase = 'Executing';
+    startAutosave();
+    saveMissionSnapshot(missionState); // milestone: deploy started
 
     // Agent_teams mode: start file watcher
     if (execMode === 'agent_teams') {
@@ -2250,6 +2277,7 @@ module.exports = function registerMission(getMainWindow) {
 
     childProcess = proc;
     if (missionState) missionState.phase = 'Executing';
+    startAutosave();
 
     // Start file watcher if agent_teams mode (detect file changes from subagents)
     if (useAgentTeams) {
@@ -2332,6 +2360,7 @@ module.exports = function registerMission(getMainWindow) {
 
     childProcess = proc;
     missionState.status = 'Running';
+    startAutosave();
 
     // Wire up readers — use launch reader for planning phase, deploy reader for execution
     const isPlanning = missionState.phase === 'Planning';
@@ -2493,6 +2522,7 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
   // ── stop_mission ───────────────────────────────────────────────
   ipcMain.handle('stop_mission', async () => {
     stopWatcher();
+    stopAutosave();
     killChild();
 
     if (missionState) {
@@ -2503,6 +2533,7 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
           a.current_task = null;
         }
       }
+      saveMissionSnapshot(missionState); // milestone: user stopped
     }
 
     sendToWindow('mission:status', { status: 'stopped' });
@@ -2512,6 +2543,7 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
   // ── reset_mission ──────────────────────────────────────────────
   ipcMain.handle('reset_mission', async () => {
     stopWatcher();
+    stopAutosave();
     killChild();
     missionState = null;
     sendToWindow('mission:status', { status: 'reset' });
@@ -2569,6 +2601,48 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
   // ── get_mission_state ──────────────────────────────────────────
   ipcMain.handle('get_mission_state', async () => {
     return missionState;
+  });
+
+  // ── get_incomplete_missions ─────────────────────────────────────
+  // Scan snapshots for missions that weren't properly finalized (crash recovery)
+  ipcMain.handle('get_incomplete_missions', async () => {
+    try {
+      const snapshotsDir = path.join(os.homedir(), '.claude', 'agent-teams-snapshots');
+      if (!fs.existsSync(snapshotsDir)) return [];
+
+      const files = fs.readdirSync(snapshotsDir).filter(f => f.endsWith('.json'));
+      const incomplete = [];
+      const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+      for (const file of files) {
+        try {
+          const raw = fs.readFileSync(path.join(snapshotsDir, file), 'utf8');
+          const snap = JSON.parse(raw);
+          const status = (snap.status || '').toString();
+          if (status !== 'Completed' && status !== 'Failed' && status !== 'Stopped') {
+            const age = Date.now() - (snap.started_at || 0);
+            if (age < maxAge) {
+              incomplete.push({
+                id: snap.id,
+                description: snap.description || '',
+                project_path: snap.project_path || '',
+                status,
+                phase: snap.phase || '',
+                started_at: snap.started_at || 0,
+                agent_count: (snap.agents || []).length,
+                task_count: (snap.tasks || []).length,
+                log_count: (snap.log || []).length,
+              });
+            }
+          }
+        } catch (_) {}
+      }
+
+      incomplete.sort((a, b) => (b.started_at || 0) - (a.started_at || 0));
+      return incomplete;
+    } catch (_) {
+      return [];
+    }
   });
 
   // ── export_plan_markdown ─────────────────────────────────────────

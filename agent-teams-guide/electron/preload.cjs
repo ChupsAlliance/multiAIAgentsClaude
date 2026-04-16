@@ -15,7 +15,8 @@ const ALLOWED_COMMANDS = [
   'delete_history_entry', 'get_mission_detail',
   // mission
   'launch_mission', 'deploy_mission', 'continue_mission', 'replan_mission',
-  'stop_mission', 'reset_mission', 'get_mission_state', 'update_agent_model',
+  'stop_mission', 'reset_mission', 'get_mission_state', 'get_incomplete_missions',
+  'update_agent_model',
   'read_planning_template', 'answer_question', 'read_superpowers_skill',
 ];
 

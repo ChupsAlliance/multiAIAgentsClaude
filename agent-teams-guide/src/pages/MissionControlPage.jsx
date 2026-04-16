@@ -11,7 +11,7 @@ import { useMission } from '../hooks/useMission'
 import { buildMissionPrompt } from '../data/promptWrapper'
 
 export function MissionControlPage() {
-  const { missionState, isRunning, planReady, setPlanReady, isReplanning, pendingQuestions, launch, deploy, continueM, stop, reset, replan, answerQuestion } = useMission()
+  const { missionState, isRunning, planReady, setPlanReady, isReplanning, pendingQuestions, recoverableMission, setRecoverableMission, launch, deploy, continueM, stop, reset, replan, answerQuestion } = useMission()
   const [elapsed, setElapsed] = useState('0:00')
   const [promptPreview, setPromptPreview] = useState(null) // { agents, tasks }
   const [planViewTab, setPlanViewTab] = useState('visual') // 'visual' | 'document'
@@ -257,6 +257,33 @@ export function MissionControlPage() {
         {!promptPreview && !isPlanReview && !historyView && !hasMission && (
           <div className="flex-1 flex flex-col min-h-0">
             <div className="flex-1 overflow-y-auto px-4 pb-4">
+              {/* Crash recovery banner */}
+              {recoverableMission && (
+                <div className="max-w-2xl mx-auto mb-4 p-3 rounded-lg border border-amber-500/40 bg-amber-500/10 text-sm">
+                  <div className="font-medium text-amber-300 mb-1">Mission interrupted</div>
+                  <div className="text-vs-muted mb-2">
+                    "{recoverableMission.description?.slice(0, 80) || 'Unnamed mission'}" was interrupted ({recoverableMission.phase}, {recoverableMission.log_count} log entries).
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={async () => {
+                        const snap = await invoke('get_mission_detail', { missionId: recoverableMission.id }).catch(() => null)
+                        if (snap) { setHistoryView(snap); setHistoryViewMode('continue') }
+                        setRecoverableMission(null)
+                      }}
+                      className="px-3 py-1 rounded bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 text-xs font-medium"
+                    >
+                      View & Continue
+                    </button>
+                    <button
+                      onClick={() => setRecoverableMission(null)}
+                      className="px-3 py-1 rounded bg-vs-panel text-vs-muted hover:bg-vs-hover text-xs"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              )}
               <MissionLauncher onLaunch={launch} />
             </div>
             <MissionHistoryPanel
