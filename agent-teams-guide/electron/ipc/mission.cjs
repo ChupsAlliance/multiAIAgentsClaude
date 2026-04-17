@@ -1579,13 +1579,13 @@ function readProcessStdout_deploy(proc, sendToWindow, isContMode) {
               if (tool === 'TeamCreate' && missionState) {
                 const teamName = (input && input.team_name) || 'mission';
                 missionState.team_name = teamName;
-                sendToWindow('mission:team-event', { event_type: 'created', data: { team_name: teamName }, timestamp: ts });
+                sendToWindow('mission:team-event', { event: 'created', team_name: teamName, timestamp: ts });
               }
 
               // ── TeamDelete → clear team ──
               if (tool === 'TeamDelete' && missionState) {
                 missionState.team_name = null;
-                sendToWindow('mission:team-event', { event_type: 'deleted', data: {}, timestamp: ts });
+                sendToWindow('mission:team-event', { event: 'deleted', timestamp: ts });
               }
 
               // ── TaskUpdate → detect task reassignment ──
@@ -2372,6 +2372,12 @@ module.exports = function registerMission(getMainWindow) {
       readProcessStdout_deploy(proc, sendToWindow, false);
       readProcessStderr(proc, sendToWindow);
       watchProcessExit_deploy(proc, missionState.id, sendToWindow);
+      // Agent Teams: restart file watcher so inter-agent messages are detected
+      // after resuming from a Q&A pause (previous watcher may have stopped when
+      // the prior process exited after <<<QUESTIONS_END>>>).
+      if (execMode === 'agent_teams' && projectPath) {
+        startFileWatcher(projectPath, sendToWindow);
+      }
     }
 
     // Notify frontend
