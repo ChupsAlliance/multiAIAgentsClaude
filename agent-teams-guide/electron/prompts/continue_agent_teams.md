@@ -29,9 +29,13 @@ Each agent prompt MUST include:
 ### Step 3: Active Monitoring (CRITICAL)
 After spawning, ACTIVELY monitor:
 1. Read messages from teammates as they are auto-delivered
-2. If a teammate reports errors or is stuck, send them guidance via SendMessage
-3. If a teammate fails, reassign tasks to another teammate
-4. Track completion — each teammate should report verification evidence
+2. **When a teammate ASKS a question** (via SendMessage):
+   - If you know the answer from project context, docs, or reference materials → reply directly
+   - If the question requires a decision only the user can make → escalate to the user using the QUESTION PROTOCOL (if in interactive mode)
+   - ALWAYS reply promptly — teammates are BLOCKED waiting for your answer
+3. If a teammate reports errors or is stuck, send them guidance via SendMessage
+4. If a teammate fails, reassign tasks to another teammate
+5. Track completion — each teammate should report verification evidence
 
 ### Step 4: Final Verification & Shutdown
 When all teammates report completion:
@@ -45,5 +49,7 @@ When all teammates report completion:
 - Dependencies installed and importable
 - Build/compile passes with 0 errors
 - App is runnable
+
+{{PERMISSION_MODE}}
 
 Begin now.
