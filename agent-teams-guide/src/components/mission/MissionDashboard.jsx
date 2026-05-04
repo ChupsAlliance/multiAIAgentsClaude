@@ -10,6 +10,7 @@ import { ThinkingIndicator } from './ThinkingIndicator'
 import { InterventionPanel } from './InterventionPanel'
 import { QuestionCard } from './QuestionCard'
 import { ListTodo, Activity, FolderOpen, User, MessageSquare } from 'lucide-react'
+import { VirtualOfficeCanvas } from '../office/VirtualOfficeCanvas'
 
 const baseTabs = [
   { id: 'tasks',    label: 'Tasks',    icon: ListTodo },
@@ -34,18 +35,47 @@ export const MissionDashboard = memo(function MissionDashboard({ state, isRunnin
     document.body.style.userSelect = 'none'
   }, [sidebarWidth])
 
+  const [officePanelWidth, setOfficePanelWidth] = useState(() => {
+    const saved = localStorage.getItem('office-panel-ratio')
+    return saved ? parseInt(saved, 10) : 420
+  })
+  const isOfficeDragging = useRef(false)
+  const officeStartX = useRef(0)
+  const officeStartWidth = useRef(0)
+
+  const onOfficeDragStart = useCallback((e) => {
+    isOfficeDragging.current = true
+    officeStartX.current = e.clientX
+    officeStartWidth.current = officePanelWidth
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }, [officePanelWidth])
+
   useEffect(() => {
     const onMove = (e) => {
-      if (!isDragging.current) return
-      const delta = e.clientX - dragStartX.current
-      const next = Math.min(400, Math.max(160, dragStartWidth.current + delta))
-      setSidebarWidth(next)
+      if (isDragging.current) {
+        const delta = e.clientX - dragStartX.current
+        const next = Math.min(400, Math.max(160, dragStartWidth.current + delta))
+        setSidebarWidth(next)
+      }
+      if (isOfficeDragging.current) {
+        const delta = officeStartX.current - e.clientX  // inverted: drag left = wider office
+        const next = Math.max(300, Math.min(officeStartWidth.current + delta, window.innerWidth - 400))
+        setOfficePanelWidth(next)
+        localStorage.setItem('office-panel-ratio', String(next))
+      }
     }
     const onUp = () => {
-      if (!isDragging.current) return
-      isDragging.current = false
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
+      if (isDragging.current) {
+        isDragging.current = false
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
+      if (isOfficeDragging.current) {
+        isOfficeDragging.current = false
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
@@ -132,83 +162,105 @@ export const MissionDashboard = memo(function MissionDashboard({ state, isRunnin
       {/* Header */}
       <MissionHeader state={state} onStop={isHistoryView ? null : onStop} onNewMission={onNewMission} elapsed={elapsed} />
 
-      {/* Main content */}
+      {/* Main content — split: dashboard left, Virtual Office right */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left: Agent Grid (resizable) */}
-        <div className="relative shrink-0 border-r border-vs-border overflow-y-auto p-3 scrollbar-thin" style={{ width: sidebarWidth }}>
-          <AgentGrid
-            agents={agents}
-            logs={logs}
-            selectedAgent={selectedAgent}
-            onSelectAgent={handleSelectAgent}
+        {/* Left: existing dashboard content */}
+        <div className="flex flex-1 min-w-[400px] overflow-hidden">
+          {/* Agent Grid (resizable) */}
+          <div className="relative shrink-0 border-r border-vs-border overflow-y-auto p-3 scrollbar-thin" style={{ width: sidebarWidth }}>
+            <AgentGrid
+              agents={agents}
+              logs={logs}
+              selectedAgent={selectedAgent}
+              onSelectAgent={handleSelectAgent}
+            />
+          </div>
+
+          {/* Drag handle — agent sidebar */}
+          <div
+            onMouseDown={onDragStart}
+            className="w-1 shrink-0 cursor-col-resize hover:bg-vs-accent/50 active:bg-vs-accent transition-colors"
+            title="Kéo để điều chỉnh độ rộng"
           />
+
+          {/* Tabbed panel or Thinking indicator */}
+          <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+            {isThinking ? (
+              <ThinkingIndicator
+                log={logs}
+                isRunning={isRunning}
+              />
+            ) : (
+              <>
+                {/* Tab bar */}
+                <div className="flex border-b border-vs-border overflow-x-auto">
+                  {tabs.map(({ id, label, icon: Icon }) => (
+                    <button
+                      key={id}
+                      onClick={() => setActiveTab(id)}
+                      className={`flex items-center gap-1.5 px-4 py-2 text-xs font-mono transition-colors border-b-2 shrink-0 ${
+                        activeTab === id
+                          ? 'border-vs-accent text-white bg-vs-accent/5'
+                          : 'border-transparent text-vs-muted hover:text-vs-text hover:bg-white/5'
+                      }`}
+                    >
+                      <Icon size={12} />
+                      <span className="truncate max-w-[120px]">{label}</span>
+                      {id === 'tasks' && tasks.length > 0 && (
+                        <span className="ml-1 px-1 rounded bg-vs-accent/20 text-vs-accent text-[10px]">
+                          {tasks.filter(t => t.status === 'completed').length}/{tasks.length}
+                        </span>
+                      )}
+                      {id === 'messages' && messages.length > 0 && (
+                        <span className="ml-1 px-1 rounded bg-cyan-500/20 text-cyan-300 text-[10px]">
+                          {messages.length}
+                        </span>
+                      )}
+                      {id === 'agent' && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setSelectedAgent(null); setActiveTab('tasks'); }}
+                          className="ml-1 text-vs-muted hover:text-white text-[10px]"
+                          title="Close agent view"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Tab content */}
+                <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 scrollbar-thin min-h-0">
+                  {activeTab === 'tasks' && <TaskList tasks={tasks} logs={logs} />}
+                  {activeTab === 'activity' && <ActivityLog log={logs} />}
+                  {activeTab === 'messages' && <MessagesPanel messages={messages} />}
+                  {activeTab === 'files' && <FileChangesPanel changes={fileChanges} />}
+                  {activeTab === 'agent' && selectedAgent && (
+                    <ActivityLog log={agentLogs} title={`Logs: ${selectedAgent}`} />
+                  )}
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
-        {/* Drag handle */}
+        {/* Drag handle — office panel */}
         <div
-          onMouseDown={onDragStart}
-          className="w-1 shrink-0 cursor-col-resize hover:bg-vs-accent/50 active:bg-vs-accent transition-colors"
-          title="Kéo để điều chỉnh độ rộng"
+          onMouseDown={onOfficeDragStart}
+          className="w-1 shrink-0 cursor-col-resize bg-slate-800 hover:bg-indigo-500 transition-colors"
+          title="Drag to resize office panel"
         />
 
-        {/* Right: Tabbed panel or Thinking indicator */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-          {isThinking ? (
-            <ThinkingIndicator
-              log={logs}
-              isRunning={isRunning}
-            />
-          ) : (
-            <>
-              {/* Tab bar */}
-              <div className="flex border-b border-vs-border overflow-x-auto">
-                {tabs.map(({ id, label, icon: Icon }) => (
-                  <button
-                    key={id}
-                    onClick={() => setActiveTab(id)}
-                    className={`flex items-center gap-1.5 px-4 py-2 text-xs font-mono transition-colors border-b-2 shrink-0 ${
-                      activeTab === id
-                        ? 'border-vs-accent text-white bg-vs-accent/5'
-                        : 'border-transparent text-vs-muted hover:text-vs-text hover:bg-white/5'
-                    }`}
-                  >
-                    <Icon size={12} />
-                    <span className="truncate max-w-[120px]">{label}</span>
-                    {id === 'tasks' && tasks.length > 0 && (
-                      <span className="ml-1 px-1 rounded bg-vs-accent/20 text-vs-accent text-[10px]">
-                        {tasks.filter(t => t.status === 'completed').length}/{tasks.length}
-                      </span>
-                    )}
-                    {id === 'messages' && messages.length > 0 && (
-                      <span className="ml-1 px-1 rounded bg-cyan-500/20 text-cyan-300 text-[10px]">
-                        {messages.length}
-                      </span>
-                    )}
-                    {id === 'agent' && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setSelectedAgent(null); setActiveTab('tasks'); }}
-                        className="ml-1 text-vs-muted hover:text-white text-[10px]"
-                        title="Close agent view"
-                      >
-                        ×
-                      </button>
-                    )}
-                  </button>
-                ))}
-              </div>
-
-              {/* Tab content */}
-              <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 scrollbar-thin min-h-0">
-                {activeTab === 'tasks' && <TaskList tasks={tasks} logs={logs} />}
-                {activeTab === 'activity' && <ActivityLog log={logs} />}
-                {activeTab === 'messages' && <MessagesPanel messages={messages} />}
-                {activeTab === 'files' && <FileChangesPanel changes={fileChanges} />}
-                {activeTab === 'agent' && selectedAgent && (
-                  <ActivityLog log={agentLogs} title={`Logs: ${selectedAgent}`} />
-                )}
-              </div>
-            </>
-          )}
+        {/* Right: Virtual Office */}
+        <div
+          className="shrink-0 overflow-hidden"
+          style={{ width: officePanelWidth }}
+        >
+          <VirtualOfficeCanvas
+            missionState={state}
+            isRunning={isRunning}
+            logs={logs}
+          />
         </div>
       </div>
 
