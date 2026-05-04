@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { TileEditor } from './editor/TileEditor'
 import { Renderer } from './canvas-engine/Renderer'
 import { DeskAssigner } from './agent-bridge/DeskAssigner'
 import { mapLogEntryToState, formatSpeechBubble } from './agent-bridge/AgentStateMapper'
@@ -138,19 +139,13 @@ export function VirtualOfficeCanvas({ missionState, isRunning, logs }) {
         />
       </div>
 
-      {/* TileEditor — Task 9 will implement this; placeholder for now */}
       {editorOpen && layout && (
-        <div className="absolute inset-0 bg-slate-950/90 flex items-center justify-center">
-          <div className="bg-slate-900 border border-slate-700 rounded-lg p-6 text-slate-400 text-sm">
-            <p>Tile Editor — coming in Task 9</p>
-            <button
-              onClick={() => setEditorOpen(false)}
-              className="mt-4 px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs"
-            >
-              Close
-            </button>
-          </div>
-        </div>
+        <TileEditor
+          layout={layout}
+          isRunning={isRunning}
+          onSave={handleSaveLayout}
+          onClose={() => setEditorOpen(false)}
+        />
       )}
     </div>
   )
