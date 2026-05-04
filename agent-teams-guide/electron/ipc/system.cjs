@@ -114,14 +114,14 @@ module.exports = function registerSystem(getMainWindow) {
   });
 
   // ─── load_office_layout ─────────────────────────────────────────
-  const LAYOUT_FILE = path.join(app.getPath('userData'), 'office-layout.json')
+  const LAYOUT_FILE = path.join(app.getPath('userData'), 'office-layout.json');
 
   const DEFAULT_LAYOUT = JSON.stringify({
     version: 1,
     width: 32,
     height: 24,
     tiles: []
-  })
+  });
 
   ipcMain.handle('load_office_layout', async () => {
     try {
