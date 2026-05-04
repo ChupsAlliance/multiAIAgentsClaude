@@ -67,6 +67,13 @@ describe('mapLogEntryToState', () => {
     const entry: MissionLogEntry = { agent: 'A', message: '', log_type: 'tool' }
     expect(mapLogEntryToState(entry)).toBe('idle')
   })
+
+  it('TOOL_TO_STATE contains all expected tool mappings', () => {
+    expect(Object.keys(TOOL_TO_STATE)).toContain('Write')
+    expect(Object.keys(TOOL_TO_STATE)).toContain('Agent')
+    expect(Object.values(TOOL_TO_STATE)).toContain('coding')
+    expect(Object.values(TOOL_TO_STATE)).toContain('managing')
+  })
 })
 
 describe('formatSpeechBubble', () => {
@@ -86,6 +93,25 @@ describe('formatSpeechBubble', () => {
   it('returns null for non-tool entries', async () => {
     const { formatSpeechBubble } = await import('../../components/office/agent-bridge/AgentStateMapper')
     const entry: MissionLogEntry = { agent: 'A', message: 'hello', log_type: 'message' }
+    expect(formatSpeechBubble(entry)).toBeNull()
+  })
+
+  it('guarantees output is ≤30 chars even for longest tool names', async () => {
+    const { formatSpeechBubble } = await import('../../components/office/agent-bridge/AgentStateMapper')
+    const entry: MissionLogEntry = {
+      agent: 'A',
+      message: 'src/components/very/long/path/to/SomeComponent.jsx',
+      log_type: 'tool',
+      tool_name: 'WebSearch',
+    }
+    const bubble = formatSpeechBubble(entry)
+    expect(bubble).not.toBeNull()
+    expect(bubble!.length).toBeLessThanOrEqual(30)
+  })
+
+  it('returns null for empty message', async () => {
+    const { formatSpeechBubble } = await import('../../components/office/agent-bridge/AgentStateMapper')
+    const entry: MissionLogEntry = { agent: 'A', message: '', log_type: 'tool', tool_name: 'Write' }
     expect(formatSpeechBubble(entry)).toBeNull()
   })
 })

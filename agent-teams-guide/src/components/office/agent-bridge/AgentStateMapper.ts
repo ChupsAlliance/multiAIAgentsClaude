@@ -20,9 +20,13 @@ export function mapLogEntryToState(entry: MissionLogEntry): AgentAnimationState 
 
 export function formatSpeechBubble(entry: MissionLogEntry): string | null {
   if (entry.log_type !== 'tool' || !entry.tool_name) return null
+  const msg = entry.message?.trim()
+  if (!msg) return null
   const tool = entry.tool_name.toLowerCase()
-  const msg = entry.message || ''
-  const filename = msg.split('/').pop() || msg
-  const short = filename.length > 20 ? filename.slice(0, 20) + '…' : filename
+  const filename = msg.split('/').filter(Boolean).pop() || msg
+  const maxFilename = 30 - tool.length - 2  // 2 = ': '
+  const short = filename.length > maxFilename
+    ? filename.slice(0, maxFilename) + '…'
+    : filename
   return `${tool}: ${short}`
 }
