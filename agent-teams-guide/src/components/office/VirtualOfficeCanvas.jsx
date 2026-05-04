@@ -82,6 +82,9 @@ export function VirtualOfficeCanvas({ missionState, isRunning, logs }) {
     if (bubble) {
       agent.speechBubble = bubble
       agent.speechBubbleExpiry = Date.now() + 3000
+    } else {
+      agent.speechBubble = null
+      agent.speechBubbleExpiry = null
     }
 
     rendererRef.current?.setAgents(Object.values(agentsRef.current))
