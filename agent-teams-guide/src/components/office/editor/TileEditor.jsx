@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-// Grid constants
-const GRID_W = 32
-const GRID_H = 24
-const TILE_PX = 16  // display size per tile
-const CANVAS_W = GRID_W * TILE_PX  // 512
-const CANVAS_H = GRID_H * TILE_PX  // 384
+// Tile display size in pixels
+const TILE_PX = 16
 
 // Tile colors for canvas rendering
 const TILE_COLORS = {
@@ -22,6 +18,9 @@ const WALL_BORDER  = '#6b5a4a'
 const DESK_BORDER  = '#3b82f6'
 const GRID_LINE    = 'rgba(255,255,255,0.05)'
 
+// Valid tile types for import validation
+const VALID_TYPES = new Set(['floor', 'wall', 'desk', 'plant', 'box', 'door', 'empty'])
+
 // Palette definition
 const PALETTE_TOOLS = [
   { type: 'floor',  label: 'Floor',  emoji: '🟫' },
@@ -32,16 +31,11 @@ const PALETTE_TOOLS = [
   { type: 'door',   label: 'Door',   emoji: '🚪' },
 ]
 
-const ACTION_TOOLS = [
-  { type: 'eraser', label: 'Eraser', emoji: '🗑' },
-  { type: 'undo',   label: 'Undo',   emoji: '↩' },
-]
-
 // Render all tiles to the canvas context
-function drawCanvas(ctx, tiles) {
+function drawCanvas(ctx, tiles, gridW, gridH, canvasW, canvasH) {
   // Background
   ctx.fillStyle = TILE_COLORS.floor
-  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
+  ctx.fillRect(0, 0, canvasW, canvasH)
 
   // Build lookup map for O(1) tile access
   const map = {}
@@ -50,8 +44,8 @@ function drawCanvas(ctx, tiles) {
   }
 
   // Draw each cell
-  for (let y = 0; y < GRID_H; y++) {
-    for (let x = 0; x < GRID_W; x++) {
+  for (let y = 0; y < gridH; y++) {
+    for (let x = 0; x < gridW; x++) {
       const type = map[`${x},${y}`] || 'floor'
       const px = x * TILE_PX
       const py = y * TILE_PX
@@ -77,30 +71,30 @@ function drawCanvas(ctx, tiles) {
   // Grid lines
   ctx.strokeStyle = GRID_LINE
   ctx.lineWidth = 1
-  for (let x = 0; x <= GRID_W; x++) {
+  for (let x = 0; x <= gridW; x++) {
     ctx.beginPath()
     ctx.moveTo(x * TILE_PX, 0)
-    ctx.lineTo(x * TILE_PX, CANVAS_H)
+    ctx.lineTo(x * TILE_PX, canvasH)
     ctx.stroke()
   }
-  for (let y = 0; y <= GRID_H; y++) {
+  for (let y = 0; y <= gridH; y++) {
     ctx.beginPath()
     ctx.moveTo(0, y * TILE_PX)
-    ctx.lineTo(CANVAS_W, y * TILE_PX)
+    ctx.lineTo(canvasW, y * TILE_PX)
     ctx.stroke()
   }
 }
 
 // Convert a mouse event position to grid (x, y) relative to canvas element
-function eventToGrid(e, canvas) {
+function eventToGrid(e, canvas, gridW, gridH, canvasW, canvasH) {
   const rect = canvas.getBoundingClientRect()
-  const scaleX = CANVAS_W / rect.width
-  const scaleY = CANVAS_H / rect.height
+  const scaleX = canvasW / rect.width
+  const scaleY = canvasH / rect.height
   const cx = (e.clientX - rect.left) * scaleX
   const cy = (e.clientY - rect.top)  * scaleY
   const gx = Math.floor(cx / TILE_PX)
   const gy = Math.floor(cy / TILE_PX)
-  if (gx < 0 || gx >= GRID_W || gy < 0 || gy >= GRID_H) return null
+  if (gx < 0 || gx >= gridW || gy < 0 || gy >= gridH) return null
   return { x: gx, y: gy }
 }
 
@@ -115,24 +109,31 @@ export function TileEditor({ layout, isRunning, onSave, onClose }) {
   const [undoStack, setUndoStack] = useState([])
   const [isPainting, setIsPainting] = useState(false)
 
+  // Stroke snapshot ref — holds tiles state at stroke start for undo
+  const strokeStartRef = useRef(null)
+
   // Keep a ref to workingLayout for use inside event handlers
   const workingLayoutRef = useRef(workingLayout)
   useEffect(() => { workingLayoutRef.current = workingLayout }, [workingLayout])
+
+  // Derive grid dimensions from workingLayout so imports with different sizes work correctly
+  const GRID_W = Math.min(workingLayout.width || 32, 64)
+  const GRID_H = Math.min(workingLayout.height || 24, 48)
+  const CANVAS_W = GRID_W * TILE_PX
+  const CANVAS_H = GRID_H * TILE_PX
 
   // Redraw canvas whenever tiles change
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
-    drawCanvas(ctx, workingLayout.tiles)
-  }, [workingLayout])
+    drawCanvas(ctx, workingLayout.tiles, GRID_W, GRID_H, CANVAS_W, CANVAS_H)
+  }, [workingLayout, GRID_W, GRID_H, CANVAS_W, CANVAS_H])
 
-  // Tile placement
+  // Tile placement — no undo push here; snapshots are taken at stroke start
   const placeTile = useCallback((x, y) => {
     if (isRunning) return
     if (selectedTool === 'undo') return
-
-    setUndoStack(prev => [...prev.slice(-49), [...workingLayoutRef.current.tiles]])
 
     if (selectedTool === 'eraser') {
       setWorkingLayout(prev => ({
@@ -154,37 +155,39 @@ export function TileEditor({ layout, isRunning, onSave, onClose }) {
   // Mouse events on canvas
   const handleMouseDown = useCallback((e) => {
     if (e.button !== 0) return
-    const pos = eventToGrid(e, canvasRef.current)
+    if (isRunning) return
+    const pos = eventToGrid(e, canvasRef.current, GRID_W, GRID_H, CANVAS_W, CANVAS_H)
     if (!pos) return
     setIsPainting(true)
+    // Snapshot tiles ONCE at the start of the stroke
+    strokeStartRef.current = [...workingLayoutRef.current.tiles]
     placeTile(pos.x, pos.y)
-  }, [placeTile])
+  }, [isRunning, placeTile, GRID_W, GRID_H, CANVAS_W, CANVAS_H])
 
   const handleMouseMove = useCallback((e) => {
     if (!isPainting) return
-    const pos = eventToGrid(e, canvasRef.current)
+    const pos = eventToGrid(e, canvasRef.current, GRID_W, GRID_H, CANVAS_W, CANVAS_H)
     if (!pos) return
     placeTile(pos.x, pos.y)
-  }, [isPainting, placeTile])
+  }, [isPainting, placeTile, GRID_W, GRID_H, CANVAS_W, CANVAS_H])
 
-  const handleMouseUp = useCallback(() => setIsPainting(false), [])
-
-  // Stop painting if mouse leaves canvas
-  const handleMouseLeave = useCallback(() => setIsPainting(false), [])
-
-  // Keyboard undo (Ctrl+Z / Cmd+Z)
-  useEffect(() => {
-    const handler = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && undoStack.length > 0) {
-        e.preventDefault()
-        const prev = undoStack[undoStack.length - 1]
-        setUndoStack(s => s.slice(0, -1))
-        setWorkingLayout(l => ({ ...l, tiles: prev }))
-      }
+  const handleMouseUp = useCallback(() => {
+    if (strokeStartRef.current !== null) {
+      // Push the snapshot taken at stroke start
+      setUndoStack(prev => [...prev.slice(-49), strokeStartRef.current])
+      strokeStartRef.current = null
     }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [undoStack])
+    setIsPainting(false)
+  }, [])
+
+  // Stop painting if mouse leaves canvas — also commit the stroke
+  const handleMouseLeave = useCallback(() => {
+    if (isPainting && strokeStartRef.current !== null) {
+      setUndoStack(prev => [...prev.slice(-49), strokeStartRef.current])
+      strokeStartRef.current = null
+    }
+    setIsPainting(false)
+  }, [isPainting])
 
   // Palette undo button click
   const handleUndoClick = useCallback(() => {
@@ -193,6 +196,22 @@ export function TileEditor({ layout, isRunning, onSave, onClose }) {
     setUndoStack(s => s.slice(0, -1))
     setWorkingLayout(l => ({ ...l, tiles: prev }))
   }, [undoStack])
+
+  // Keyboard undo (Ctrl+Z / Cmd+Z)
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        // Only handle if focus is NOT in a text input
+        const tag = document.activeElement?.tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return
+        if (isRunning) return  // read-only mode
+        e.preventDefault()
+        handleUndoClick()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [isRunning, undoStack, handleUndoClick])
 
   // Save
   const handleSave = useCallback(() => {
@@ -212,7 +231,7 @@ export function TileEditor({ layout, isRunning, onSave, onClose }) {
     URL.revokeObjectURL(url)
   }, [workingLayout])
 
-  // Import
+  // Import with validation
   const handleImport = useCallback(() => {
     const input = document.createElement('input')
     input.type = 'file'
@@ -224,9 +243,26 @@ export function TileEditor({ layout, isRunning, onSave, onClose }) {
       reader.onload = (ev) => {
         try {
           const parsed = JSON.parse(ev.target.result)
-          setWorkingLayout(parsed)
+          if (
+            typeof parsed !== 'object' || parsed === null ||
+            !Array.isArray(parsed.tiles) ||
+            parsed.version !== 1
+          ) {
+            console.warn('[TileEditor] Import rejected: invalid layout structure')
+            return
+          }
+          const maxW = Math.min(parsed.width || 32, 64)
+          const maxH = Math.min(parsed.height || 24, 48)
+          // Filter out-of-range or invalid tiles
+          const validTiles = parsed.tiles.filter(t =>
+            Number.isInteger(t.x) && Number.isInteger(t.y) &&
+            t.x >= 0 && t.x < maxW &&
+            t.y >= 0 && t.y < maxH &&
+            VALID_TYPES.has(t.type)
+          )
+          setWorkingLayout({ ...parsed, tiles: validTiles })
         } catch {
-          /* ignore invalid JSON */
+          console.warn('[TileEditor] Import failed: invalid JSON')
         }
       }
       reader.readAsText(file)
@@ -305,7 +341,7 @@ export function TileEditor({ layout, isRunning, onSave, onClose }) {
             {/* Undo button */}
             <button
               onClick={handleUndoClick}
-              disabled={undoStack.length === 0}
+              disabled={undoStack.length === 0 || isRunning}
               title="Undo (Ctrl+Z)"
               className="flex items-center gap-2 px-2 py-1.5 rounded text-xs text-left transition-colors hover:bg-slate-800 border border-transparent text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed"
             >
