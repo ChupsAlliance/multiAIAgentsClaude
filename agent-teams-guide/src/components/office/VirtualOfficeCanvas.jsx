@@ -14,6 +14,27 @@ export function VirtualOfficeCanvas({ missionState, isRunning, logs }) {
   const [editorOpen, setEditorOpen] = useState(false)
   const [canvasError, setCanvasError] = useState(false)
 
+  // Keep canvas buffer dimensions in sync with its CSS display size.
+  // Without this the canvas drawing buffer stays at the HTML default (300×150)
+  // while CSS stretches it, causing the Renderer's centering math to go negative.
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const observer = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect
+        const w = Math.round(width)
+        const h = Math.round(height)
+        if (w > 0 && h > 0 && (canvas.width !== w || canvas.height !== h)) {
+          canvas.width = w
+          canvas.height = h
+        }
+      }
+    })
+    observer.observe(canvas)
+    return () => observer.disconnect()
+  }, [])
+
   // Load layout on mount
   useEffect(() => {
     loadLayout().then(l => {
