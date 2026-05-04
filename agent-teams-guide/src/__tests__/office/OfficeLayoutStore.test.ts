@@ -37,6 +37,11 @@ describe('saveLayout', () => {
     await saveLayout(layout)
     expect(mockInvoke).toHaveBeenCalledWith('save_office_layout', { json: JSON.stringify(layout) })
   })
+
+  it('rejects when IPC throws', async () => {
+    mockInvoke.mockRejectedValue(new Error('disk full'))
+    await expect(saveLayout({ version: 1, width: 32, height: 24, tiles: [] })).rejects.toThrow('disk full')
+  })
 })
 
 describe('DEFAULT_LAYOUT', () => {
