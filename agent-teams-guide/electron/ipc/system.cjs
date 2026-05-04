@@ -125,17 +125,24 @@ module.exports = function registerSystem(getMainWindow) {
 
   ipcMain.handle('load_office_layout', async () => {
     try {
-      if (!fs.existsSync(LAYOUT_FILE)) return DEFAULT_LAYOUT
-      return fs.readFileSync(LAYOUT_FILE, 'utf8')
+      return fs.readFileSync(LAYOUT_FILE, 'utf-8');
     } catch {
-      return DEFAULT_LAYOUT
+      return DEFAULT_LAYOUT;
     }
-  })
+  });
 
   // ─── save_office_layout ─────────────────────────────────────────
   ipcMain.handle('save_office_layout', async (_event, { json }) => {
-    fs.writeFileSync(LAYOUT_FILE, json, 'utf8')
-  })
+    try {
+      if (typeof json !== 'string' || json.length > 1_000_000) {
+        throw new Error('Invalid layout payload');
+      }
+      const parsed = JSON.parse(json);
+      fs.writeFileSync(LAYOUT_FILE, JSON.stringify(parsed), 'utf-8');
+    } catch (err) {
+      throw new Error(`Failed to save office layout: ${err.message}`);
+    }
+  });
 
   console.log('[IPC] system OK');
 };
