@@ -23,9 +23,7 @@ import {
   type AnimationState,
 } from './SpriteAnimator'
 import {
-  buildTileGrid,
   renderBackground,
-  renderGridLines,
   renderSpeechBubble,
   renderTiles,
 } from './TileMap'
