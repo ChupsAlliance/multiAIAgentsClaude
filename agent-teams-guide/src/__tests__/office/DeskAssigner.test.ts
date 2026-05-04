@@ -64,4 +64,26 @@ describe('DeskAssigner', () => {
     const slot = assigner.assign('agent-2')
     expect(slot!.tile).toEqual(desk(9, 9))
   })
+
+  it('assign is idempotent — returns same slot if agent already assigned', () => {
+    const slot1 = assigner.assign('agent-1')
+    const slot2 = assigner.assign('agent-1')
+    expect(slot2).toBe(slot1)
+    // should not consume a second desk
+    expect(assigner.assign('agent-2')!.tile).toEqual(desk(1, 0))
+  })
+
+  it('release is no-op for unassigned agent', () => {
+    expect(() => assigner.release('ghost')).not.toThrow()
+    // desks still available after no-op release
+    expect(assigner.assign('agent-1')).not.toBeNull()
+  })
+
+  it('updateLayout clears prior assignments without reset', () => {
+    assigner.assign('agent-1')
+    assigner.updateLayout([desk(9, 9)])
+    expect(assigner.getSlot('agent-1')).toBeNull()
+    const slot = assigner.assign('agent-2')
+    expect(slot!.tile).toEqual(desk(9, 9))
+  })
 })

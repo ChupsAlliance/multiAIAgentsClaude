@@ -1,5 +1,12 @@
 import type { Tile, DeskSlot } from '../types'
 
+/**
+ * Tracks desk slot assignments for agents in the Virtual Office.
+ *
+ * NOTE: `assign()` and `getSlot()` return live references into internal state.
+ * Callers must not mutate the returned `DeskSlot` objects directly.
+ * Use `release()` and `assign()` to change assignments.
+ */
 export class DeskAssigner {
   private slots: DeskSlot[]
 
@@ -8,6 +15,8 @@ export class DeskAssigner {
   }
 
   assign(agentName: string): DeskSlot | null {
+    const existing = this.slots.find(s => s.agentName === agentName)
+    if (existing) return existing
     const free = this.slots.find(s => s.agentName === null)
     if (!free) return null
     free.agentName = agentName
