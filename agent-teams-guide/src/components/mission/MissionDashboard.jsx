@@ -62,7 +62,6 @@ export const MissionDashboard = memo(function MissionDashboard({ state, isRunnin
         const delta = officeStartX.current - e.clientX  // inverted: drag left = wider office
         const next = Math.max(300, Math.min(officeStartWidth.current + delta, window.innerWidth - 400))
         setOfficePanelWidth(next)
-        localStorage.setItem('office-panel-ratio', String(next))
       }
     }
     const onUp = () => {
@@ -75,6 +74,11 @@ export const MissionDashboard = memo(function MissionDashboard({ state, isRunnin
         isOfficeDragging.current = false
         document.body.style.cursor = ''
         document.body.style.userSelect = ''
+        // Write to localStorage once per drag, not on every mousemove
+        setOfficePanelWidth(prev => {
+          localStorage.setItem('office-panel-ratio', String(prev))
+          return prev
+        })
       }
     }
     window.addEventListener('mousemove', onMove)
