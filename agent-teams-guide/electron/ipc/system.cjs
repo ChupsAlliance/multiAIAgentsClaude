@@ -1,6 +1,6 @@
 'use strict';
 // Port of system commands from lib.rs → Node.js
-const { ipcMain, shell } = require('electron');
+const { ipcMain, shell, app } = require('electron');
 const { execSync, spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -112,6 +112,30 @@ module.exports = function registerSystem(getMainWindow) {
     const url = args.url || args;
     shell.openExternal(url);
   });
+
+  // ─── load_office_layout ─────────────────────────────────────────
+  const LAYOUT_FILE = path.join(app.getPath('userData'), 'office-layout.json')
+
+  const DEFAULT_LAYOUT = JSON.stringify({
+    version: 1,
+    width: 32,
+    height: 24,
+    tiles: []
+  })
+
+  ipcMain.handle('load_office_layout', async () => {
+    try {
+      if (!fs.existsSync(LAYOUT_FILE)) return DEFAULT_LAYOUT
+      return fs.readFileSync(LAYOUT_FILE, 'utf8')
+    } catch {
+      return DEFAULT_LAYOUT
+    }
+  })
+
+  // ─── save_office_layout ─────────────────────────────────────────
+  ipcMain.handle('save_office_layout', async (_event, { json }) => {
+    fs.writeFileSync(LAYOUT_FILE, json, 'utf8')
+  })
 
   console.log('[IPC] system OK');
 };
