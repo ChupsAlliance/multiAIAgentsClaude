@@ -154,9 +154,16 @@ export class Renderer {
   }
 
   private _render(): void {
-    const { ctx, canvas, cols, rows, tileSize } = this
+    const { ctx, canvas, cols, rows } = this
 
-    // Center the grid in the canvas viewport
+    // Scale tile size to fit the canvas, preserving grid aspect ratio.
+    // This handles any canvas size — small panel or large — without clipping.
+    const tileSize = Math.max(1, Math.min(
+      Math.floor(canvas.width / cols),
+      Math.floor(canvas.height / rows),
+    ))
+
+    // Center the scaled grid in the canvas viewport
     const mapW = cols * tileSize
     const mapH = rows * tileSize
     const offsetX = Math.floor((canvas.width - mapW) / 2)
@@ -176,7 +183,7 @@ export class Renderer {
     })
 
     for (const state of sortedAgents) {
-      this._renderAgent(ctx, state, offsetX, offsetY)
+      this._renderAgent(ctx, state, offsetX, offsetY, tileSize)
     }
   }
 
@@ -185,9 +192,9 @@ export class Renderer {
     state: AgentRenderState,
     offsetX: number,
     offsetY: number,
+    tileSize: number,
   ): void {
     const { agent, anim } = state
-    const { tileSize } = this
 
     // Determine pixel position — use desk tile if assigned, otherwise center of map
     let tileX: number
@@ -217,7 +224,7 @@ export class Renderer {
       drawSprite(ctx, sprite, drawX, drawY, tileSize / 16)
     } else {
       // Fallback: draw a colored circle while sprites load
-      this._renderFallbackAgent(ctx, agent, px, py)
+      this._renderFallbackAgent(ctx, agent, px, py, tileSize)
     }
 
     // Speech bubble
@@ -239,8 +246,8 @@ export class Renderer {
     agent: OfficeAgent,
     px: number,
     py: number,
+    tileSize: number,
   ): void {
-    const { tileSize } = this
     const PALETTE = [
       '#e05252', '#52a0e0', '#52c872', '#e0a052',
       '#a052e0', '#52e0d8',

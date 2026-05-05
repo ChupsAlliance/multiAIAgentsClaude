@@ -7,6 +7,7 @@ import { loadLayout, saveLayout } from './persistence/OfficeLayoutStore'
 
 export function VirtualOfficeCanvas({ missionState, isRunning, logs }) {
   const canvasRef = useRef(null)
+  const containerRef = useRef(null)
   const rendererRef = useRef(null)
   const assignerRef = useRef(new DeskAssigner([]))
   const agentsRef = useRef({})
@@ -14,24 +15,23 @@ export function VirtualOfficeCanvas({ missionState, isRunning, logs }) {
   const [editorOpen, setEditorOpen] = useState(false)
   const [canvasError, setCanvasError] = useState(false)
 
-  // Keep canvas buffer dimensions in sync with its CSS display size.
-  // Without this the canvas drawing buffer stays at the HTML default (300×150)
-  // while CSS stretches it, causing the Renderer's centering math to go negative.
+  // Sync canvas pixel buffer to container size so Renderer fills the panel.
+  // Observing the container (not canvas) avoids resize-observer feedback loops.
   useEffect(() => {
+    const container = containerRef.current
     const canvas = canvasRef.current
-    if (!canvas) return
+    if (!container || !canvas) return
     const observer = new ResizeObserver(entries => {
       for (const entry of entries) {
-        const { width, height } = entry.contentRect
-        const w = Math.round(width)
-        const h = Math.round(height)
-        if (w > 0 && h > 0 && (canvas.width !== w || canvas.height !== h)) {
+        const w = Math.round(entry.contentRect.width)
+        const h = Math.round(entry.contentRect.height)
+        if (w > 0 && h > 0) {
           canvas.width = w
           canvas.height = h
         }
       }
     })
-    observer.observe(canvas)
+    observer.observe(container)
     return () => observer.disconnect()
   }, [])
 
@@ -151,12 +151,11 @@ export function VirtualOfficeCanvas({ missionState, isRunning, logs }) {
         </button>
       </div>
 
-      {/* Canvas */}
-      <div className="flex-1 overflow-hidden">
+      {/* Canvas — buffer synced to container via ResizeObserver on the wrapper */}
+      <div className="flex-1 overflow-hidden" ref={containerRef} style={{ position: 'relative' }}>
         <canvas
           ref={canvasRef}
-          className="w-full h-full"
-          style={{ imageRendering: 'pixelated' }}
+          style={{ position: 'absolute', inset: 0, imageRendering: 'pixelated' }}
         />
       </div>
 
