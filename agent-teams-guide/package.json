@@ -10,7 +10,10 @@
     "tauri": "tauri",
     "electron:dev": "vite build --config vite.config.electron.mjs && electron .",
     "electron:build": "vite build --config vite.config.electron.mjs && electron-builder --win",
-    "electron:patch": "node scripts/build-patch.cjs"
+    "electron:patch": "node scripts/build-patch.cjs",
+    "build:pixel-agents": "node scripts/build-pixel-agents.cjs",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "main": "electron/main.cjs",
   "dependencies": {
@@ -29,27 +32,38 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@vitejs/plugin-react": "^4.6.0",
     "autoprefixer": "^10.4.27",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
+    "jsdom": "^29.1.1",
     "postcss": "^8.5.8",
     "tailwindcss": "^3.4.19",
     "vite": "^7.0.4",
-    "electron": "^33.4.11",
-    "electron-builder": "^25.1.8"
+    "vitest": "^4.1.5"
   },
   "build": {
     "appId": "com.internal.agent-teams-guide",
     "productName": "Claude Agent Teams",
-    "directories": { "output": "release" },
+    "directories": {
+      "output": "release"
+    },
     "files": [
       "dist-electron/**/*",
       "electron/**/*",
       "!electron/prompts/**/*"
     ],
     "extraResources": [
-      { "from": "electron/prompts", "to": "prompts" }
+      {
+        "from": "electron/prompts",
+        "to": "prompts"
+      }
     ],
-    "win": { "target": "nsis" },
+    "win": {
+      "target": "nsis"
+    },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true

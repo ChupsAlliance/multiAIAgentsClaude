@@ -705,8 +705,8 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
 
   // Sync when re-plan returns new data (preserve ALL local edits)
   useEffect(() => {
-    setLocalAgents(agents.map(a => {
-      const existing = localAgents.find(e => e.name === a.name)
+    setLocalAgents(prev => agents.map(a => {
+      const existing = prev.find(e => e.name === a.name)
       return {
         ...a,
         model: existing?.model || a.model || 'sonnet',

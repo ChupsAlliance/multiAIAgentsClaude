@@ -1,4 +1,5 @@
 'use strict';
+const path = require('path');
 const { contextBridge, ipcRenderer } = require('electron');
 
 // Commands the frontend can invoke (whitelist)
@@ -15,8 +16,13 @@ const ALLOWED_COMMANDS = [
   'delete_history_entry', 'get_mission_detail',
   // mission
   'launch_mission', 'deploy_mission', 'continue_mission', 'replan_mission',
-  'stop_mission', 'reset_mission', 'get_mission_state', 'update_agent_model',
-  'read_planning_template',
+  'stop_mission', 'reset_mission', 'get_mission_state', 'get_incomplete_missions',
+  'update_agent_model',
+  'read_planning_template', 'answer_question', 'read_superpowers_skill',
+  // office
+  'load_office_layout', 'save_office_layout',
+  // pixel-agents persistence
+  'pa:save-layout', 'pa:save-seats',
 ];
 
 // Events the backend can push to frontend (whitelist)
@@ -24,7 +30,8 @@ const ALLOWED_EVENTS = [
   'mission:status', 'mission:agent-spawned', 'mission:log',
   'mission:file-change', 'mission:task-update', 'mission:raw-line',
   'mission:plan-ready', 'mission:agent-message', 'mission:team-event',
-  'mission:task-reassigned', 'claude-output',
+  'mission:task-reassigned', 'mission:question', 'mission:answer-sent',
+  'claude-output',
 ];
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -53,5 +60,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on(event, handler);
     // Return unlisten function (like Tauri)
     return () => ipcRenderer.removeListener(event, handler);
+  },
+
+  /**
+   * Get paths for webview preload and pixel-agents assets
+   */
+  getPaths() {
+    return {
+      webviewPreload: path.join(__dirname, 'webview-preload.cjs'),
+      pixelAgentsDist: path.join(__dirname, '../src/assets/pixel-agents-webview'),
+    };
   },
 });

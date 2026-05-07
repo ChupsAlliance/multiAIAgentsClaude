@@ -1,6 +1,6 @@
 'use strict';
 // Port of system commands from lib.rs → Node.js
-const { ipcMain, shell } = require('electron');
+const { ipcMain, shell, app } = require('electron');
 const { execSync, spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -111,6 +111,51 @@ module.exports = function registerSystem(getMainWindow) {
   ipcMain.handle('open_url', async (_event, args) => {
     const url = args.url || args;
     shell.openExternal(url);
+  });
+
+  // ─── load_office_layout ─────────────────────────────────────────
+  const LAYOUT_FILE = path.join(app.getPath('userData'), 'office-layout.json');
+
+  const DEFAULT_LAYOUT = (() => {
+    const map = new Map()
+    const put = (x, y, type) => map.set(`${x},${y}`, { x, y, type })
+
+    for (let x = 0; x < 32; x++) { put(x, 0, 'wall'); put(x, 23, 'wall') }
+    for (let y = 1; y < 23; y++) { put(0, y, 'wall'); put(31, y, 'wall') }
+    for (let y = 1; y < 23; y++) for (let x = 1; x < 31; x++) put(x, y, 'floor')
+    for (let i = 0; i < 6; i++) put(4 + i*4, 5, 'desk')
+    for (let i = 0; i < 6; i++) put(4 + i*4, 10, 'desk')
+    put(2, 2, 'plant'); put(29, 2, 'plant'); put(2, 21, 'plant'); put(29, 21, 'plant')
+    put(16, 23, 'door')
+
+    return JSON.stringify({version:1,width:32,height:24,tiles:Array.from(map.values())})
+  })();
+
+  ipcMain.handle('load_office_layout', async () => {
+    try {
+      const raw = fs.readFileSync(LAYOUT_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      // Guard: reject saved layouts with no tiles (from old buggy default)
+      if (!Array.isArray(parsed.tiles) || parsed.tiles.length === 0) {
+        return DEFAULT_LAYOUT;
+      }
+      return raw;
+    } catch {
+      return DEFAULT_LAYOUT;
+    }
+  });
+
+  // ─── save_office_layout ─────────────────────────────────────────
+  ipcMain.handle('save_office_layout', async (_event, { json }) => {
+    try {
+      if (typeof json !== 'string' || json.length > 1_000_000) {
+        throw new Error('Invalid layout payload');
+      }
+      const parsed = JSON.parse(json);
+      fs.writeFileSync(LAYOUT_FILE, JSON.stringify(parsed), 'utf-8');
+    } catch (err) {
+      throw new Error(`Failed to save office layout: ${err.message}`);
+    }
   });
 
   console.log('[IPC] system OK');

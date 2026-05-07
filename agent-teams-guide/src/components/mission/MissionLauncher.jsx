@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { Rocket, FolderOpen, Zap, History, Trash2, Cpu, Eye, EyeOff, Users, FlaskConical, Paperclip, FileText, Image, Folder, Upload, X, AtSign } from 'lucide-react'
+import { Rocket, FolderOpen, Zap, History, Trash2, Cpu, Eye, EyeOff, Users, FlaskConical, Paperclip, FileText, Image, Folder, Upload, X, AtSign, Shield, ShieldCheck, ShieldQuestion, Brain } from 'lucide-react'
 import { buildMissionPrompt } from '../../data/promptWrapper'
 import { useTauriFileDrop } from '../../hooks/useTauriFileDrop'
 
@@ -27,12 +27,42 @@ const EXEC_MODES = [
   },
 ]
 
+const PERMISSION_MODES = [
+  {
+    id: 'auto',
+    label: 'Auto-pilot',
+    desc: 'Agents tự quyết mọi thứ, chạy liên tục',
+    icon: Shield,
+  },
+  {
+    id: 'interactive',
+    label: 'Interactive',
+    desc: 'Lead có thể hỏi bạn khi cần input',
+    icon: ShieldQuestion,
+  },
+  {
+    id: 'plan-only',
+    label: 'Plan Only',
+    desc: 'Chỉ lên plan, dừng ở PlanReview',
+    icon: ShieldCheck,
+  },
+  {
+    id: 'deep_plan',
+    label: 'Deep Plan',
+    desc: 'Lead hỏi clarifying questions trước khi lên plan',
+    icon: Brain,
+  },
+]
+
 export function MissionLauncher({ onLaunch }) {
   const [requirement, setRequirement] = useState('')
   const [projectPath, setProjectPath] = useState('')
   const [teamHint, setTeamHint] = useState(3)
   const [model, setModel] = useState('sonnet')
   const [executionMode, setExecutionMode] = useState('standard')
+  const [permissionMode, setPermissionMode] = useState(() =>
+    localStorage.getItem('permission_mode') || 'auto'
+  )
   const [launching, setLaunching] = useState(false)
   const [history, setHistory] = useState([])
   const [showPrompt, setShowPrompt] = useState(false)
@@ -245,8 +275,9 @@ export function MissionLauncher({ onLaunch }) {
       projectPath: projectPath || '(chưa chọn)',
       teamHint: `Use ${teamHint} teammates for this task`,
       references,
+      permissionMode,
     }).then(setPreviewPrompt).catch(() => setPreviewPrompt(''))
-  }, [requirement, projectPath, teamHint, references])
+  }, [requirement, projectPath, teamHint, references, permissionMode])
 
   useEffect(() => {
     invoke('load_history').then(setHistory).catch(() => {})
@@ -268,6 +299,7 @@ export function MissionLauncher({ onLaunch }) {
         projectPath,
         teamHint: `Use ${teamHint} teammates for this task`,
         references,
+        permissionMode,
       })
 
       // Save to history — store full requirement
@@ -280,7 +312,7 @@ export function MissionLauncher({ onLaunch }) {
         }
       }).catch(() => {})
 
-      await onLaunch({ projectPath, prompt, description: requirement, model, executionMode })
+      await onLaunch({ projectPath, prompt, description: requirement, model, executionMode, permissionMode })
     } catch (err) {
       console.error('Launch failed:', err)
     } finally {
@@ -562,6 +594,54 @@ export function MissionLauncher({ onLaunch }) {
             <p className="text-[10px] text-yellow-400/80 font-mono bg-yellow-500/5 border border-yellow-500/20 rounded px-2 py-1.5 leading-relaxed">
               ⚗ Experimental: Agents giao tiếp qua SendMessage. Tab Messages sẽ hiển thị messages thực tế.
               Backend polling task files mỗi 2s để cập nhật Tasks và Files.
+            </p>
+          )}
+        </div>
+
+        {/* Permission Mode selector */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-mono text-vs-muted uppercase tracking-wider flex items-center gap-1.5">
+            <Shield size={11} />
+            Permission Mode
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            {PERMISSION_MODES.map(mode => {
+              const Icon = mode.icon
+              return (
+                <button
+                  key={mode.id}
+                  onClick={() => {
+                    setPermissionMode(mode.id)
+                    localStorage.setItem('permission_mode', mode.id)
+                  }}
+                  className={`text-left px-3 py-2.5 rounded-lg border text-xs transition-colors ${
+                    permissionMode === mode.id
+                      ? mode.id === 'interactive'
+                        ? 'border-amber-500/60 bg-amber-500/10 text-white'
+                        : mode.id === 'deep_plan'
+                        ? 'border-purple-500/60 bg-purple-500/10 text-white'
+                        : 'border-vs-accent bg-vs-accent/10 text-white'
+                      : 'border-vs-border bg-vs-bg text-vs-muted hover:border-vs-text/30 hover:bg-white/5'
+                  }`}
+                >
+                  <span className="font-semibold flex items-center gap-1.5">
+                    <Icon size={11} />
+                    {mode.label}
+                  </span>
+                  <span className="text-[10px] text-vs-muted block mt-0.5 leading-tight">{mode.desc}</span>
+                </button>
+              )
+            })}
+          </div>
+          {permissionMode === 'interactive' && (
+            <p className="text-[10px] text-amber-400/80 font-mono bg-amber-500/5 border border-amber-500/20 rounded px-2 py-1.5 leading-relaxed">
+              ⏸ Lead agent có thể pause mission và hỏi bạn khi thiếu thông tin.
+              Bạn trả lời qua UI, mission tiếp tục tự động.
+            </p>
+          )}
+          {permissionMode === 'deep_plan' && (
+            <p className="text-[10px] text-purple-400/80 font-mono bg-purple-500/5 border border-purple-500/20 rounded px-2 py-1.5 leading-relaxed">
+              🧠 Lead sẽ hỏi 3–5 câu clarifying questions trước khi lên plan. Mỗi câu hỏi hiện trong QuestionCard — bạn trả lời, Lead hỏi tiếp hoặc lên plan ngay. Tốn thêm ~1–2 phút nhưng plan và sub-agent prompts sẽ chính xác hơn.
             </p>
           )}
         </div>

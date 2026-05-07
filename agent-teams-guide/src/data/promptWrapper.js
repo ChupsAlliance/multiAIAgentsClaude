@@ -51,8 +51,47 @@ function detectLanguageHint(text) {
   return null
 }
 
+/**
+ * Build the Phase 0 wrapper that prepends brainstorming skill to planning prompt.
+ * @param {string} skillContent - Raw content of brainstorming/SKILL.md
+ * @returns {string} Phase 0 section to prepend to the planning template
+ */
+function buildPhase0Wrapper(skillContent) {
+  const skillSection = skillContent
+    ? `\n### Brainstorming Framework\nThe following skill provides structure for your questions:\n\n${skillContent}\n=== END BRAINSTORMING FRAMEWORK ===\n`
+    : ''
+
+  return `## ⚠ PHASE 0: MANDATORY Q&A — Read This BEFORE "Phase 1"
+
+**STOP. Do NOT proceed to "Phase 1: Analyze & Plan" yet.**
+
+You are in Deep Plan mode. Before doing ANY analysis or planning, you MUST ask the user clarifying questions. Minimum 3 questions, maximum 5.
+
+### How to ask a question (use EXACT format, ONE question per turn, then STOP):
+
+<<<QUESTION>>>
+{"from":"Lead","type":"clarification","question":"Your specific question here","options":["Option A","Option B","Option C"],"context":"Why this matters for correct planning"}
+<<<END_QUESTION>>>
+<<<QUESTIONS_END>>>
+
+After writing \`<<<QUESTIONS_END>>>\`, STOP IMMEDIATELY — do not write another word. You will be resumed with the user's answer. Then ask your next question (or proceed after 3–5 total).
+
+### After receiving answers to 3–5 questions:
+
+1. Write a \`## MISSION UNDERSTANDING\` section (2–3 paragraphs summarising key decisions)
+2. Then proceed to Phase 1 below — read the codebase and output the MISSION PLAN JSON
+
+**HARD RULES:**
+- Do NOT output \`=== MISSION PLAN ===\` until you have asked and received answers to at least 3 questions.
+- After outputting \`=== END PLAN ===\`, STOP IMMEDIATELY. Do NOT spawn any agents or tools. The user must review and approve the plan first.
+${skillSection}
+---
+
+`
+}
+
 export async function buildMissionPrompt(requirement, options = {}) {
-  const { projectPath, teamHint, references = [] } = options
+  const { projectPath, teamHint, references = [], permissionMode = 'auto' } = options
   const langHint = detectLanguageHint(requirement)
   const planningTemplate = await loadPlanningTemplate()
 
@@ -110,13 +149,69 @@ ${parts.join('\n\n')}
   // Build language hint section
   const langSection = langHint ? `\n## LANGUAGE REQUIREMENT\n${langHint}\n` : ''
 
+  // Shared interactive question protocol text (used by both 'interactive' and deep_plan fallback)
+  const INTERACTIVE_PERMISSION_TEXT = `Use the <<<QUESTION>>> protocol below. The app will show your questions to the user and resume the session with their answers.
+
+1. Output this EXACT format (one block per question):
+<<<QUESTION>>>
+{"from":"Lead","type":"clarification","question":"Your specific question here","options":["Option A","Option B"],"context":"Why you need this answered"}
+<<<END_QUESTION>>>
+
+2. You may output multiple <<<QUESTION>>> blocks if you have several questions.
+
+3. After ALL questions, output the terminal marker:
+<<<QUESTIONS_END>>>
+
+4. Then STOP. End your turn immediately after <<<QUESTIONS_END>>>.
+   The user will answer your questions and a new turn will begin with their answers.
+   After receiving answers, continue with Phase 1 analysis and output the plan.
+
+RULES:
+- Only ask when you truly lack critical information that would lead to wrong decisions.
+- Prefer making informed decisions autonomously when possible.
+- ALWAYS end your question batch with <<<QUESTIONS_END>>> marker.`
+
+  // Build permission mode section for planning phase
+  let permissionSection = ''
+  let phase0Section = ''
+
+  if (permissionMode === 'deep_plan') {
+    // Read brainstorming skill from superpowers installation
+    let skillContent = null
+    try {
+      skillContent = await invoke('read_superpowers_skill', { skillName: 'brainstorming' })
+    } catch {
+      // IPC not available (Tauri mode or handler missing) — fall back gracefully
+    }
+
+    // Always build Phase 0 — it's the hard gate that blocks Phase 1 until Q&A is done.
+    // Skill content adds brainstorming structure but Phase 0 works without it.
+    phase0Section = buildPhase0Wrapper(skillContent)
+    if (!skillContent) {
+      console.warn('[deep_plan] superpowers brainstorming skill not found — Phase 0 running without it')
+    }
+
+    // Minimal reminder at the bottom ({{PERMISSION_MODE}} slot).
+    // The full protocol is already in Phase 0 above; repeating it here would cause confusion.
+    permissionSection = `See Phase 0 instructions at the top of this prompt — Q&A is mandatory before planning. Use the <<<QUESTION>>> protocol defined there.`
+  } else if (permissionMode === 'interactive') {
+    permissionSection = INTERACTIVE_PERMISSION_TEXT
+  } else {
+    permissionSection = `Make all decisions independently. Choose the most optimal approach.
+Do NOT output <<<QUESTION>>> markers. Proceed directly to Phase 1 analysis.`
+  }
+
   // Apply template replacements
-  return planningTemplate
+  const filledTemplate = planningTemplate
     .replace('{{REQUIREMENT}}', requirement)
     .replace('{{PROJECT_PATH}}', projectPath || '(current directory)')
     .replace('{{LANG_HINT}}', langSection)
     .replace('{{REFERENCES_SECTION}}', referencesSection)
     .replace('{{TEAM_HINT}}', teamHint || 'Use 3-4 teammates for this task')
+    .replace('{{PERMISSION_MODE}}', permissionSection)
+
+  // Prepend Phase 0 (Deep Plan mode only) — empty string otherwise
+  return phase0Section + filledTemplate
 }
 
 /**

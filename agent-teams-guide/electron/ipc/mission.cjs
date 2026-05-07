@@ -32,6 +32,8 @@ const PROMPT_REPLAN = fs.existsSync(promptPath('replan.md'))
 let missionState  = null;   // Option<MissionState>
 let childProcess  = null;   // Running claude subprocess
 let watcherInterval = null; // setInterval for file watcher
+let autosaveInterval = null; // setInterval for periodic snapshot saves
+let agentTeamsCompletionTimer = null; // safety auto-complete timer for agent_teams mode
 
 // ─────────────────────────────────────────────────────────────────
 // Helper: current timestamp in milliseconds
@@ -335,6 +337,52 @@ function detectProjectTypeCont(projectPath) {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// buildPermissionModeSection — prompt injection based on permission mode
+// ─────────────────────────────────────────────────────────────────
+function buildPermissionModeSection(mode) {
+  if (mode === 'interactive') {
+    return `
+## QUESTION PROTOCOL (Interactive Mode)
+
+When you genuinely cannot proceed without user input — missing critical information
+that is not available in the provided documents, reference materials, or project files:
+
+1. Output this EXACT format (one block per question):
+<<<QUESTION>>>
+{"from":"Lead","type":"clarification","question":"Your specific question here","options":["Option A","Option B"],"context":"Why you need this answered"}
+<<<END_QUESTION>>>
+
+2. You may output multiple <<<QUESTION>>> blocks if you have several questions.
+
+3. After ALL questions, output the terminal marker:
+<<<QUESTIONS_END>>>
+
+4. Then STOP. End your turn immediately after the <<<QUESTIONS_END>>> marker.
+   Do not output anything else, do not call any tools, do not continue working.
+   The user will answer your questions and a new turn will begin with their answers.
+
+5. When you receive the user's answers in the next turn, continue working based on them.
+
+RULES:
+- Only YOU (Lead) can ask the user. Subagents ask you via SendMessage.
+- You decide whether to answer subagents from your knowledge or escalate to the user.
+- Only ask when you truly lack critical information that would lead to wrong decisions.
+- Prefer making informed decisions autonomously when possible.
+- If you've already asked multiple questions, strongly consider deciding on your own.
+- ALWAYS end your question batch with <<<QUESTIONS_END>>> marker.
+- ALWAYS end your turn immediately after <<<QUESTIONS_END>>> — this is critical.
+`;
+  }
+  // auto mode (default) — or plan-only
+  return `
+## AUTONOMOUS MODE
+You are running in autonomous mode. Make all decisions independently.
+Choose the most optimal approach that best fits the current project architecture.
+Do NOT output <<<QUESTION>>> markers.
+`;
+}
+
+// ─────────────────────────────────────────────────────────────────
 // detectVietnamese — check if description has Vietnamese characters
 // ─────────────────────────────────────────────────────────────────
 function detectVietnamese(text) {
@@ -397,6 +445,88 @@ function stopWatcher() {
     clearInterval(watcherInterval);
     watcherInterval = null;
   }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// startAutosave / stopAutosave — periodic snapshot flush (every 10s)
+// ─────────────────────────────────────────────────────────────────
+function startAutosave() {
+  stopAutosave();
+  autosaveInterval = setInterval(() => {
+    if (missionState) {
+      saveMissionSnapshot(missionState);
+    }
+  }, 10_000);
+}
+
+function stopAutosave() {
+  if (autosaveInterval !== null) {
+    clearInterval(autosaveInterval);
+    autosaveInterval = null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Agent Teams completion safety timer
+// When all non-Lead subagents finish but the Lead process hangs
+// (e.g. stuck waiting on SendMessage acknowledgement or final build),
+// this timer force-completes the mission after 90 seconds of inactivity.
+// ─────────────────────────────────────────────────────────────────
+function clearAgentTeamsTimer() {
+  if (agentTeamsCompletionTimer !== null) {
+    clearTimeout(agentTeamsCompletionTimer);
+    agentTeamsCompletionTimer = null;
+  }
+}
+
+function scheduleAgentTeamsCompletion(missionId, sendToWindow) {
+  clearAgentTeamsTimer();
+  agentTeamsCompletionTimer = setTimeout(() => {
+    agentTeamsCompletionTimer = null;
+    if (!missionState || missionState.status !== 'Running') return;
+    if (missionState.phase !== 'Executing') return;
+
+    const ts = now();
+    const logEntry = makeLogEntry(ts, 'System',
+      'All agents done — auto-completing (Lead process timed out after 90s)', 'info');
+    missionState.log.push(logEntry);
+    sendToWindow('mission:log', logEntry);
+
+    killChild();
+    stopWatcher();
+    stopAutosave();
+
+    missionState.status = 'Completed';
+    missionState.phase  = 'Done';
+    missionState.ended_at = ts;
+    for (const a of missionState.agents) {
+      if (a.status !== 'Error') a.status = 'Done';
+      if (a.name === 'Lead') a.current_task = 'Mission completed';
+    }
+    for (const task of missionState.tasks) {
+      if (task.status !== 'completed') { task.status = 'completed'; task.completed_at = ts; }
+    }
+
+    // Persist to history like a normal completion
+    const histEntry = {
+      id: missionState.id,
+      description: missionState.description,
+      project_path: missionState.project_path,
+      execution_mode: missionState.execution_mode || 'agent_teams',
+      forked_from: missionState.forked_from || null,
+      forked_from_desc: missionState.forked_from_desc || null,
+      status: 'completed',
+      started_at: missionState.started_at,
+      ended_at: ts,
+      agent_count: missionState.agents.length,
+      task_summary: missionState.tasks.map(t => `[${t.status}] ${t.title}`),
+      file_changes: missionState.file_changes,
+      log_count: missionState.log.length,
+    };
+    saveToHistory(histEntry);
+    saveMissionSnapshot(missionState);
+    sendToWindow('mission:status', { mission_id: missionId, status: 'completed' });
+  }, 90_000);
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -800,6 +930,7 @@ function applyPlanToState(planJson, planNow, logMsg, sendToWindow) {
     const lead = missionState.agents.find(a => a.name === 'Lead');
     if (lead) { lead.status = 'Idle'; lead.current_task = 'Plan ready — waiting for review'; }
     missionState.log.push(makeLogEntry(planNow, 'System', logMsg, 'plan-ready'));
+    saveMissionSnapshot(missionState); // milestone: plan ready
   }
 
   sendToWindow('mission:plan-ready', { agents: newAgents, tasks: newTasks });
@@ -815,6 +946,11 @@ function readProcessStdout_launch(proc, missionId, sendToWindow) {
   let lineCount   = 0;
   let fullTextBuf = '';
   let planEmitted = false;
+  // Question protocol: accumulate text for marker detection
+  let questionTextBuf = '';
+  let questionBatch   = [];
+  // Capture session_id for resume-based question protocol
+  let capturedSessionId = null;
 
   rl.on('line', (line) => {
     const clean = stripAnsi(line).trim();
@@ -837,6 +973,12 @@ function readProcessStdout_launch(proc, missionId, sendToWindow) {
         case 'content_block_start': {
           // Extract text content — handle multiple stream-json structures
           let text = null;
+
+          // Capture session_id from assistant messages as backup
+          if (!capturedSessionId && json.session_id) {
+            capturedSessionId = json.session_id;
+            if (missionState) missionState.session_id = json.session_id;
+          }
 
           // "assistant": { "message": { "content": [{ "text": "..." }] } }
           const msgContent = json.message && json.message.content;
@@ -864,6 +1006,30 @@ function readProcessStdout_launch(proc, missionId, sendToWindow) {
           if (text !== null && text !== '') {
             fullTextBuf += text;
 
+            // ── Question Protocol: detect markers in planning text ──
+            questionTextBuf += text;
+            if (questionTextBuf.includes('<<<QUESTION>>>')) {
+              const qRegex = /<<<QUESTION>>>\s*([\s\S]*?)\s*<<<END_QUESTION>>>/g;
+              let qMatch;
+              while ((qMatch = qRegex.exec(questionTextBuf)) !== null) {
+                try {
+                  const qJson = JSON.parse(qMatch[1].trim());
+                  questionBatch.push(qJson);
+                } catch (_) {
+                  // Malformed JSON — skip
+                }
+              }
+              if (questionTextBuf.includes('<<<QUESTIONS_END>>>')) {
+                if (questionBatch.length > 0) {
+                  handleQuestionBatch(questionBatch, proc, sendToWindow);
+                  questionBatch = [];
+                }
+                questionTextBuf = questionTextBuf.slice(
+                  questionTextBuf.indexOf('<<<QUESTIONS_END>>>') + '<<<QUESTIONS_END>>>'.length
+                );
+              }
+            }
+
             // Check for plan markers / fallback JSON in accumulated text
             if (!planEmitted) {
               const parsed = tryParsePlanFromBuffer(fullTextBuf);
@@ -871,6 +1037,9 @@ function readProcessStdout_launch(proc, missionId, sendToWindow) {
                 planEmitted = true;
                 applyPlanToState(parsed, ts, 'Mission plan ready for review', sendToWindow);
                 fullTextBuf = '';
+                // Kill the planning process immediately — prevents Lead from continuing
+                // to Phase 3 (spawning agents) before the user reviews the plan.
+                try { proc.kill(); } catch (_) {}
               }
             }
 
@@ -928,6 +1097,11 @@ function readProcessStdout_launch(proc, missionId, sendToWindow) {
         case 'error': {
           const subtype = json.subtype || '';
           if (subtype === 'init') {
+            // Capture session_id for question resume protocol
+            if (!capturedSessionId && json.session_id) {
+              capturedSessionId = json.session_id;
+              if (missionState) missionState.session_id = json.session_id;
+            }
             // Skip noisy init — just store raw
             if (missionState) missionState.raw_output.push(clean);
           } else {
@@ -949,6 +1123,13 @@ function readProcessStdout_launch(proc, missionId, sendToWindow) {
             sendToWindow('mission:log', entry);
 
           } else if (currentPhase === 'Planning') {
+            // If Lead paused to ask the user questions, don't treat this result as
+            // "no plan found". The question protocol already set status='WaitingForAnswer'
+            // via handleQuestionBatch (called from streaming events before result fires).
+            if (missionState && missionState.status === 'WaitingForAnswer') {
+              break;
+            }
+
             // Last resort: try to get plan from result text
             const resultText =
               (json.result || '') ||
@@ -964,6 +1145,7 @@ function readProcessStdout_launch(proc, missionId, sendToWindow) {
                 planEmitted = true;
                 applyPlanToState(parsed, ts, 'Mission plan detected from result — ready for review', sendToWindow);
                 fullTextBuf = '';
+                try { proc.kill(); } catch (_) {}
               }
             }
 
@@ -1053,9 +1235,23 @@ function watchProcessExit_launch(proc, missionId, sendToWindow) {
       return;
     }
 
+    // If WaitingForAnswer (interactive mode question protocol), don't mark as Done.
+    // Claude exited because it finished its turn after outputting <<<QUESTIONS_END>>>.
+    // The user will answer and we'll resume via answer_question.
+    if (missionState && missionState.status === 'WaitingForAnswer') {
+      const ts = now();
+      const entry = makeLogEntry(ts, 'System',
+        'Planning paused — Lead is waiting for your answers', 'info');
+      missionState.log.push(entry);
+      sendToWindow('mission:log', entry);
+      // Keep phase='Planning', status='WaitingForAnswer', don't emit completed
+      return;
+    }
+
     const finalStatus = (code === 0 || code === null) ? 'Completed' : 'Failed';
     const ts = now();
 
+    stopAutosave();
     if (missionState) {
       missionState.status = finalStatus;
       for (const a of missionState.agents) {
@@ -1093,6 +1289,42 @@ function watchProcessExit_launch(proc, missionId, sendToWindow) {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// handleQuestionBatch — process question markers from Lead
+// Auto-answers in 'auto' mode, pauses in 'interactive' mode
+// ─────────────────────────────────────────────────────────────────
+function handleQuestionBatch(questions, proc, sendToWindow) {
+  const permMode = missionState ? missionState.permission_mode : 'auto';
+  const ts = now();
+
+  if (permMode === 'auto') {
+    // Auto mode: Claude shouldn't ask questions (prompt says "Do NOT output <<<QUESTION>>> markers").
+    // If it somehow does, log them and ignore — process will continue on its own.
+    const qTexts = questions.map(q => q.question || '').join('"; "');
+    const entry = makeLogEntry(ts, 'System',
+      `Question auto-resolved (auto mode): "${qTexts}"`, 'info');
+    if (missionState) missionState.log.push(entry);
+    sendToWindow('mission:log', entry);
+    return;
+  }
+
+  // Interactive mode: pause mission and emit questions to frontend
+  if (missionState) {
+    missionState._lastQuestions = questions;
+    missionState.pendingQuestions = questions;
+    missionState.status = 'WaitingForAnswer';
+    saveMissionSnapshot(missionState); // milestone: waiting for answer
+  }
+  sendToWindow('mission:question', { questions, timestamp: ts });
+  sendToWindow('mission:status', { status: 'waiting_for_answer' });
+
+  // Log
+  const entry = makeLogEntry(ts, 'Lead',
+    `Asking ${questions.length} question(s) — waiting for user answer`, 'info');
+  if (missionState) missionState.log.push(entry);
+  sendToWindow('mission:log', entry);
+}
+
 // readProcessStdout_deploy — stdout reader for deploy_mission /
 //                            continue_mission (execution phase)
 // ─────────────────────────────────────────────────────────────────
@@ -1104,6 +1336,11 @@ function readProcessStdout_deploy(proc, sendToWindow, isContMode) {
   const toolUseToAgent = new Map();
   // task IDs currently running
   const runningTasks   = new Set();
+  // Question protocol: accumulate text for marker detection
+  let questionTextBuf = '';
+  let questionBatch   = [];
+  // Capture session_id for resume-based question protocol
+  let capturedSessionId = null;
 
   rl.on('line', (line) => {
     const clean = stripAnsi(line).trim();
@@ -1136,6 +1373,11 @@ function readProcessStdout_deploy(proc, sendToWindow, isContMode) {
 
           switch (subtype) {
             case 'init':
+              // Capture session_id for resume-based question protocol
+              if (json.session_id && missionState) {
+                capturedSessionId = json.session_id;
+                missionState.session_id = json.session_id;
+              }
               break; // skip
 
             case 'task_notification': {
@@ -1221,6 +1463,11 @@ function readProcessStdout_deploy(proc, sendToWindow, isContMode) {
         case 'assistant': {
           const content = json.message && Array.isArray(json.message.content)
             ? json.message.content : [];
+          // Capture session_id from assistant messages as backup
+          if (!capturedSessionId && json.session_id) {
+            capturedSessionId = json.session_id;
+            if (missionState) missionState.session_id = json.session_id;
+          }
 
           for (const block of content) {
             const blockType = (block.type || '').toString();
@@ -1228,6 +1475,33 @@ function readProcessStdout_deploy(proc, sendToWindow, isContMode) {
             if (blockType === 'text') {
               const text = (block.text || '').toString();
               if (!text.trim()) continue;
+
+              // ── Question Protocol: detect markers in assistant text ──
+              questionTextBuf += text;
+              if (questionTextBuf.includes('<<<QUESTION>>>')) {
+                // Extract all complete question blocks
+                const qRegex = /<<<QUESTION>>>\s*([\s\S]*?)\s*<<<END_QUESTION>>>/g;
+                let qMatch;
+                while ((qMatch = qRegex.exec(questionTextBuf)) !== null) {
+                  try {
+                    const qJson = JSON.parse(qMatch[1].trim());
+                    questionBatch.push(qJson);
+                  } catch (_) {
+                    // Malformed JSON — skip this question
+                  }
+                }
+                // Check for batch-end terminal marker
+                if (questionTextBuf.includes('<<<QUESTIONS_END>>>')) {
+                  if (questionBatch.length > 0) {
+                    handleQuestionBatch(questionBatch, proc, sendToWindow);
+                    questionBatch = [];
+                  }
+                  // Clear the buffer after processing
+                  questionTextBuf = questionTextBuf.slice(
+                    questionTextBuf.indexOf('<<<QUESTIONS_END>>>') + '<<<QUESTIONS_END>>>'.length
+                  );
+                }
+              }
 
               let [parsedAgent, message] = parseProgressLine(text);
               const finalAgent = parentId ? sourceAgent : parsedAgent;
@@ -1369,13 +1643,13 @@ function readProcessStdout_deploy(proc, sendToWindow, isContMode) {
               if (tool === 'TeamCreate' && missionState) {
                 const teamName = (input && input.team_name) || 'mission';
                 missionState.team_name = teamName;
-                sendToWindow('mission:team-event', { event_type: 'created', data: { team_name: teamName }, timestamp: ts });
+                sendToWindow('mission:team-event', { event: 'created', team_name: teamName, timestamp: ts });
               }
 
               // ── TeamDelete → clear team ──
               if (tool === 'TeamDelete' && missionState) {
                 missionState.team_name = null;
-                sendToWindow('mission:team-event', { event_type: 'deleted', data: {}, timestamp: ts });
+                sendToWindow('mission:team-event', { event: 'deleted', timestamp: ts });
               }
 
               // ── TaskUpdate → detect task reassignment ──
@@ -1447,23 +1721,31 @@ function readProcessStdout_deploy(proc, sendToWindow, isContMode) {
                 );
                 if (agentMatch) { task.status = 'completed'; task.completed_at = ts; }
               }
-            }
-            sendToWindow('mission:log', entry);
-          } else {
-            // Lead result message — log it but do NOT mark mission completed yet.
-            // The mission is only truly done when the CLI process exits (handled by watchProcessExit_deploy).
-            // Marking completed here causes premature "Done" while CLI still runs bash commands.
-            const entry = makeLogEntry(ts, 'Lead', `Result: ${display}`, 'result');
-            if (missionState) {
-              missionState.log.push(entry);
-              // Store the result text for summary, but keep status as Running
-              missionState._lastLeadResult = display;
-              if (missionState.agents.find(a => a.name === 'Lead')) {
-                missionState.agents.find(a => a.name === 'Lead').current_task = 'Finishing up...';
+
+              // Safety timer: if all non-Lead agents are Done and the Lead process
+              // hasn't exited within 90s, force-complete. This handles the case where
+              // the Lead hangs after subagents finish (e.g. SendMessage to exited agent,
+              // stuck build verification, etc.)
+              const hasNonLeadAgents = missionState.agents.some(a => a.name !== 'Lead');
+              const allNonLeadDone = hasNonLeadAgents && missionState.agents.every(
+                a => a.name === 'Lead' || a.status === 'Done' || a.status === 'Error'
+              );
+              if (allNonLeadDone) {
+                scheduleAgentTeamsCompletion(missionState.id, sendToWindow);
               }
             }
             sendToWindow('mission:log', entry);
-            sendToWindow('mission:status', { status: 'completed' });
+          } else {
+            // Lead result message — log it but do NOT mark mission completed.
+            // The mission is only truly done when the CLI process exits (watchProcessExit_deploy).
+            // `result` events fire per-turn in stream-json — Lead may output a result
+            // while subagents are still running. Only process exit = mission done.
+            const entry = makeLogEntry(ts, 'Lead', `Result: ${display}`, 'result');
+            if (missionState) {
+              missionState.log.push(entry);
+              missionState._lastLeadResult = display;
+            }
+            sendToWindow('mission:log', entry);
           }
           break;
         }
@@ -1543,6 +1825,21 @@ function watchProcessExit_deploy(proc, missionId, sendToWindow) {
     const ts = now();
     if (!missionState) return;
 
+    // If WaitingForAnswer (interactive mode question protocol), don't mark as Done.
+    // Process exits because stdin was closed after prompt — user will answer via
+    // session resume (new process with --resume SESSION_ID).
+    if (missionState.status === 'WaitingForAnswer') {
+      const entry = makeLogEntry(ts, 'System',
+        'Process paused — waiting for user answer (will resume session after answer)', 'info');
+      missionState.log.push(entry);
+      sendToWindow('mission:log', entry);
+      // Keep phase='Executing', status='WaitingForAnswer', don't emit completed
+      return;
+    }
+
+    stopWatcher();
+    stopAutosave();
+    clearAgentTeamsTimer();
     if (missionState.status === 'Running') {
       missionState.status = code === 0 || code === null ? 'Completed' : 'Failed';
     }
@@ -1603,7 +1900,7 @@ module.exports = function registerMission(getMainWindow) {
 
   // ── launch_mission ─────────────────────────────────────────────
   ipcMain.handle('launch_mission', async (_event, args) => {
-    const { projectPath, prompt, description, model, executionMode, historyContext } = args || {};
+    const { projectPath, prompt, description, model, executionMode, historyContext, permissionMode } = args || {};
 
     // Prevent double-launch
     if (missionState &&
@@ -1621,6 +1918,7 @@ module.exports = function registerMission(getMainWindow) {
     const missionId = `mission-${ts}`;
     const modelArg  = model || 'sonnet';
     const execMode  = executionMode || 'standard';
+    const permMode  = permissionMode || 'auto';
 
     // Build "previous work" summary if continuing from history
     let previousWorkSection = '';
@@ -1685,6 +1983,8 @@ module.exports = function registerMission(getMainWindow) {
       team_name: null,
       messages: [],
       execution_mode: execMode,
+      permission_mode: permMode,
+      question_history: [],
       forked_from: historyState ? (historyState.id || null) : undefined,
       forked_from_desc: historyState ? (historyState.description || null) : undefined,
     };
@@ -1715,6 +2015,7 @@ module.exports = function registerMission(getMainWindow) {
 
     childProcess = proc;
     missionState.status = 'Running';
+    startAutosave();
     sendToWindow('mission:status', { mission_id: missionId, status: 'running' });
 
     // Wire up readers
@@ -1727,7 +2028,7 @@ module.exports = function registerMission(getMainWindow) {
 
   // ── deploy_mission ─────────────────────────────────────────────
   ipcMain.handle('deploy_mission', async (_event, args) => {
-    const { agents = [], tasks = [] } = args || {};
+    const { agents = [], tasks = [], agentPrompts = {} } = args || {};
 
     if (!missionState) return 'No active mission';
 
@@ -1750,15 +2051,15 @@ module.exports = function registerMission(getMainWindow) {
 
     // Build agent blocks
     const agentBlocks = agents.map(a => {
-      const name      = a.name       || '';
-      const role      = a.role       || '';
-      const agentModel = a.model     || 'sonnet';
-      const custom    = a.customPrompt || '';
-      const skillName = a.skillFile && a.skillFile.name;
+      const name       = a.name        || '';
+      const role       = a.role        || '';
+      const agentModel = a.model       || 'sonnet';
+      const custom     = a.customPrompt || '';
+      const skillName  = a.skillFile && a.skillFile.name;
       const skillFileCount = a.skillFile && a.skillFile.fileCount;
 
+      // Log skill injection (unchanged)
       if (skillName) {
-        // Log skill injection
         const desc = skillFileCount
           ? `Skill folder "${skillName}" loaded for agent "${name}" (${skillFileCount} files, ${custom.length} chars)`
           : `Skill file "${skillName}" loaded for agent "${name}" (${custom.length} chars)`;
@@ -1767,16 +2068,26 @@ module.exports = function registerMission(getMainWindow) {
         sendToWindow('mission:log', skillEntry);
       }
 
+      // ── Verbatim prompt path (PromptPreview was used) ──────────
+      const verbatimPrompt = agentPrompts[name];
+      if (verbatimPrompt) {
+        // Append viRule at end if Vietnamese project (global requirement)
+        const finalPrompt = viRule
+          ? verbatimPrompt + '\n' + viRule
+          : verbatimPrompt;
+        return `### Agent: "${name}"\n- Model: ${agentModel}\n- Prompt:\n\`\`\`prompt\n${finalPrompt}\n\`\`\``;
+      }
+
+      // ── Fallback: task-list path (no PromptPreview used) ───────
       const agentTasks = tasks
         .filter(t => (t.assigned_agent || t.agent || '') === name)
         .map(t => ({ title: t.title || '', detail: t.detail || '' }));
 
-      const tasksStr  = agentTasks.map((t, i) => {
+      const tasksStr = agentTasks.map((t, i) => {
         const line = `   ${i + 1}. ${t.title}`;
         return t.detail ? `${line}\n      Detail: ${t.detail}` : line;
       }).join('\n');
 
-      // Separate skill content from custom instructions for clarity
       let skillSection = '';
       let customSection = '';
       if (skillName && custom) {
@@ -1793,11 +2104,13 @@ module.exports = function registerMission(getMainWindow) {
     const total     = agents.length.toString();
 
     // Build deploy prompt — substitute static vars first, user content last
+    const permModeSection = buildPermissionModeSection(missionState.permission_mode);
     const deployPrompt = (execMode === 'agent_teams' ? PROMPT_DEPLOY_AGENT_TEAMS : PROMPT_DEPLOY_STANDARD)
       .replace('{{PROJECT_PATH}}', proj)
       .replace('{{PROJECT_TYPE}}', projectTypeHint)
       .replace('{{LANG_RULE}}',    viRule)
       .replace('{{TOTAL_AGENTS}}', total)
+      .replace('{{PERMISSION_MODE}}', permModeSection)
       .replace('{{AGENT_BLOCKS}}', agentsStr);  // last — user content may contain {{ }}
 
     // Update state to Deploying
@@ -1831,6 +2144,7 @@ module.exports = function registerMission(getMainWindow) {
 
     try {
       proc.stdin.write(deployPrompt, 'utf8');
+      // Always close stdin — interactive questions use session resume (new process)
       proc.stdin.end();
     } catch (e) {
       return `Failed to write deploy prompt: ${e.message}`;
@@ -1838,13 +2152,15 @@ module.exports = function registerMission(getMainWindow) {
 
     childProcess = proc;
     missionState.phase = 'Executing';
+    startAutosave();
+    saveMissionSnapshot(missionState); // milestone: deploy started
 
     // Agent_teams mode: start file watcher
     if (execMode === 'agent_teams') {
       startFileWatcher(projectPath, sendToWindow);
     }
 
-    // Wire up readers
+    // Wire up readers — pass permission mode for question marker handling
     readProcessStdout_deploy(proc, sendToWindow, false);
     readProcessStderr(proc, sendToWindow);
     watchProcessExit_deploy(proc, missionId, sendToWindow);
@@ -1909,6 +2225,8 @@ module.exports = function registerMission(getMainWindow) {
         status:          'Running',
         phase:           'Deploying',
         execution_mode:  forkedExecMode,
+        permission_mode: historyState.permission_mode || 'auto',
+        question_history: [],
         started_at:      ts,
         ended_at:        null,
         forked_from:     parentId,        // ← parent link
@@ -2006,9 +2324,13 @@ module.exports = function registerMission(getMainWindow) {
 
     // Select the appropriate continue prompt template based on execution mode
     const continueTemplate = useAgentTeams ? PROMPT_CONTINUE_AGENT_TEAMS : PROMPT_CONTINUE_STANDARD;
+    const contPermModeSection = buildPermissionModeSection(
+      missionState ? missionState.permission_mode : 'auto'
+    );
     const continuePrompt = continueTemplate
       .replace('{{PROJECT_PATH}}', projectPath.replace(/\\/g, '/'))
       .replace('{{PROJECT_TYPE}}', projectTypeHint)
+      .replace('{{PERMISSION_MODE}}', contPermModeSection)
       .replace('{{SUMMARY}}', completedSummary || 'No previous work recorded.')
       .replace('{{MESSAGE}}', message);
 
@@ -2025,6 +2347,7 @@ module.exports = function registerMission(getMainWindow) {
 
     try {
       proc.stdin.write(continuePrompt, 'utf8');
+      // Always close stdin — interactive questions use session resume (new process)
       proc.stdin.end();
     } catch (e) {
       return `Failed to write continue prompt: ${e.message}`;
@@ -2032,6 +2355,7 @@ module.exports = function registerMission(getMainWindow) {
 
     childProcess = proc;
     if (missionState) missionState.phase = 'Executing';
+    startAutosave();
 
     // Start file watcher if agent_teams mode (detect file changes from subagents)
     if (useAgentTeams) {
@@ -2046,6 +2370,104 @@ module.exports = function registerMission(getMainWindow) {
     watchProcessExit_deploy(proc, missionId, sendToWindow);
 
     return null; // Ok(())
+  });
+
+  // ── answer_question ─────────────────────────────────────────
+  // User answered Lead's question(s) — resume Claude session with answer
+  // Uses `claude -p --resume SESSION_ID` to continue the conversation
+  ipcMain.handle('answer_question', async (_event, args) => {
+    const { answers = [] } = args || {};
+
+    if (!missionState) {
+      return 'No active mission';
+    }
+    if (!missionState.session_id) {
+      return 'No session ID captured — cannot resume Claude session';
+    }
+    if (missionState.status !== 'WaitingForAnswer') {
+      return 'Mission is not waiting for an answer';
+    }
+
+    const ts = now();
+
+    // Build answer text to send as the new user message in resumed session
+    const answerLines = answers.map(a => {
+      const qObj = missionState._lastQuestions && missionState._lastQuestions[a.question_index];
+      const qText = qObj ? qObj.question : `Question #${a.question_index}`;
+      return `**Q:** ${qText}\n**A:** ${a.answer}${a.note ? ` (Note: ${a.note})` : ''}`;
+    });
+    const answerPrompt = `The user has answered your questions:\n\n${answerLines.join('\n\n')}\n\nPlease continue with the mission based on these answers.`;
+
+    // Log Q&A for history
+    if (!missionState.question_history) missionState.question_history = [];
+    for (const a of answers) {
+      const qObj = missionState._lastQuestions && missionState._lastQuestions[a.question_index];
+      missionState.question_history.push({
+        question: qObj ? qObj.question : `Question #${a.question_index}`,
+        answer: a.answer,
+        note: a.note || '',
+        timestamp: ts,
+      });
+    }
+    missionState._lastQuestions = null;
+    missionState.pendingQuestions = null;
+
+    // Kill old process if still lingering
+    killChild();
+
+    // Spawn new Claude process resuming the session
+    const sessionId = missionState.session_id;
+    const leadModel = missionState.agents.find(a => a.name === 'Lead')?.model || 'sonnet';
+    const projectPath = missionState.project_path;
+    const execMode = missionState.execution_mode || 'standard';
+
+    const proc = spawnClaude(
+      ['-p', '--resume', sessionId, '--dangerously-skip-permissions',
+       '--model', leadModel,
+       '--output-format', 'stream-json', '--verbose', '--max-turns', '200'],
+      projectPath,
+      execMode === 'agent_teams'
+    );
+
+    try {
+      proc.stdin.write(answerPrompt, 'utf8');
+      proc.stdin.end();
+    } catch (e) {
+      return `Failed to write answer prompt: ${e.message}`;
+    }
+
+    childProcess = proc;
+    missionState.status = 'Running';
+    startAutosave();
+
+    // Wire up readers — use launch reader for planning phase, deploy reader for execution
+    const isPlanning = missionState.phase === 'Planning';
+    if (isPlanning) {
+      readProcessStdout_launch(proc, missionState.id, sendToWindow);
+      readProcessStderr(proc, sendToWindow);
+      watchProcessExit_launch(proc, missionState.id, sendToWindow);
+    } else {
+      readProcessStdout_deploy(proc, sendToWindow, false);
+      readProcessStderr(proc, sendToWindow);
+      watchProcessExit_deploy(proc, missionState.id, sendToWindow);
+      // Agent Teams: restart file watcher so inter-agent messages are detected
+      // after resuming from a Q&A pause (previous watcher may have stopped when
+      // the prior process exited after <<<QUESTIONS_END>>>).
+      if (execMode === 'agent_teams' && projectPath) {
+        startFileWatcher(projectPath, sendToWindow);
+      }
+    }
+
+    // Notify frontend
+    sendToWindow('mission:answer-sent', { answers });
+    sendToWindow('mission:status', { status: 'running' });
+
+    const entry = makeLogEntry(ts, 'User',
+      `Answered ${answers.length} question(s) — resuming session`, 'info');
+    missionState.log.push(entry);
+    sendToWindow('mission:log', entry);
+
+    return null;
   });
 
   // ── replan_mission ────────────────────────────────────────────
@@ -2184,6 +2606,8 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
   // ── stop_mission ───────────────────────────────────────────────
   ipcMain.handle('stop_mission', async () => {
     stopWatcher();
+    stopAutosave();
+    clearAgentTeamsTimer();
     killChild();
 
     if (missionState) {
@@ -2194,6 +2618,7 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
           a.current_task = null;
         }
       }
+      saveMissionSnapshot(missionState); // milestone: user stopped
     }
 
     sendToWindow('mission:status', { status: 'stopped' });
@@ -2203,6 +2628,8 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
   // ── reset_mission ──────────────────────────────────────────────
   ipcMain.handle('reset_mission', async () => {
     stopWatcher();
+    stopAutosave();
+    clearAgentTeamsTimer();
     killChild();
     missionState = null;
     sendToWindow('mission:status', { status: 'reset' });
@@ -2216,9 +2643,108 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
     return fs.readFileSync(templatePath, 'utf8');
   });
 
+  // ── read_superpowers_skill ─────────────────────────────────────
+  // Reads a superpowers skill SKILL.md from the user's Claude plugins cache.
+  // Discovers the latest installed version automatically via semver sort.
+  // Returns the file content as a string, or null if not found.
+  ipcMain.handle('read_superpowers_skill', async (_event, args) => {
+    const { skillName } = args || {};
+    if (!skillName) return null;
+
+    const superpowersBase = path.join(
+      os.homedir(),
+      '.claude', 'plugins', 'cache', 'claude-plugins-official', 'superpowers'
+    );
+
+    // Find all semver-formatted subdirectories (e.g. "5.0.7")
+    let versions = [];
+    try {
+      versions = fs.readdirSync(superpowersBase)
+        .filter(d => /^\d+\.\d+\.\d+$/.test(d))
+        .sort((a, b) => {
+          const [aMaj, aMin, aPatch] = a.split('.').map(Number);
+          const [bMaj, bMin, bPatch] = b.split('.').map(Number);
+          return bMaj - aMaj || bMin - aMin || bPatch - aPatch;
+        });
+    } catch (err) {
+      // superpowers not installed — directory doesn't exist
+      console.error('[read_superpowers_skill] Could not read superpowers base dir:', err.message);
+      return null;
+    }
+
+    if (versions.length === 0) return null;
+
+    const skillPath = path.join(superpowersBase, versions[0], 'skills', skillName, 'SKILL.md');
+    try {
+      const content = fs.readFileSync(skillPath, 'utf8');
+      return content || null;
+    } catch (err) {
+      console.error('[read_superpowers_skill] Could not read skill file:', skillPath, err.message);
+      return null;
+    }
+  });
+
   // ── get_mission_state ──────────────────────────────────────────
   ipcMain.handle('get_mission_state', async () => {
     return missionState;
+  });
+
+  // ── get_incomplete_missions ─────────────────────────────────────
+  // Scan snapshots for missions that weren't properly finalized (crash recovery)
+  ipcMain.handle('get_incomplete_missions', async () => {
+    try {
+      const snapshotsDir = path.join(os.homedir(), '.claude', 'agent-teams-snapshots');
+      if (!fs.existsSync(snapshotsDir)) return [];
+
+      const files = fs.readdirSync(snapshotsDir).filter(f => f.endsWith('.json'));
+      const incomplete = [];
+      const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+      for (const file of files) {
+        try {
+          const raw = fs.readFileSync(path.join(snapshotsDir, file), 'utf8');
+          const snap = JSON.parse(raw);
+          const status = (snap.status || '').toString();
+          if (status !== 'Completed' && status !== 'Failed' && status !== 'Stopped') {
+            const age = Date.now() - (snap.started_at || 0);
+            if (age < maxAge) {
+              incomplete.push({
+                id: snap.id,
+                description: snap.description || '',
+                project_path: snap.project_path || '',
+                status,
+                phase: snap.phase || '',
+                started_at: snap.started_at || 0,
+                agent_count: (snap.agents || []).length,
+                task_count: (snap.tasks || []).length,
+                log_count: (snap.log || []).length,
+              });
+            }
+          }
+        } catch (_) {}
+      }
+
+      incomplete.sort((a, b) => (b.started_at || 0) - (a.started_at || 0));
+      return incomplete;
+    } catch (_) {
+      return [];
+    }
+  });
+
+  // ── export_plan_markdown ─────────────────────────────────────────
+  ipcMain.handle('export_plan_markdown', async (_event, args) => {
+    const { markdown, projectPath } = args || {};
+    if (!markdown || !projectPath) return null;
+    try {
+      const dir = path.join(projectPath, '.claude-agent-team');
+      fs.mkdirSync(dir, { recursive: true });
+      const filePath = path.join(dir, 'mission-plan.md');
+      fs.writeFileSync(filePath, markdown, 'utf8');
+      return filePath.replace(/\\/g, '/');
+    } catch (err) {
+      console.error('[export_plan_markdown] Error:', err);
+      return null;
+    }
   });
 
   // ── update_agent_model ─────────────────────────────────────────

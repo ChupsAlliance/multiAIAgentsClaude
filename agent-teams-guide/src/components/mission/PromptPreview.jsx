@@ -1,45 +1,6 @@
 import { useState } from 'react'
 import { Eye, Edit3, ChevronDown, ChevronRight, Play, ArrowLeft, Save, FolderOpen } from 'lucide-react'
-
-function generateAgentPrompt(agent, tasks, projectPath) {
-  const agentTasks = tasks.filter(t =>
-    (t.assigned_agent || t.agent) === agent.name
-  )
-  const taskList = agentTasks.map((t, i) =>
-    `${i + 1}. ${t.title}${t.priority === 'high' ? ' [HIGH PRIORITY]' : ''}`
-  ).join('\n')
-
-  return `You are "${agent.name}" — ${agent.role}.
-
-Working directory: ${projectPath}
-
-## Your Tasks
-${taskList || '(No tasks assigned)'}
-
-${agent.customPrompt ? `## Additional Instructions\n${agent.customPrompt}\n` : ''}
-## Rules
-1. cd into the working directory first
-2. Complete ALL tasks listed above
-3. Write files, install dependencies, run commands, debug any errors
-4. Do NOT stop until all tasks are done AND verified working
-5. Print "[${agent.name}] Starting: <task>" before each task
-6. Print "[${agent.name}] Completed: <task>" after each task
-
-## Quality Requirements (CRITICAL)
-You are shipping PRODUCTION code, not just writing files. For EVERY piece of work:
-1. **Install dependencies** — if you create code that uses packages (express, playwright, etc.), run \`npm install\` to install them
-2. **Run and verify** — if you create a server, start it and verify it responds correctly (e.g., curl/fetch a test request)
-3. **Run tests** — if you write tests, EXECUTE them and ensure they PASS. Do not just create test files
-4. **Debug until green** — if tests fail or code errors, fix and re-run until everything passes
-5. **Never leave broken code** — if something doesn't work, you MUST fix it before marking the task as completed
-6. **Self-verify checklist** before reporting completion:
-   - [ ] All files created and saved
-   - [ ] Dependencies installed (npm install, pip install, etc.)
-   - [ ] Code compiles / lints without errors
-   - [ ] Server starts successfully (if applicable)
-   - [ ] Tests pass (if applicable)
-   - [ ] Manual smoke test performed (curl, open browser, etc.)`
-}
+import { buildAgentPrompt } from '../../utils/planMarkdown'
 
 function PromptCard({ agent, prompt, onEdit, onSave }) {
   const [expanded, setExpanded] = useState(false)
@@ -127,7 +88,14 @@ function PromptCard({ agent, prompt, onEdit, onSave }) {
 export function PromptPreview({ agents, tasks, projectPath, onConfirm, onBack }) {
   const [prompts, setPrompts] = useState(() =>
     Object.fromEntries(
-      agents.map(a => [a.name, generateAgentPrompt(a, tasks, projectPath)])
+      agents.map(a => [
+        a.name,
+        buildAgentPrompt(
+          a,
+          tasks.filter(t => (t.assigned_agent || t.agent) === a.name),
+          { projectPath }
+        )
+      ])
     )
   )
 
@@ -136,12 +104,8 @@ export function PromptPreview({ agents, tasks, projectPath, onConfirm, onBack })
   }
 
   const handleConfirm = () => {
-    // Pass the (possibly edited) prompts along with agents/tasks
-    const agentsWithPrompts = agents.map(a => ({
-      ...a,
-      customPrompt: prompts[a.name] || '',
-    }))
-    onConfirm(agentsWithPrompts, tasks)
+    // Pass agentPrompts as a separate dict — agents are passed unchanged
+    onConfirm(agents, tasks, prompts)
   }
 
   return (
