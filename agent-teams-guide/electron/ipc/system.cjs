@@ -117,15 +117,18 @@ module.exports = function registerSystem(getMainWindow) {
   const LAYOUT_FILE = path.join(app.getPath('userData'), 'office-layout.json');
 
   const DEFAULT_LAYOUT = (() => {
-    const t = []
-    for (let x = 0; x < 32; x++) { t.push({x, y: 0, type:'wall'}); t.push({x, y: 23, type:'wall'}) }
-    for (let y = 1; y < 23; y++) { t.push({x: 0, y, type:'wall'}); t.push({x: 31, y, type:'wall'}) }
-    for (let y = 1; y < 23; y++) for (let x = 1; x < 31; x++) t.push({x, y, type:'floor'})
-    for (let i = 0; i < 6; i++) t.push({x: 4 + i*4, y: 5, type:'desk'})
-    for (let i = 0; i < 6; i++) t.push({x: 4 + i*4, y: 10, type:'desk'})
-    t.push({x:2,y:2,type:'plant'},{x:29,y:2,type:'plant'},{x:2,y:21,type:'plant'},{x:29,y:21,type:'plant'})
-    t.push({x:16,y:23,type:'door'})
-    return JSON.stringify({version:1,width:32,height:24,tiles:t})
+    const map = new Map()
+    const put = (x, y, type) => map.set(`${x},${y}`, { x, y, type })
+
+    for (let x = 0; x < 32; x++) { put(x, 0, 'wall'); put(x, 23, 'wall') }
+    for (let y = 1; y < 23; y++) { put(0, y, 'wall'); put(31, y, 'wall') }
+    for (let y = 1; y < 23; y++) for (let x = 1; x < 31; x++) put(x, y, 'floor')
+    for (let i = 0; i < 6; i++) put(4 + i*4, 5, 'desk')
+    for (let i = 0; i < 6; i++) put(4 + i*4, 10, 'desk')
+    put(2, 2, 'plant'); put(29, 2, 'plant'); put(2, 21, 'plant'); put(29, 21, 'plant')
+    put(16, 23, 'door')
+
+    return JSON.stringify({version:1,width:32,height:24,tiles:Array.from(map.values())})
   })();
 
   ipcMain.handle('load_office_layout', async () => {

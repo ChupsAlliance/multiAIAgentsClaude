@@ -59,4 +59,10 @@ describe('DEFAULT_LAYOUT', () => {
     expect(Array.isArray(DEFAULT_LAYOUT.tiles)).toBe(true)
     expect(DEFAULT_LAYOUT.tiles.length).toBeGreaterThan(0)
   })
+
+  it('has no duplicate tile coordinates', () => {
+    const coords = DEFAULT_LAYOUT.tiles.map(t => `${t.x},${t.y}`)
+    const unique = new Set(coords)
+    expect(unique.size).toBe(coords.length)
+  })
 })
