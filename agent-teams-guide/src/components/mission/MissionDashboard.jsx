@@ -10,7 +10,7 @@ import { ThinkingIndicator } from './ThinkingIndicator'
 import { InterventionPanel } from './InterventionPanel'
 import { QuestionCard } from './QuestionCard'
 import { ListTodo, Activity, FolderOpen, User, MessageSquare } from 'lucide-react'
-import { VirtualOfficeCanvas } from '../office/VirtualOfficeCanvas'
+import { VirtualOffice } from '../office/VirtualOffice'
 
 const baseTabs = [
   { id: 'tasks',    label: 'Tasks',    icon: ListTodo },
@@ -260,7 +260,7 @@ export const MissionDashboard = memo(function MissionDashboard({ state, isRunnin
           className="shrink-0 overflow-hidden"
           style={{ width: officePanelWidth }}
         >
-          <VirtualOfficeCanvas
+          <VirtualOffice
             missionState={state}
             isRunning={isRunning}
             logs={logs}
