@@ -1,103 +1,99 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
-import { DeskAssigner } from '../agent-bridge/DeskAssigner'
-import { mapLogEntryToState, formatSpeechBubble } from '../agent-bridge/AgentStateMapper'
+import { useRef, useEffect } from 'react'
+import { mapLogEntryToState } from '../agent-bridge/AgentStateMapper'
+import {
+  AgentIdMap,
+  ToolIdCounter,
+  makeLayoutLoaded,
+  makeAgentCreated,
+  makeAgentClosed,
+  makeAgentToolStart,
+  makeAgentToolDone,
+  makeAgentStatus,
+} from '../bridge/pixelAgentsProtocol.js'
 
-/**
- * useAgentSync — syncs mission agents to office render state.
- *
- * Reads missionState.agents and logs to produce an array of
- * office agent objects ready for rendering.
- *
- * Returns { agents } where each agent has:
- *   name, characterIndex, state, deskSlot,
- *   speechBubble, speechBubbleExpiry,
- *   animFrame (set by animation tick), animDir
- */
-export function useAgentSync(missionState, isRunning, logs, layout) {
-  const [agents, setAgents] = useState([])
-  const agentsRef = useRef({})
-  const assignerRef = useRef(new DeskAssigner([]))
+function sendToWebview(webviewRef, message) {
+  webviewRef.current?.send('pa:in', message)
+}
 
-  // Update desk layout when layout changes
+export function useAgentSync(missionState, isRunning, logs, webviewRef, webviewReady) {
+  const agentsRef      = useRef({})                  // name → { state }
+  const idMapRef       = useRef(new AgentIdMap())
+  const toolCounterRef = useRef(new ToolIdCounter())
+  const activeToolsRef = useRef({})                  // agentName → toolId | null
+
+  // On first webviewReady: flush layoutLoaded + all existing agents
   useEffect(() => {
-    if (!layout) return
-    const deskTiles = layout.tiles.filter(t => t.type === 'desk')
-    assignerRef.current.updateLayout(deskTiles)
-    // Re-assign any existing agents after the layout was replaced
-    const existing = Object.values(agentsRef.current)
-    for (const agent of existing) {
-      agent.deskSlot = assignerRef.current.assign(agent.name)
+    if (!webviewReady) return
+    sendToWebview(webviewRef, makeLayoutLoaded())
+    for (const name of Object.keys(agentsRef.current)) {
+      sendToWebview(webviewRef, makeAgentCreated(idMapRef.current.getId(name)))
     }
-    if (existing.length > 0) {
-      setAgents(Object.values(agentsRef.current))
-    }
-  }, [layout])
+  }, [webviewReady, webviewRef])
 
-  // Sync agents from missionState
+  // Sync agent roster from missionState
   useEffect(() => {
     if (!missionState?.agents) return
     const currentNames = new Set(missionState.agents.map(a => a.name))
 
     for (const agent of missionState.agents) {
       if (!agentsRef.current[agent.name]) {
-        const slot = assignerRef.current.assign(agent.name)
-        agentsRef.current[agent.name] = {
-          name: agent.name,
-          characterIndex: Math.floor(Math.random() * 6),
-          state: 'spawning',
-          deskSlot: slot,
-          speechBubble: null,
-          speechBubbleExpiry: null,
-          // animFrame and animDir are managed by VirtualOffice, not here
+        agentsRef.current[agent.name] = { state: 'spawning' }
+        if (webviewReady) {
+          sendToWebview(webviewRef, makeAgentCreated(idMapRef.current.getId(agent.name)))
         }
       }
     }
+
     for (const name of Object.keys(agentsRef.current)) {
       if (!currentNames.has(name)) {
-        assignerRef.current.release(name)
+        if (webviewReady) {
+          sendToWebview(webviewRef, makeAgentClosed(idMapRef.current.getId(name)))
+        }
+        idMapRef.current.remove(name)
         delete agentsRef.current[name]
+        delete activeToolsRef.current[name]
       }
     }
-    setAgents(Object.values(agentsRef.current))
-  }, [missionState?.agents])
+  }, [missionState?.agents, webviewReady, webviewRef])
 
-  // Process logs → update agent state + speech bubble
+  // Process latest log entry → send tool start/done + status
   useEffect(() => {
-    if (!logs?.length) return
+    if (!logs?.length || !webviewReady) return
     const latest = logs[logs.length - 1]
     if (!latest?.agent || !agentsRef.current[latest.agent]) return
 
-    const existing = agentsRef.current[latest.agent]
-    const bubble = formatSpeechBubble(latest)
-    agentsRef.current[latest.agent] = {
-      ...existing,
-      state: mapLogEntryToState(latest),
-      speechBubble: bubble ?? null,
-      speechBubbleExpiry: bubble ? Date.now() + 3000 : null,
-    }
-    setAgents(Object.values(agentsRef.current))
-  }, [logs])
+    const agentName = latest.agent
+    const id = idMapRef.current.getId(agentName)
+    const newState = mapLogEntryToState(latest)
 
-  // Reset when mission stops
+    agentsRef.current[agentName] = { ...agentsRef.current[agentName], state: newState }
+
+    if (latest.log_type === 'tool' && latest.tool_name) {
+      // Close previous tool if still open
+      const prevToolId = activeToolsRef.current[agentName]
+      if (prevToolId != null) {
+        sendToWebview(webviewRef, makeAgentToolDone(id, prevToolId))
+      }
+      const toolId = toolCounterRef.current.next()
+      activeToolsRef.current[agentName] = toolId
+      sendToWebview(webviewRef, makeAgentToolStart(id, toolId, latest.tool_name))
+    } else if (latest.log_type === 'result') {
+      const toolId = activeToolsRef.current[agentName]
+      if (toolId != null) {
+        sendToWebview(webviewRef, makeAgentToolDone(id, toolId))
+        activeToolsRef.current[agentName] = null
+      }
+      sendToWebview(webviewRef, makeAgentStatus(id, newState))
+    }
+  }, [logs, webviewReady, webviewRef])
+
+  // Reset on mission stop
   useEffect(() => {
     if (!isRunning) {
-      assignerRef.current.reset()
       agentsRef.current = {}
-      setAgents([])
+      idMapRef.current.clear()
+      toolCounterRef.current = new ToolIdCounter()
+      activeToolsRef.current = {}
     }
   }, [isRunning])
-
-  const clearExpiredBubbles = useCallback(() => {
-    let cleared = false
-    const now = Date.now()
-    for (const [name, agent] of Object.entries(agentsRef.current)) {
-      if (agent.speechBubble && agent.speechBubbleExpiry && now > agent.speechBubbleExpiry) {
-        agentsRef.current[name] = { ...agent, speechBubble: null, speechBubbleExpiry: null }
-        cleared = true
-      }
-    }
-    if (cleared) setAgents(Object.values(agentsRef.current))
-  }, [])
-
-  return { agents, clearExpiredBubbles }
 }
