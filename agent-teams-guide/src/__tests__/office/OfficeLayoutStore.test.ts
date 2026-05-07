@@ -14,7 +14,7 @@ describe('loadLayout', () => {
     mockInvoke.mockResolvedValue(JSON.stringify(layout))
     const result = await loadLayout()
     expect(result).toEqual(layout)
-    expect(mockInvoke).toHaveBeenCalledWith('load_office_layout', {})
+    expect(mockInvoke).toHaveBeenCalledWith('load_office_layout')
   })
 
   it('returns DEFAULT_LAYOUT when IPC returns invalid JSON', async () => {
@@ -25,6 +25,13 @@ describe('loadLayout', () => {
 
   it('returns DEFAULT_LAYOUT when IPC throws', async () => {
     mockInvoke.mockRejectedValue(new Error('IPC error'))
+    const result = await loadLayout()
+    expect(result).toEqual(DEFAULT_LAYOUT)
+  })
+
+  it('returns DEFAULT_LAYOUT when layout has empty tiles array', async () => {
+    const layout: OfficeLayout = { version: 1, width: 32, height: 24, tiles: [] }
+    mockInvoke.mockResolvedValue(JSON.stringify(layout))
     const result = await loadLayout()
     expect(result).toEqual(DEFAULT_LAYOUT)
   })
@@ -45,10 +52,11 @@ describe('saveLayout', () => {
 })
 
 describe('DEFAULT_LAYOUT', () => {
-  it('has correct structure', () => {
+  it('has correct structure and non-empty tiles', () => {
     expect(DEFAULT_LAYOUT.version).toBe(1)
     expect(DEFAULT_LAYOUT.width).toBe(32)
     expect(DEFAULT_LAYOUT.height).toBe(24)
-    expect(DEFAULT_LAYOUT.tiles).toEqual([])
+    expect(Array.isArray(DEFAULT_LAYOUT.tiles)).toBe(true)
+    expect(DEFAULT_LAYOUT.tiles.length).toBeGreaterThan(0)
   })
 })

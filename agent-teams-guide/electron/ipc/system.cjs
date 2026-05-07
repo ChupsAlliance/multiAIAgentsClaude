@@ -116,16 +116,27 @@ module.exports = function registerSystem(getMainWindow) {
   // ─── load_office_layout ─────────────────────────────────────────
   const LAYOUT_FILE = path.join(app.getPath('userData'), 'office-layout.json');
 
-  const DEFAULT_LAYOUT = JSON.stringify({
-    version: 1,
-    width: 32,
-    height: 24,
-    tiles: []
-  });
+  const DEFAULT_LAYOUT = (() => {
+    const t = []
+    for (let x = 0; x < 32; x++) { t.push({x, y: 0, type:'wall'}); t.push({x, y: 23, type:'wall'}) }
+    for (let y = 1; y < 23; y++) { t.push({x: 0, y, type:'wall'}); t.push({x: 31, y, type:'wall'}) }
+    for (let y = 1; y < 23; y++) for (let x = 1; x < 31; x++) t.push({x, y, type:'floor'})
+    for (let i = 0; i < 6; i++) t.push({x: 4 + i*4, y: 5, type:'desk'})
+    for (let i = 0; i < 6; i++) t.push({x: 4 + i*4, y: 10, type:'desk'})
+    t.push({x:2,y:2,type:'plant'},{x:29,y:2,type:'plant'},{x:2,y:21,type:'plant'},{x:29,y:21,type:'plant'})
+    t.push({x:16,y:23,type:'door'})
+    return JSON.stringify({version:1,width:32,height:24,tiles:t})
+  })();
 
   ipcMain.handle('load_office_layout', async () => {
     try {
-      return fs.readFileSync(LAYOUT_FILE, 'utf-8');
+      const raw = fs.readFileSync(LAYOUT_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      // Guard: reject saved layouts with no tiles (from old buggy default)
+      if (!Array.isArray(parsed.tiles) || parsed.tiles.length === 0) {
+        return DEFAULT_LAYOUT;
+      }
+      return raw;
     } catch {
       return DEFAULT_LAYOUT;
     }
