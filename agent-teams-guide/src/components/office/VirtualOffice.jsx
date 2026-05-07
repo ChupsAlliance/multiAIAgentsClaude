@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState } from 'react'
+import { useRef, useCallback, useState, useEffect } from 'react'
 import { TileEditor } from './editor/TileEditor'
 import { useOfficeLayout } from './hooks/useOfficeLayout'
 import { useAgentSync } from './hooks/useAgentSync'
@@ -13,9 +13,14 @@ export function VirtualOffice({ missionState, isRunning, logs }) {
   // Absolute paths resolved by the Electron preload
   const { webviewPreload, pixelAgentsDist } = window.electronAPI.getPaths()
 
-  // Normalize Windows backslashes so file:// URLs work cross-platform
-  const distSrc    = `file:///${pixelAgentsDist.replace(/\\/g, '/')}/index.html`
-  const preloadSrc = `file:///${webviewPreload.replace(/\\/g, '/')}`
+  // Normalize paths to file:// URLs. Unix paths start with '/' (2 slashes after scheme);
+  // Windows paths start with a drive letter (3 slashes needed before the letter).
+  const distSrc = pixelAgentsDist.startsWith('/')
+    ? `file://${pixelAgentsDist}/index.html`
+    : `file:///${pixelAgentsDist.replace(/\\/g, '/')}/index.html`
+  const preloadSrc = webviewPreload.startsWith('/')
+    ? `file://${webviewPreload}`
+    : `file:///${webviewPreload.replace(/\\/g, '/')}`
 
   // Handle messages FROM pixel-agents webview
   const handleInbound = useCallback((e) => {
@@ -31,6 +36,11 @@ export function VirtualOffice({ missionState, isRunning, logs }) {
     }
   }, [])
 
+  // Reset webviewReady when mission stops so the layoutLoaded flush re-fires on next run
+  useEffect(() => {
+    if (!isRunning) setWebviewReady(false)
+  }, [isRunning])
+
   // Attach/detach ipc-message listener via ref callback
   const webviewCallback = useCallback((node) => {
     if (node) {
@@ -39,6 +49,7 @@ export function VirtualOffice({ missionState, isRunning, logs }) {
     } else {
       webviewRef.current?.removeEventListener('ipc-message', handleInbound)
       webviewRef.current = null
+      setWebviewReady(false)
     }
   }, [handleInbound])
 
