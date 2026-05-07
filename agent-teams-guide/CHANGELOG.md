@@ -8,10 +8,37 @@ Format dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+---
+
+## [0.2.0] — 2026-03-20
+
+### Added — Agent Question Protocol
+- **Permission Mode selector**: 3 modes — Auto-pilot (default), Interactive, Plan Only
+- **Interactive mode**: Lead agent can pause and ask questions when lacking critical info
+  - Marker-based protocol: `<<<QUESTION>>>...<<<END_QUESTION>>>...<<<QUESTIONS_END>>>`
+  - Backend parses markers from assistant text blocks in stream-json output
+  - Stdin kept open for interactive mode (closed for auto mode)
+- **QuestionCard UI**: Multi-question support with tabs, option buttons, free text, skip, submit
+  - Browser notification when questions arrive while tab is unfocused
+  - Amber-themed card matches VS Code dark theme
+  - Shows answered count badge on question tabs
+- **Auto mode**: Questions auto-resolved with `__AUTO__` answer, Lead continues autonomously
+- **answer_question IPC handler**: Writes user answers back to Claude stdin via `<<<ANSWER>>>` markers
+- **Question history**: All Q&A pairs stored in `missionState.question_history` for history replay
+- **Prompt injection**: `{{PERMISSION_MODE}}` placeholder in all 4 deploy/continue prompt templates
+  - Auto mode: "AUTONOMOUS MODE" — make all decisions independently
+  - Interactive mode: Full question protocol instructions with JSON format spec
+- **Permission mode persistence**: localStorage saves last-used permission mode
+
 ### Changed
 - Continue from History giờ đi qua full lifecycle (Planning → ReviewPlan → Deploy) thay vì skip thẳng vào execution
 - `continue_mission` chỉ còn dùng cho intervention trên mission đang chạy (không còn xử lý fork)
 - Prompt continue chia thành 2 template riêng: `continue_agent_teams.md` và `continue_standard.md`
+- InterventionPanel disabled khi có pending questions (tránh conflict)
+- `deploy_mission` và `continue_mission` giữ stdin open khi interactive mode
+- `launch_mission` nhận thêm `permissionMode` argument
+- `missionState` thêm `permission_mode`, `question_history`, `pendingQuestions`
+- Preload whitelist thêm `answer_question` command và `mission:question`, `mission:answer-sent` events
 
 ---
 

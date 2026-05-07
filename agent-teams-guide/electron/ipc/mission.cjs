@@ -33,6 +33,7 @@ let missionState  = null;   // Option<MissionState>
 let childProcess  = null;   // Running claude subprocess
 let watcherInterval = null; // setInterval for file watcher
 let autosaveInterval = null; // setInterval for periodic snapshot saves
+let agentTeamsCompletionTimer = null; // safety auto-complete timer for agent_teams mode
 
 // ─────────────────────────────────────────────────────────────────
 // Helper: current timestamp in milliseconds
@@ -463,6 +464,69 @@ function stopAutosave() {
     clearInterval(autosaveInterval);
     autosaveInterval = null;
   }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Agent Teams completion safety timer
+// When all non-Lead subagents finish but the Lead process hangs
+// (e.g. stuck waiting on SendMessage acknowledgement or final build),
+// this timer force-completes the mission after 90 seconds of inactivity.
+// ─────────────────────────────────────────────────────────────────
+function clearAgentTeamsTimer() {
+  if (agentTeamsCompletionTimer !== null) {
+    clearTimeout(agentTeamsCompletionTimer);
+    agentTeamsCompletionTimer = null;
+  }
+}
+
+function scheduleAgentTeamsCompletion(missionId, sendToWindow) {
+  clearAgentTeamsTimer();
+  agentTeamsCompletionTimer = setTimeout(() => {
+    agentTeamsCompletionTimer = null;
+    if (!missionState || missionState.status !== 'Running') return;
+    if (missionState.phase !== 'Executing') return;
+
+    const ts = now();
+    const logEntry = makeLogEntry(ts, 'System',
+      'All agents done — auto-completing (Lead process timed out after 90s)', 'info');
+    missionState.log.push(logEntry);
+    sendToWindow('mission:log', logEntry);
+
+    killChild();
+    stopWatcher();
+    stopAutosave();
+
+    missionState.status = 'Completed';
+    missionState.phase  = 'Done';
+    missionState.ended_at = ts;
+    for (const a of missionState.agents) {
+      if (a.status !== 'Error') a.status = 'Done';
+      if (a.name === 'Lead') a.current_task = 'Mission completed';
+    }
+    for (const task of missionState.tasks) {
+      if (task.status !== 'completed') { task.status = 'completed'; task.completed_at = ts; }
+    }
+
+    // Persist to history like a normal completion
+    const histEntry = {
+      id: missionState.id,
+      description: missionState.description,
+      project_path: missionState.project_path,
+      execution_mode: missionState.execution_mode || 'agent_teams',
+      forked_from: missionState.forked_from || null,
+      forked_from_desc: missionState.forked_from_desc || null,
+      status: 'completed',
+      started_at: missionState.started_at,
+      ended_at: ts,
+      agent_count: missionState.agents.length,
+      task_summary: missionState.tasks.map(t => `[${t.status}] ${t.title}`),
+      file_changes: missionState.file_changes,
+      log_count: missionState.log.length,
+    };
+    saveToHistory(histEntry);
+    saveMissionSnapshot(missionState);
+    sendToWindow('mission:status', { mission_id: missionId, status: 'completed' });
+  }, 90_000);
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -1657,6 +1721,18 @@ function readProcessStdout_deploy(proc, sendToWindow, isContMode) {
                 );
                 if (agentMatch) { task.status = 'completed'; task.completed_at = ts; }
               }
+
+              // Safety timer: if all non-Lead agents are Done and the Lead process
+              // hasn't exited within 90s, force-complete. This handles the case where
+              // the Lead hangs after subagents finish (e.g. SendMessage to exited agent,
+              // stuck build verification, etc.)
+              const hasNonLeadAgents = missionState.agents.some(a => a.name !== 'Lead');
+              const allNonLeadDone = hasNonLeadAgents && missionState.agents.every(
+                a => a.name === 'Lead' || a.status === 'Done' || a.status === 'Error'
+              );
+              if (allNonLeadDone) {
+                scheduleAgentTeamsCompletion(missionState.id, sendToWindow);
+              }
             }
             sendToWindow('mission:log', entry);
           } else {
@@ -1761,7 +1837,9 @@ function watchProcessExit_deploy(proc, missionId, sendToWindow) {
       return;
     }
 
+    stopWatcher();
     stopAutosave();
+    clearAgentTeamsTimer();
     if (missionState.status === 'Running') {
       missionState.status = code === 0 || code === null ? 'Completed' : 'Failed';
     }
@@ -2529,6 +2607,7 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
   ipcMain.handle('stop_mission', async () => {
     stopWatcher();
     stopAutosave();
+    clearAgentTeamsTimer();
     killChild();
 
     if (missionState) {
@@ -2550,6 +2629,7 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
   ipcMain.handle('reset_mission', async () => {
     stopWatcher();
     stopAutosave();
+    clearAgentTeamsTimer();
     killChild();
     missionState = null;
     sendToWindow('mission:status', { status: 'reset' });

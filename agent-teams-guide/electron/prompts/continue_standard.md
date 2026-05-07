@@ -41,4 +41,6 @@ Print a summary of what was done with evidence of verification.
 - Build/compile passes with 0 errors
 - App is runnable
 
+{{PERMISSION_MODE}}
+
 Begin now.

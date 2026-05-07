@@ -78,3 +78,11 @@ DO NOT start Phase 3 until explicitly told.
 Use .claude-agent-team/ directory for coordination:
 - mission-progress.md -- Task list and status
 - Any shared interfaces or contracts between teammates
+
+## ⚠ TOOL RESTRICTIONS (CRITICAL — read carefully)
+You are running in NON-INTERACTIVE mode (`-p` flag). The following tools DO NOT WORK:
+- **AskUserQuestion** — WILL BE DENIED. Do NOT use it. It requires interactive stdin.
+- **EnterPlanMode** — Not applicable, you ARE the planner.
+
+If you need to ask the user a question (e.g., clarify requirements, choose between approaches):
+{{PERMISSION_MODE}}
