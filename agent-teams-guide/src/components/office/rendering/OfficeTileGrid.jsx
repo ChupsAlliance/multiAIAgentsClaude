@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { AgentSprite } from './AgentSprite'
 
 // Tile fill colors — matches existing TileMap.ts palette
@@ -80,8 +81,10 @@ function TileAccent({ tile, ts }) {
  *   agents     — OfficeAgent[] with animFrame + animDir added
  */
 export function OfficeTileGrid({ tiles, tileSize, cols = 32, rows = 24, agents = [] }) {
+  if (!tileSize) return null
+
   const ts = tileSize
-  const nonFloorTiles = tiles.filter(t => t.type !== 'floor')
+  const nonFloorTiles = useMemo(() => tiles.filter(t => t.type !== 'floor'), [tiles])
 
   return (
     <div style={{

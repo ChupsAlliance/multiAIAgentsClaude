@@ -21,6 +21,9 @@ const ROW = {
 // Direction constants matching AgentStateMapper
 const DIR = { DOWN: 0, LEFT: 1, RIGHT: 2, UP: 3 }
 
+// Animation constants
+const SHORT_NAME_MAX = 10
+
 /**
  * Returns { row, col, flip } for the current agent state + animation frame.
  * flip=true means apply scaleX(-1) (LEFT direction reuses RIGHT frames).
@@ -29,7 +32,7 @@ function getFrameCoords(agentState, animFrame, dir) {
   const frame = animFrame ?? 0
 
   if (agentState === 'spawning') {
-    const col = frame % 3
+    const col = [0, 1, 2, 1][frame % 4]
     if (dir === DIR.UP) return { row: ROW.walkUp, col, flip: false }
     if (dir === DIR.RIGHT) return { row: ROW.walkRight, col, flip: false }
     if (dir === DIR.LEFT) return { row: ROW.walkRight, col, flip: true }
@@ -60,6 +63,8 @@ function getFrameCoords(agentState, animFrame, dir) {
  *   animDir   — Direction constant (0=DOWN,1=LEFT,2=RIGHT,3=UP)
  */
 export function AgentSprite({ agent, tileSize, animFrame, animDir }) {
+  if (!tileSize) return null
+
   const ts = tileSize
 
   // Position — use desk tile or fallback to top-left area
@@ -78,12 +83,15 @@ export function AgentSprite({ agent, tileSize, animFrame, animDir }) {
   const top = tileY * ts - spriteH + ts
 
   // speech bubble visible?
+  // Expiry evaluated at render time — the animation tick in VirtualOffice ensures
+  // continuous re-renders while agents are active, so expired bubbles will be
+  // cleared on the next tick. The parent must also clear speechBubble/speechBubbleExpiry
+  // on the agent object after expiry.
   const now = Date.now()
   const bubbleText = agent.speechBubble &&
     (!agent.speechBubbleExpiry || now < agent.speechBubbleExpiry)
     ? agent.speechBubble : null
 
-  const SHORT_NAME_MAX = 10
   const shortName = agent.name.length > SHORT_NAME_MAX
     ? agent.name.slice(0, SHORT_NAME_MAX - 1) + '…'
     : agent.name

@@ -1,7 +1,8 @@
 // SpeechBubble.jsx — CSS speech bubble shown above an agent tile
+const MAX_CHARS = 24
+
 export function SpeechBubble({ text }) {
   if (!text) return null
-  const MAX_CHARS = 24
   const label = text.length > MAX_CHARS ? text.slice(0, MAX_CHARS - 1) + '…' : text
 
   return (
