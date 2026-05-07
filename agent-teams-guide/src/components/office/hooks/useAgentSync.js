@@ -67,15 +67,13 @@ export function useAgentSync(missionState, isRunning, logs, layout) {
     const latest = logs[logs.length - 1]
     if (!latest?.agent || !agentsRef.current[latest.agent]) return
 
-    const agent = agentsRef.current[latest.agent]
-    agent.state = mapLogEntryToState(latest)
+    const existing = agentsRef.current[latest.agent]
     const bubble = formatSpeechBubble(latest)
-    if (bubble) {
-      agent.speechBubble = bubble
-      agent.speechBubbleExpiry = Date.now() + 3000
-    } else {
-      agent.speechBubble = null
-      agent.speechBubbleExpiry = null
+    agentsRef.current[latest.agent] = {
+      ...existing,
+      state: mapLogEntryToState(latest),
+      speechBubble: bubble ?? null,
+      speechBubbleExpiry: bubble ? Date.now() + 3000 : null,
     }
     setAgents(Object.values(agentsRef.current))
   }, [logs])
@@ -92,10 +90,9 @@ export function useAgentSync(missionState, isRunning, logs, layout) {
   const clearExpiredBubbles = useCallback(() => {
     let cleared = false
     const now = Date.now()
-    for (const agent of Object.values(agentsRef.current)) {
+    for (const [name, agent] of Object.entries(agentsRef.current)) {
       if (agent.speechBubble && agent.speechBubbleExpiry && now > agent.speechBubbleExpiry) {
-        agent.speechBubble = null
-        agent.speechBubbleExpiry = null
+        agentsRef.current[name] = { ...agent, speechBubble: null, speechBubbleExpiry: null }
         cleared = true
       }
     }

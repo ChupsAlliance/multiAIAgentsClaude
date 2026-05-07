@@ -45,6 +45,12 @@ export function VirtualOffice({ missionState, isRunning, logs }) {
   // Animation tick — advances frame counters, triggers re-render only on frame change
   useAnimationTick((dt) => {
     clearExpiredBubbles() // active cleanup each frame
+
+    // Clean up timers for removed agents (must run before early return so mission stop clears all)
+    for (const name of Object.keys(animRef.current)) {
+      if (!agents.find(a => a.name === name)) delete animRef.current[name]
+    }
+
     if (!agents.length) return
     let changed = false
 
@@ -65,11 +71,6 @@ export function VirtualOffice({ missionState, isRunning, logs }) {
         s.frame = (s.frame + 1) % maxFrame
         changed = true
       }
-    }
-
-    // Clean up timers for removed agents
-    for (const name of Object.keys(animRef.current)) {
-      if (!agents.find(a => a.name === name)) delete animRef.current[name]
     }
 
     if (changed) {
