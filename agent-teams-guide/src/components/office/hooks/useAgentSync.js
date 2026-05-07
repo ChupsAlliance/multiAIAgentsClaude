@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { DeskAssigner } from '../agent-bridge/DeskAssigner'
 import { mapLogEntryToState, formatSpeechBubble } from '../agent-bridge/AgentStateMapper'
 
@@ -23,6 +23,14 @@ export function useAgentSync(missionState, isRunning, logs, layout) {
     if (!layout) return
     const deskTiles = layout.tiles.filter(t => t.type === 'desk')
     assignerRef.current.updateLayout(deskTiles)
+    // Re-assign any existing agents after the layout was replaced
+    const existing = Object.values(agentsRef.current)
+    for (const agent of existing) {
+      agent.deskSlot = assignerRef.current.assign(agent.name)
+    }
+    if (existing.length > 0) {
+      setAgents(Object.values(agentsRef.current))
+    }
   }, [layout])
 
   // Sync agents from missionState
@@ -40,8 +48,7 @@ export function useAgentSync(missionState, isRunning, logs, layout) {
           deskSlot: slot,
           speechBubble: null,
           speechBubbleExpiry: null,
-          animFrame: 0,
-          animDir: 0,
+          // animFrame and animDir are managed by VirtualOffice, not here
         }
       }
     }
@@ -82,5 +89,18 @@ export function useAgentSync(missionState, isRunning, logs, layout) {
     }
   }, [isRunning])
 
-  return { agents, agentsRef }
+  const clearExpiredBubbles = useCallback(() => {
+    let cleared = false
+    const now = Date.now()
+    for (const agent of Object.values(agentsRef.current)) {
+      if (agent.speechBubble && agent.speechBubbleExpiry && now > agent.speechBubbleExpiry) {
+        agent.speechBubble = null
+        agent.speechBubbleExpiry = null
+        cleared = true
+      }
+    }
+    if (cleared) setAgents(Object.values(agentsRef.current))
+  }, [])
+
+  return { agents, clearExpiredBubbles }
 }

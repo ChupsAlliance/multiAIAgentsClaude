@@ -14,7 +14,7 @@ export function VirtualOffice({ missionState, isRunning, logs }) {
   const [editorOpen, setEditorOpen] = useState(false)
 
   const { layout, isLoading, saveLayout } = useOfficeLayout()
-  const { agents } = useAgentSync(missionState, isRunning, logs, layout)
+  const { agents, clearExpiredBubbles } = useAgentSync(missionState, isRunning, logs, layout)
 
   // animStates: name → { frame, frameTimer }
   // Kept in React state so updates trigger re-renders of OfficeTileGrid
@@ -44,6 +44,7 @@ export function VirtualOffice({ missionState, isRunning, logs }) {
 
   // Animation tick — advances frame counters, triggers re-render only on frame change
   useAnimationTick((dt) => {
+    clearExpiredBubbles() // active cleanup each frame
     if (!agents.length) return
     let changed = false
 
