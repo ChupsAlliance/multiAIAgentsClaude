@@ -1,100 +1,53 @@
-import { useRef, useState, useEffect, useCallback } from 'react'
-import { OfficeTileGrid } from './rendering/OfficeTileGrid'
+import { useRef, useCallback, useState } from 'react'
 import { TileEditor } from './editor/TileEditor'
-import { useAnimationTick } from './hooks/useAnimationTick'
 import { useOfficeLayout } from './hooks/useOfficeLayout'
 import { useAgentSync } from './hooks/useAgentSync'
 
-const WALK_FRAME_SEC = 0.15
-const TYPE_FRAME_SEC = 0.4
-
 export function VirtualOffice({ missionState, isRunning, logs }) {
-  const containerRef = useRef(null)
-  const [tileSize, setTileSize] = useState(16)
+  const webviewRef = useRef(null)
   const [editorOpen, setEditorOpen] = useState(false)
+  const [webviewReady, setWebviewReady] = useState(false)
 
   const { layout, isLoading, saveLayout } = useOfficeLayout()
-  const { agents, clearExpiredBubbles } = useAgentSync(missionState, isRunning, logs, layout)
 
-  // animStates: name → { frame, frameTimer }
-  // Kept in React state so updates trigger re-renders of OfficeTileGrid
-  const [animStates, setAnimStates] = useState({})
-  const animRef = useRef({}) // same data in ref for mutation in tick
+  // Absolute paths resolved by the Electron preload
+  const { webviewPreload, pixelAgentsDist } = window.electronAPI.getPaths()
 
-  // Compute tileSize to fit the container
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container || !layout) return
-    const compute = () => {
-      const w = container.clientWidth
-      const h = container.clientHeight
-      if (w > 0 && h > 0) {
-        const ts = Math.max(4, Math.min(
-          Math.floor(w / layout.width),
-          Math.floor(h / layout.height),
-        ))
-        setTileSize(ts)
-      }
+  // Normalize Windows backslashes so file:// URLs work cross-platform
+  const distSrc    = `file:///${pixelAgentsDist.replace(/\\/g, '/')}/index.html`
+  const preloadSrc = `file:///${webviewPreload.replace(/\\/g, '/')}`
+
+  // Handle messages FROM pixel-agents webview
+  const handleInbound = useCallback((e) => {
+    if (e.channel !== 'pa:out') return
+    const data = e.args?.[0]
+    if (!data) return
+    if (data.type === 'webviewReady') {
+      setWebviewReady(true)
+    } else if (data.type === 'saveLayout') {
+      window.electronAPI.invoke('pa:save-layout', { layout: data.layout }).catch(console.error)
+    } else if (data.type === 'saveAgentSeats') {
+      window.electronAPI.invoke('pa:save-seats', { seats: data.seats }).catch(console.error)
     }
-    compute()
-    const observer = new ResizeObserver(compute)
-    observer.observe(container)
-    return () => observer.disconnect()
-  }, [layout])
+  }, [])
 
-  // Animation tick — advances frame counters, triggers re-render only on frame change
-  useAnimationTick((dt) => {
-    clearExpiredBubbles() // active cleanup each frame
-
-    // Clean up timers for removed agents (must run before early return so mission stop clears all)
-    for (const name of Object.keys(animRef.current)) {
-      if (!agents.find(a => a.name === name)) delete animRef.current[name]
+  // Attach/detach ipc-message listener via ref callback
+  const webviewCallback = useCallback((node) => {
+    if (node) {
+      webviewRef.current = node
+      node.addEventListener('ipc-message', handleInbound)
+    } else {
+      webviewRef.current?.removeEventListener('ipc-message', handleInbound)
+      webviewRef.current = null
     }
-
-    if (!agents.length) return
-    let changed = false
-
-    for (const agent of agents) {
-      let s = animRef.current[agent.name]
-      if (!s) {
-        s = { frame: 0, frameTimer: 0 }
-        animRef.current[agent.name] = s
-      }
-
-      const isWalking = agent.state === 'spawning'
-      const duration = isWalking ? WALK_FRAME_SEC : TYPE_FRAME_SEC
-      const maxFrame = isWalking ? 4 : 2
-
-      s.frameTimer += dt
-      if (s.frameTimer >= duration) {
-        s.frameTimer -= duration
-        s.frame = (s.frame + 1) % maxFrame
-        changed = true
-      }
-    }
-
-    if (changed) {
-      // Copy to state to trigger re-render (shallow copy of current frame values)
-      setAnimStates(Object.fromEntries(
-        Object.entries(animRef.current).map(([n, s]) => [n, { frame: s.frame }])
-      ))
-    }
-  })
-
-  // Merge agents with their current animFrame for rendering
-  const agentsWithAnim = agents.map(a => ({
-    ...a,
-    animFrame: animStates[a.name]?.frame ?? 0,
-    animDir: 0, // always DOWN (direction logic can be added later)
-  }))
+  }, [handleInbound])
 
   const handleSaveLayout = useCallback(async (newLayout) => {
     await saveLayout(newLayout)
     setEditorOpen(false)
   }, [saveLayout])
 
-  const gridW = layout ? layout.width * tileSize : 0
-  const gridH = layout ? layout.height * tileSize : 0
+  useAgentSync(missionState, isRunning, logs, webviewRef, webviewReady)
 
   return (
     <div className="relative flex flex-col h-full bg-slate-950">
@@ -109,25 +62,19 @@ export function VirtualOffice({ missionState, isRunning, logs }) {
         </button>
       </div>
 
-      {/* Office grid area */}
-      <div
-        ref={containerRef}
-        className="flex-1 overflow-hidden flex items-center justify-center"
-        style={{ background: '#1e1e2e' }}
-      >
-        {isLoading && (
-          <div className="text-slate-500 text-xs">Loading office...</div>
-        )}
-        {!isLoading && layout && (
-          <div style={{ width: gridW, height: gridH, flexShrink: 0 }}>
-            <OfficeTileGrid
-              tiles={layout.tiles}
-              tileSize={tileSize}
-              cols={layout.width}
-              rows={layout.height}
-              agents={agentsWithAnim}
-            />
+      {/* pixel-agents canvas */}
+      <div className="flex-1 overflow-hidden">
+        {isLoading ? (
+          <div className="flex items-center justify-center h-full text-slate-500 text-xs">
+            Loading office...
           </div>
+        ) : (
+          <webview
+            ref={webviewCallback}
+            src={distSrc}
+            preload={preloadSrc}
+            style={{ width: '100%', height: '100%', display: 'block' }}
+          />
         )}
       </div>
 
