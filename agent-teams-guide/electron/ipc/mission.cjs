@@ -2006,12 +2006,14 @@ module.exports = function registerMission(getMainWindow) {
       agent_name: 'Lead', role: 'Lead Coordinator', timestamp: ts, reset: true,
     });
 
-    // Spawn claude -p
+    // Spawn claude -p — planning phase only: do NOT enable AGENT_TEAMS here.
+    // If AGENT_TEAMS=1 is set, Lead gains the Agent tool and will spawn sub-agents
+    // directly, skipping our plan-review flow entirely.
     const proc = spawnClaude(
       ['-p', '--dangerously-skip-permissions', '--model', modelArg,
        '--output-format', 'stream-json', '--verbose'],
       projectPath,
-      true   // always set CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 for launch
+      false
     );
 
     try {
