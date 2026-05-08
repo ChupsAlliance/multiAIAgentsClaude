@@ -1,9 +1,6 @@
 'use strict';
+const path = require('path');
 const { contextBridge, ipcRenderer } = require('electron');
-
-// path.join is unavailable in sandboxed preloads — compute manually
-const SEP = __dirname.includes('/') ? '/' : '\\';
-function joinPath(...parts) { return parts.join(SEP); }
 
 // Commands the frontend can invoke (whitelist)
 const ALLOWED_COMMANDS = [
@@ -70,8 +67,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
    */
   getPaths() {
     return {
-      webviewPreload: joinPath(__dirname, 'webview-preload.cjs'),
-      pixelAgentsDist: joinPath(__dirname, '..', 'src', 'assets', 'pixel-agents-webview'),
+      webviewPreload: path.join(__dirname, 'webview-preload.cjs'),
+      pixelAgentsDist: path.join(__dirname, '../src/assets/pixel-agents-webview'),
     };
   },
 });

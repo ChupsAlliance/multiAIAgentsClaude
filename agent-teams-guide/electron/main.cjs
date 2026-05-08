@@ -15,6 +15,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: false,      // allows require('path/fs') in preload; renderer stays isolated
       webviewTag: true,
     },
     // Dark title bar to match app theme
