@@ -1150,26 +1150,32 @@ function readProcessStdout_launch(proc, missionId, sendToWindow) {
             }
 
             if (!planEmitted) {
-              // No plan found — check for connection errors
-              const isConnErr = /ConnectionRefused|Unable to connect to API|ECONNREFUSED|connection refused|Network error|401|authentication/i.test(resultText);
+              // No plan found — classify the error
+              const isConnErr  = /ConnectionRefused|Unable to connect to API|ECONNREFUSED|connection refused|Network error|401|authentication/i.test(resultText);
+              const isTooLarge = /Request too large|prompt is too long|payload too large|max \d+MB/i.test(resultText);
+
               const logMsg = isConnErr
                 ? '⚠️ Không thể kết nối tới API. Vui lòng kiểm tra lại kết nối và cấu hình API của bạn.'
-                : `Result (no plan detected): ${resultText.length > 500 ? resultText.slice(0, 500) + '...' : resultText}`;
-              const logType = isConnErr ? 'error' : 'result';
+                : isTooLarge
+                  ? '❌ Yêu cầu quá lớn (vượt giới hạn 32MB). Thử lại mà không dùng ngữ cảnh từ mission cũ, hoặc chọn ít file hơn.'
+                  : `Result (no plan detected): ${resultText.length > 500 ? resultText.slice(0, 500) + '...' : resultText}`;
+              const logType = (isConnErr || isTooLarge) ? 'error' : 'result';
 
               const entry = makeLogEntry(ts, 'System', logMsg, logType);
               if (missionState) {
                 missionState.log.push(entry);
-                missionState.status = isConnErr ? 'Failed' : 'Completed';
+                missionState.status = (isConnErr || isTooLarge) ? 'Failed' : 'Completed';
                 missionState.phase  = 'Done';
                 const lead = missionState.agents.find(a => a.name === 'Lead');
                 if (lead) {
-                  lead.status = isConnErr ? 'Error' : 'Done';
-                  lead.current_task = isConnErr ? 'Failed — API connection error' : 'Completed — no plan structure found';
+                  lead.status = (isConnErr || isTooLarge) ? 'Error' : 'Done';
+                  lead.current_task = isConnErr  ? 'Failed — API connection error'
+                    : isTooLarge ? 'Failed — request too large (reduce history context)'
+                    : 'Completed — no plan structure found';
                 }
               }
               sendToWindow('mission:log', entry);
-              sendToWindow('mission:status', { status: isConnErr ? 'failed' : 'completed' });
+              sendToWindow('mission:status', { status: (isConnErr || isTooLarge) ? 'failed' : 'completed' });
             }
 
           } else {
@@ -1936,10 +1942,11 @@ module.exports = function registerMission(getMainWindow) {
       if (pending.length)    parts.push(`Pending:\n${pending.join('\n')}`);
 
       const hLogs = (historyState.log || []).filter(l => l.log_type !== 'raw').slice(-20)
-        .map(l => `[${l.agent}] ${l.message}`);
+        .map(l => `[${l.agent}] ${(l.message || '').slice(0, 300)}`);
       if (hLogs.length) parts.push(`Recent activity:\n${hLogs.join('\n')}`);
 
-      const hFiles = (historyState.file_changes || []).map(f => `- ${f.path} (${f.action})`);
+      const hFiles = (historyState.file_changes || []).slice(0, 50)
+        .map(f => `- ${f.path} (${f.action})`);
       if (hFiles.length) parts.push(`Files created/modified:\n${hFiles.join('\n')}`);
 
       if (parts.length) {
@@ -1948,6 +1955,10 @@ module.exports = function registerMission(getMainWindow) {
           parts.join('\n\n') +
           '\n\nTake this context into account when planning. Reuse existing work where applicable. ' +
           'Focus on what the NEW requirement asks — do NOT redo completed work unless the user explicitly wants changes.\n';
+        // Safety cap — prevents 32MB API limit errors from oversized history context
+        if (previousWorkSection.length > 40_000) {
+          previousWorkSection = previousWorkSection.slice(0, 40_000) + '\n... (context truncated to fit API limits)\n';
+        }
       }
     }
 
@@ -2200,13 +2211,18 @@ module.exports = function registerMission(getMainWindow) {
       if (pending.length)    parts.push(`Pending:\n${pending.join('\n')}`);
 
       const hLogs = (historyState.log || []).filter(l => l.log_type !== 'raw').slice(-30)
-        .map(l => `[${l.agent}] ${l.message}`);
+        .map(l => `[${l.agent}] ${(l.message || '').slice(0, 300)}`);
       if (hLogs.length) parts.push(`Recent activity:\n${hLogs.join('\n')}`);
 
-      const hFiles = (historyState.file_changes || []).map(f => `- ${f.path} (${f.action})`);
+      const hFiles = (historyState.file_changes || []).slice(0, 50)
+        .map(f => `- ${f.path} (${f.action})`);
       if (hFiles.length) parts.push(`Files created/modified:\n${hFiles.join('\n')}`);
 
       completedSummary = parts.join('\n\n');
+      // Safety cap — prevents 32MB API limit errors from oversized history context
+      if (completedSummary.length > 40_000) {
+        completedSummary = completedSummary.slice(0, 40_000) + '\n... (context truncated to fit API limits)';
+      }
 
       // ── FORK: create brand-new missionState, link to parent ──
       const ts = now();
