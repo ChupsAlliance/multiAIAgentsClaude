@@ -2148,11 +2148,14 @@ module.exports = function registerMission(getMainWindow) {
     killChild();
 
     // Spawn NEW claude -p process for execution phase
+    // Always enable AGENT_TEAMS — deploy_standard.md and deploy_agent_teams.md
+    // both instruct Lead to use the Agent tool to spawn sub-agents.
+    // (Planning phase intentionally does NOT set this, so Lead outputs JSON plan instead.)
     const proc = spawnClaude(
       ['-p', '--dangerously-skip-permissions', '--model', leadModel,
        '--output-format', 'stream-json', '--verbose', '--max-turns', '200'],
       projectPath,
-      execMode === 'agent_teams'
+      true
     );
 
     try {
@@ -2338,10 +2341,9 @@ module.exports = function registerMission(getMainWindow) {
 
     // Determine execution mode: fork inherits from parent, normal uses current
     const execMode = missionState ? missionState.execution_mode || 'standard' : 'standard';
-    const useAgentTeams = execMode === 'agent_teams';
 
     // Select the appropriate continue prompt template based on execution mode
-    const continueTemplate = useAgentTeams ? PROMPT_CONTINUE_AGENT_TEAMS : PROMPT_CONTINUE_STANDARD;
+    const continueTemplate = execMode === 'agent_teams' ? PROMPT_CONTINUE_AGENT_TEAMS : PROMPT_CONTINUE_STANDARD;
     const contPermModeSection = buildPermissionModeSection(
       missionState ? missionState.permission_mode : 'auto'
     );
@@ -2355,12 +2357,12 @@ module.exports = function registerMission(getMainWindow) {
     // Kill existing process (no-op if already killed in fork path)
     killChild();
 
-    // Spawn new claude process — respect execution_mode for AGENT_TEAMS env
+    // Both continue_standard.md and continue_agent_teams.md use the Agent tool — always enable it.
     const proc = spawnClaude(
       ['-p', '--dangerously-skip-permissions', '--model', leadModel,
        '--output-format', 'stream-json', '--verbose', '--max-turns', '200'],
       projectPath,
-      useAgentTeams  // enable AGENT_TEAMS if original mission used it
+      true  // always enable AGENT_TEAMS so Lead can spawn sub-agents
     );
 
     try {
