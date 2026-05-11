@@ -10,6 +10,27 @@ export function VirtualOffice({ missionState, isRunning, logs }) {
 
   const { layout, isLoading, saveLayout } = useOfficeLayout()
 
+  // When the webview signals ready, send the actual layout + settings so agents
+  // have a floor to walk on. Layout is loaded in pixel-agents' native format
+  // (cols/rows/tiles:number[]) from IPC; falls back to bundled default.
+  useEffect(() => {
+    if (!webviewReady) return
+    const wv = webviewRef.current
+    if (!wv) return
+
+    window.electronAPI.invoke('load_office_layout')
+      .then(layoutJson => {
+        const paLayout = typeof layoutJson === 'string' ? JSON.parse(layoutJson) : layoutJson
+        wv.send('pa:in', { type: 'layoutLoaded', layout: paLayout, wasReset: false })
+      })
+      .catch(() => {
+        wv.send('pa:in', { type: 'layoutLoaded', wasReset: false })
+      })
+
+    // Settings expected by pixel-agents (matches VS Code extension defaults)
+    wv.send('pa:in', { type: 'settingsLoaded', soundEnabled: false, extensionVersion: '1.3.0', lastSeenVersion: '1.3.0' })
+  }, [webviewReady])
+
   // Absolute paths resolved by the Electron preload
   const { webviewPreload, pixelAgentsDist } = window.electronAPI.getPaths()
 

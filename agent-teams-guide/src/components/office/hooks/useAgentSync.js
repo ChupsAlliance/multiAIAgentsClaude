@@ -3,7 +3,6 @@ import { mapLogEntryToState } from '../agent-bridge/AgentStateMapper'
 import {
   AgentIdMap,
   ToolIdCounter,
-  makeLayoutLoaded,
   makeAgentCreated,
   makeAgentClosed,
   makeAgentToolStart,
@@ -21,10 +20,10 @@ export function useAgentSync(missionState, isRunning, logs, webviewRef, webviewR
   const toolCounterRef = useRef(new ToolIdCounter())
   const activeToolsRef = useRef({})                  // agentName → toolId | null
 
-  // On first webviewReady: flush layoutLoaded + all existing agents
+  // On first webviewReady: flush all existing agents.
+  // (layoutLoaded is sent by VirtualOffice.jsx with the actual pixel-agents layout.)
   useEffect(() => {
     if (!webviewReady) return
-    sendToWebview(webviewRef, makeLayoutLoaded())
     for (const name of Object.keys(agentsRef.current)) {
       sendToWebview(webviewRef, makeAgentCreated(idMapRef.current.getId(name)))
     }
