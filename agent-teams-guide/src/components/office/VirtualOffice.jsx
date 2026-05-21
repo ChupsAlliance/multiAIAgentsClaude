@@ -57,9 +57,16 @@ export function VirtualOffice({ missionState, isRunning, logs }) {
     }
   }, [])
 
-  // Reset webviewReady when mission stops so the layoutLoaded flush re-fires on next run
+  // Reload the webview each time a mission starts so pixel-agents re-fires webviewReady.
+  // The webview element stays mounted between missions, so it won't send webviewReady
+  // again on its own — we must trigger a reload to restart the handshake.
+  const prevIsRunning = useRef(false)
   useEffect(() => {
-    if (!isRunning) setWebviewReady(false)
+    if (isRunning && !prevIsRunning.current) {
+      setWebviewReady(false)
+      webviewRef.current?.reload()
+    }
+    prevIsRunning.current = isRunning
   }, [isRunning])
 
   // Attach/detach ipc-message listener via ref callback
