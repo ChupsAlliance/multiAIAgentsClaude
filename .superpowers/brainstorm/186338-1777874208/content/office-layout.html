@@ -1,0 +1,125 @@
+<h2>Office Layout — cố định hay chỉnh được?</h2>
+<p class="subtitle">Khi mission chạy, office nhìn như thế nào và user có thể tùy chỉnh không?</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#111;padding:12px;image-rendering:pixelated;font-family:monospace;">
+      <div style="background:#1a1a2e;border:2px solid #2d2d4e;border-radius:4px;padding:8px;min-height:110px;position:relative;">
+        <!-- Auto-arranged agents -->
+        <div style="position:absolute;top:6px;left:6px;font-size:9px;color:#6366f1;border:1px solid #4338ca;border-radius:2px;padding:1px 4px;">AUTO</div>
+        <!-- Floor tiles -->
+        <div style="position:absolute;bottom:0;left:0;right:0;height:18px;background:repeating-linear-gradient(90deg,#2d2d4e 0,#2d2d4e 8px,#252545 8px,#252545 16px);"></div>
+        <!-- Desks + agents auto-placed -->
+        <div style="display:flex;justify-content:space-around;align-items:flex-end;height:90px;">
+          <div style="text-align:center;">
+            <div style="width:36px;height:10px;background:#5c3a1e;border-top:2px solid #7a4e2d;margin:0 auto;"></div>
+            <div style="font-size:18px;margin-top:-2px;">🧑‍💻</div>
+            <div style="background:#1e3a5f;border:1px solid #3b82f6;border-radius:2px;padding:1px 4px;font-size:7px;color:#93c5fd;">coding...</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="width:36px;height:10px;background:#5c3a1e;border-top:2px solid #7a4e2d;margin:0 auto;"></div>
+            <div style="font-size:18px;margin-top:-2px;">🤖</div>
+            <div style="background:#14532d;border:1px solid #16a34a;border-radius:2px;padding:1px 4px;font-size:7px;color:#86efac;">reading...</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="width:36px;height:10px;background:#5c3a1e;border-top:2px solid #7a4e2d;margin:0 auto;"></div>
+            <div style="font-size:18px;margin-top:-2px;">👨‍🎨</div>
+            <div style="background:#2d1b69;border:1px solid #7c3aed;border-radius:2px;padding:1px 4px;font-size:7px;color:#c4b5fd;">waiting...</div>
+          </div>
+        </div>
+        <!-- New agent joins -->
+        <div style="position:absolute;bottom:18px;right:8px;font-size:10px;opacity:0.5;color:#fbbf24;">+ 🧑‍💻</div>
+      </div>
+      <div style="text-align:center;color:#6366f1;font-size:9px;margin-top:4px;">Agents tự động xếp khi spawn, di chuyển khi hoàn thành task</div>
+    </div>
+    <div class="card-body">
+      <h3>A — Auto Layout</h3>
+      <p>App tự sắp xếp agents vào bàn làm việc khi họ spawn. Không cần editor — layout tự điều chỉnh theo số agents.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Zero config</li><li>Dễ implement nhất</li><li>Luôn gọn gàng</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Không cá nhân hóa được</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#111;padding:12px;image-rendering:pixelated;font-family:monospace;">
+      <div style="display:flex;gap:6px;">
+        <!-- Office view -->
+        <div style="background:#1a1a2e;border:2px solid #2d2d4e;border-radius:4px;padding:6px;flex:2;min-height:110px;position:relative;">
+          <div style="position:absolute;bottom:0;left:0;right:0;height:16px;background:repeating-linear-gradient(90deg,#2d2d4e 0,#2d2d4e 8px,#252545 8px,#252545 16px);"></div>
+          <div style="display:flex;justify-content:space-around;align-items:flex-end;height:95px;">
+            <div style="text-align:center;">
+              <div style="width:30px;height:8px;background:#1e3a5f;border-top:2px solid #3b82f6;margin:0 auto;"></div>
+              <div style="font-size:16px;">🧑‍💻</div>
+            </div>
+            <div style="text-align:center;">
+              <div style="font-size:22px;">🌿</div>
+            </div>
+            <div style="text-align:center;">
+              <div style="width:30px;height:8px;background:#5c3a1e;border-top:2px solid #7a4e2d;margin:0 auto;"></div>
+              <div style="font-size:16px;">🤖</div>
+            </div>
+          </div>
+        </div>
+        <!-- Editor panel -->
+        <div style="background:#0d0d1a;border:2px solid #4338ca;border-radius:4px;padding:6px;flex:1;font-size:8px;">
+          <div style="color:#a5b4fc;margin-bottom:4px;">🖊 Editor</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px;">
+            <div style="background:#1e293b;border:1px solid #334155;width:18px;height:18px;border-radius:2px;text-align:center;line-height:18px;">🪑</div>
+            <div style="background:#1e293b;border:1px solid #334155;width:18px;height:18px;border-radius:2px;text-align:center;line-height:18px;">🖥️</div>
+            <div style="background:#1e293b;border:1px solid #334155;width:18px;height:18px;border-radius:2px;text-align:center;line-height:18px;">🌿</div>
+            <div style="background:#1e293b;border:1px solid #334155;width:18px;height:18px;border-radius:2px;text-align:center;line-height:18px;">📦</div>
+          </div>
+          <div style="color:#475569;font-size:7px;margin-top:4px;">drag to place</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Editor đầy đủ (giống pixel-agents)</h3>
+      <p>User có thể thiết kế office layout: đặt bàn, tường, cây, furniture bằng tile editor. Layout lưu persistent giữa các sessions.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Faithful nhất với pixel-agents</li><li>Cực kỳ fun &amp; customizable</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Scope lớn nhất</li><li>Phải build tile editor từ đầu</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#111;padding:12px;image-rendering:pixelated;font-family:monospace;">
+      <div style="background:#1a1a2e;border:2px solid #2d2d4e;border-radius:4px;padding:8px;min-height:110px;position:relative;">
+        <!-- Preset selector -->
+        <div style="display:flex;gap:3px;margin-bottom:6px;">
+          <div style="background:#4338ca;border-radius:2px;padding:1px 5px;font-size:8px;color:#e0e7ff;">Open Office</div>
+          <div style="background:#1e293b;border-radius:2px;padding:1px 5px;font-size:8px;color:#475569;">Lab</div>
+          <div style="background:#1e293b;border-radius:2px;padding:1px 5px;font-size:8px;color:#475569;">Zen</div>
+        </div>
+        <!-- Office with preset layout -->
+        <div style="position:absolute;bottom:0;left:0;right:0;height:16px;background:repeating-linear-gradient(90deg,#2d2d4e 0,#2d2d4e 8px,#252545 8px,#252545 16px);"></div>
+        <div style="display:flex;justify-content:space-around;align-items:flex-end;height:75px;">
+          <div style="text-align:center;">
+            <div style="width:32px;height:9px;background:#5c3a1e;border-top:2px solid #7a4e2d;margin:0 auto;"></div>
+            <div style="font-size:16px;">🧑‍💻</div>
+          </div>
+          <div style="font-size:18px;align-self:center;">🌿</div>
+          <div style="font-size:18px;align-self:center;">🪴</div>
+          <div style="text-align:center;">
+            <div style="width:32px;height:9px;background:#5c3a1e;border-top:2px solid #7a4e2d;margin:0 auto;"></div>
+            <div style="font-size:16px;">🤖</div>
+          </div>
+        </div>
+      </div>
+      <div style="text-align:center;color:#a855f7;font-size:9px;margin-top:4px;">Chọn từ preset themes — không cần build editor</div>
+    </div>
+    <div class="card-body">
+      <h3>C — Preset Layouts</h3>
+      <p>3–5 office themes có sẵn (Open Office, Lab, Zen Garden...). User chọn theme, agents tự xếp vào. Không có tile editor.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Có tính cá nhân hóa</li><li>Scope vừa phải</li><li>Nhanh implement</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Ít linh hoạt hơn B</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+</div>

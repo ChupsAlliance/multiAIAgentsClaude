@@ -10,7 +10,7 @@ import { ThinkingIndicator } from './ThinkingIndicator'
 import { InterventionPanel } from './InterventionPanel'
 import { QuestionCard } from './QuestionCard'
 import { ListTodo, Activity, FolderOpen, User, MessageSquare } from 'lucide-react'
-import { VirtualOffice } from '../office/VirtualOffice'
+// import { VirtualOffice } from '../office/VirtualOffice'
 
 const baseTabs = [
   { id: 'tasks',    label: 'Tasks',    icon: ListTodo },
@@ -249,14 +249,14 @@ export const MissionDashboard = memo(function MissionDashboard({ state, isRunnin
         </div>
 
         {/* Drag handle — office panel */}
-        <div
+        {/* <div
           onMouseDown={onOfficeDragStart}
           className="w-1 shrink-0 cursor-col-resize bg-slate-800 hover:bg-indigo-500 transition-colors"
           title="Drag to resize office panel"
-        />
+        /> */}
 
-        {/* Right: Virtual Office */}
-        <div
+        {/* Right: Virtual Office — temporarily hidden due to errors */}
+        {/* <div
           className="shrink-0 overflow-hidden"
           style={{ width: officePanelWidth }}
         >
@@ -265,7 +265,7 @@ export const MissionDashboard = memo(function MissionDashboard({ state, isRunnin
             isRunning={isRunning}
             logs={logs}
           />
-        </div>
+        </div> */}
       </div>
 
       {/* Question card — shown when Lead asks questions */}

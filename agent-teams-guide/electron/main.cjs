@@ -26,6 +26,22 @@ function createWindow() {
   // Load the built frontend
   mainWindow.loadFile(path.join(__dirname, '../dist-electron/index.html'));
 
+  // Debug: open DevTools for main window
+  mainWindow.webContents.openDevTools({ mode: 'detach' });
+
+  // Debug: pipe webview console to main process stdout
+  mainWindow.webContents.on('did-attach-webview', (_e, wc) => {
+    console.log('[DEBUG] webview attached, url:', wc.getURL());
+    wc.openDevTools();
+    wc.on('console-message', (_e2, level, msg) => {
+      console.log('[WEBVIEW]', msg);
+    });
+    wc.on('did-finish-load', () => console.log('[DEBUG] webview did-finish-load'));
+    wc.on('did-fail-load', (_e2, code, desc, url) => console.log('[DEBUG] webview FAILED', code, desc, url));
+    wc.on('preload-error', (_e2, path, err) => console.log('[DEBUG] preload ERROR', path, err));
+  });
+  console.log('[DEBUG] main window created, waiting for webview attach');
+
   mainWindow.on('closed', () => { mainWindow = null; });
 
   return mainWindow;

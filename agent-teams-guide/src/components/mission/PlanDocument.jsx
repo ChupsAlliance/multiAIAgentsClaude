@@ -1,0 +1,562 @@
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { invoke } from '@tauri-apps/api/core'
+import {
+  FileText, Plus, UserPlus, Check, AlertTriangle, Download,
+  RotateCcw, ChevronRight, ChevronDown, X, Bot, ListTodo, Link2
+} from 'lucide-react'
+import {
+  planToMarkdown, parseMissionPlan, diffPlanChanges,
+  extractOutline, agentTemplate, taskTemplate,
+} from '../../utils/planMarkdown'
+
+// ─── Outline Sidebar ───────────────────────────────────────────────────────
+
+function OutlineSidebar({ outline, onJumpTo }) {
+  const [collapsed, setCollapsed] = useState({})
+
+  const toggle = (idx) => {
+    setCollapsed(prev => ({ ...prev, [idx]: !prev[idx] }))
+  }
+
+  // Group: agents with their tasks nested underneath
+  const tree = useMemo(() => {
+    const nodes = []
+    let currentAgent = null
+
+    for (let i = 0; i < outline.length; i++) {
+      const item = outline[i]
+      if (item.level === 2) {
+        if (item.type === 'agent') {
+          currentAgent = { ...item, idx: i, children: [] }
+          nodes.push(currentAgent)
+        } else {
+          currentAgent = null
+          nodes.push({ ...item, idx: i, children: [] })
+        }
+      } else if (item.level === 4 && item.type === 'task') {
+        if (currentAgent) {
+          currentAgent.children.push({ ...item, idx: i })
+        }
+      }
+    }
+    return nodes
+  }, [outline])
+
+  const typeIcon = (type) => {
+    if (type === 'agent') return <Bot size={10} className="text-vs-accent shrink-0" />
+    if (type === 'task') return <ListTodo size={9} className="text-vs-muted shrink-0" />
+    return <Link2 size={10} className="text-vs-muted shrink-0" />
+  }
+
+  return (
+    <div className="w-[160px] shrink-0 border-r border-vs-border overflow-y-auto scrollbar-thin bg-[#1e1e1e]">
+      <div className="px-2 py-1.5 text-[9px] font-bold text-vs-muted uppercase tracking-wider border-b border-vs-border">
+        Outline
+      </div>
+      <div className="py-1">
+        {tree.map((node, i) => (
+          <div key={i}>
+            {/* Section/Agent header */}
+            <button
+              className="w-full flex items-center gap-1 px-2 py-1 text-left hover:bg-white/5 text-[10px]"
+              onClick={() => {
+                if (node.children?.length > 0) toggle(i)
+                onJumpTo(node.line)
+              }}
+            >
+              {node.children?.length > 0 ? (
+                collapsed[i]
+                  ? <ChevronRight size={9} className="text-vs-muted shrink-0" />
+                  : <ChevronDown size={9} className="text-vs-muted shrink-0" />
+              ) : (
+                <span className="w-[9px] shrink-0" />
+              )}
+              {typeIcon(node.type)}
+              <span className="truncate text-vs-text">{node.text}</span>
+              {node.children?.length > 0 && (
+                <span className="ml-auto text-[8px] text-vs-muted shrink-0">
+                  {node.children.length}
+                </span>
+              )}
+            </button>
+
+            {/* Nested tasks */}
+            {!collapsed[i] && node.children?.map((child, j) => (
+              <button
+                key={j}
+                className="w-full flex items-center gap-1 pl-6 pr-2 py-0.5 text-left hover:bg-white/5 text-[9px]"
+                onClick={() => onJumpTo(child.line)}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                  child.priority === 'high' ? 'bg-red-400' :
+                  child.priority === 'low' ? 'bg-green-400' : 'bg-yellow-400'
+                }`} />
+                <span className="truncate text-vs-muted">{child.text}</span>
+              </button>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── Diff Summary Modal ────────────────────────────────────────────────────
+
+function DiffSummary({ diff, onConfirm, onCancel }) {
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 animate-fade-in">
+      <div className="bg-vs-panel border border-vs-border rounded-lg shadow-xl w-full max-w-md">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-vs-border">
+          <h3 className="text-xs font-bold text-white flex items-center gap-2">
+            <FileText size={13} className="text-vs-accent" />
+            Xác nhận thay đổi
+          </h3>
+          <button onClick={onCancel} className="text-vs-muted hover:text-white">
+            <X size={14} />
+          </button>
+        </div>
+
+        {/* Changes */}
+        <div className="px-4 py-3 space-y-2">
+          <p className="text-[10px] text-vs-muted font-mono">{diff.summary}</p>
+
+          {diff.addedAgents.length > 0 && (
+            <div className="text-[10px]">
+              <span className="text-green-400 font-bold">+ Agents mới:</span>
+              <span className="text-vs-text ml-1">{diff.addedAgents.map(a => a.name).join(', ')}</span>
+            </div>
+          )}
+          {diff.removedAgents.length > 0 && (
+            <div className="text-[10px]">
+              <span className="text-red-400 font-bold">- Agents xóa:</span>
+              <span className="text-vs-text ml-1">{diff.removedAgents.map(a => a.name).join(', ')}</span>
+            </div>
+          )}
+          {diff.modifiedAgents.length > 0 && (
+            <div className="text-[10px]">
+              <span className="text-yellow-400 font-bold">• Agents sửa:</span>
+              <span className="text-vs-text ml-1">{diff.modifiedAgents.map(a => a.name).join(', ')}</span>
+            </div>
+          )}
+          {diff.addedTasks.length > 0 && (
+            <div className="text-[10px]">
+              <span className="text-green-400 font-bold">+ Tasks mới:</span>
+              <span className="text-vs-text ml-1">{diff.addedTasks.map(t => t.title).join(', ')}</span>
+            </div>
+          )}
+          {diff.removedTasks.length > 0 && (
+            <div className="text-[10px]">
+              <span className="text-red-400 font-bold">- Tasks xóa:</span>
+              <span className="text-vs-text ml-1">{diff.removedTasks.map(t => t.title).join(', ')}</span>
+            </div>
+          )}
+          {diff.modifiedTasks.length > 0 && (
+            <div className="text-[10px]">
+              <span className="text-yellow-400 font-bold">• Tasks sửa:</span>
+              <span className="text-vs-text ml-1">{diff.modifiedTasks.map(t => t.title).join(', ')}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-2 px-4 py-3 border-t border-vs-border">
+          <button
+            onClick={onConfirm}
+            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-vs-accent text-white
+                       rounded text-xs font-mono hover:bg-vs-accent2 transition-colors"
+          >
+            <Check size={11} /> Áp dụng
+          </button>
+          <button
+            onClick={onCancel}
+            className="px-3 py-2 border border-vs-border text-vs-text rounded text-xs font-mono hover:bg-white/5"
+          >
+            Hủy
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Main PlanDocument Component ───────────────────────────────────────────
+
+export function PlanDocument({ agents, tasks, projectPath, requirement, onApply, onExport, isReplanning }) {
+  const textareaRef = useRef(null)
+  const lineNumRef = useRef(null)
+
+  // Generate initial markdown from plan data
+  const initialMd = useMemo(() =>
+    planToMarkdown(agents, tasks, { projectPath, requirement }),
+    [] // Only generate once on mount
+  )
+
+  const [markdown, setMarkdown] = useState(initialMd)
+  const [originalMd, setOriginalMd] = useState(initialMd)
+  const [hasChanges, setHasChanges] = useState(false)
+  const [parseResult, setParseResult] = useState(null)
+  const [outline, setOutline] = useState([])
+  const [showDiff, setShowDiff] = useState(false)
+  const [pendingDiff, setPendingDiff] = useState(null)
+  const [toast, setToast] = useState(null)
+
+  // Regenerate markdown when agents/tasks change externally (e.g. after replan)
+  useEffect(() => {
+    const newMd = planToMarkdown(agents, tasks, { projectPath, requirement })
+    setMarkdown(newMd)
+    setOriginalMd(newMd)
+    setHasChanges(false)
+  }, [agents, tasks])
+
+  // Live parse + outline extraction (debounced)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const result = parseMissionPlan(markdown)
+      setParseResult(result)
+      setOutline(extractOutline(markdown))
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [markdown])
+
+  // Track changes
+  useEffect(() => {
+    setHasChanges(markdown !== originalMd)
+  }, [markdown, originalMd])
+
+  // Sync textarea scroll with line numbers
+  const handleScroll = useCallback(() => {
+    if (textareaRef.current && lineNumRef.current) {
+      lineNumRef.current.scrollTop = textareaRef.current.scrollTop
+    }
+  }, [])
+
+  // Apply ref for keyboard shortcut access
+  const applyRef = useRef(null)
+
+  // Handle Tab key → insert 2 spaces
+  const handleKeyDown = useCallback((e) => {
+    if (e.key === 'Tab') {
+      e.preventDefault()
+      const ta = textareaRef.current
+      const start = ta.selectionStart
+      const end = ta.selectionEnd
+      const val = ta.value
+      const newVal = val.substring(0, start) + '  ' + val.substring(end)
+      setMarkdown(newVal)
+      requestAnimationFrame(() => {
+        ta.selectionStart = ta.selectionEnd = start + 2
+      })
+    }
+    // Ctrl+S → Apply
+    if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault()
+      if (applyRef.current) applyRef.current()
+    }
+  }, [])
+
+  // Jump to line from outline
+  const jumpToLine = useCallback((lineNum) => {
+    const ta = textareaRef.current
+    if (!ta) return
+    const lines = ta.value.split('\n')
+    let charPos = 0
+    for (let i = 0; i < Math.min(lineNum, lines.length); i++) {
+      charPos += lines[i].length + 1
+    }
+    ta.focus()
+    ta.setSelectionRange(charPos, charPos)
+    // Scroll to approximate position
+    const lineHeight = 18 // approximate
+    ta.scrollTop = Math.max(0, lineNum * lineHeight - ta.clientHeight / 3)
+  }, [])
+
+  // Insert template at cursor
+  const insertAtCursor = useCallback((template) => {
+    const ta = textareaRef.current
+    if (!ta) return
+    const pos = ta.selectionStart
+    const val = ta.value
+    const newVal = val.substring(0, pos) + template + val.substring(pos)
+    setMarkdown(newVal)
+    requestAnimationFrame(() => {
+      const newPos = pos + template.indexOf('[')
+      if (newPos > pos) {
+        ta.focus()
+        ta.setSelectionRange(newPos, newPos)
+      }
+    })
+  }, [])
+
+  // Apply changes
+  const handleApply = useCallback(() => {
+    const edited = parseMissionPlan(markdown)
+    if (edited.warnings.length > 0 && edited.agents.length === 0) {
+      showToast('Parse lỗi: Không tìm thấy agent', 'error')
+      return
+    }
+
+    const original = { agents, tasks }
+    const diff = diffPlanChanges(original, edited)
+
+    if (!diff.hasChanges) {
+      showToast('Không có thay đổi', 'info')
+      return
+    }
+
+    setPendingDiff(diff)
+    setShowDiff(true)
+  }, [markdown, agents, tasks])
+
+  // Keep applyRef in sync for keyboard shortcut
+  useEffect(() => {
+    applyRef.current = hasChanges ? handleApply : null
+  }, [hasChanges, handleApply])
+
+  const confirmApply = useCallback(() => {
+    const edited = parseMissionPlan(markdown)
+    setShowDiff(false)
+    setPendingDiff(null)
+
+    // Map to match the expected data structure
+    const newAgents = edited.agents.map(a => ({
+      name: a.name,
+      role: a.role,
+      model: a.model || 'sonnet',
+      reason: a.reason,
+      customPrompt: '',
+      skillFile: null,
+      // Preserve existing skillFile and customPrompt if agent existed before
+      ...(() => {
+        const existing = agents.find(ea => ea.name === a.name)
+        if (existing) return {
+          customPrompt: existing.customPrompt || '',
+          skillFile: existing.skillFile || null,
+        }
+        return {}
+      })(),
+    }))
+
+    const newTasks = edited.tasks.map((t, idx) => ({
+      id: t.id || `task-${Date.now()}-${idx}`,
+      title: t.title,
+      detail: t.detail || '',
+      priority: t.priority || 'medium',
+      assigned_agent: t.assigned_agent,
+    }))
+
+    onApply(newAgents, newTasks)
+    setOriginalMd(markdown)
+    setHasChanges(false)
+    showToast('Đã áp dụng thay đổi', 'success')
+  }, [markdown, agents, onApply])
+
+  // Export to file
+  const handleExport = useCallback(async () => {
+    if (!projectPath) {
+      showToast('Chưa có project path', 'error')
+      return
+    }
+    try {
+      const filePath = await invoke('export_plan_markdown', {
+        markdown: markdown,
+        projectPath: projectPath,
+      })
+      showToast(`Đã xuất: ${filePath}`, 'success')
+      if (onExport) onExport()
+    } catch (err) {
+      showToast(`Lỗi xuất: ${err}`, 'error')
+    }
+  }, [markdown, projectPath, onExport])
+
+  // Reset to original
+  const handleReset = useCallback(() => {
+    setMarkdown(originalMd)
+  }, [originalMd])
+
+  // Toast helper
+  const showToast = (msg, type = 'info') => {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 3000)
+  }
+
+  // Line count for gutter
+  const lineCount = markdown.split('\n').length
+
+  // Stats from parse result
+  const stats = useMemo(() => {
+    if (!parseResult) return null
+    const { agents: pa, tasks: pt, warnings } = parseResult
+    const high = pt.filter(t => t.priority === 'high').length
+    const med = pt.filter(t => t.priority === 'medium').length
+    const low = pt.filter(t => t.priority === 'low').length
+    return {
+      agents: pa.length,
+      tasks: pt.length,
+      high, med, low,
+      warnings: warnings.length,
+      warningList: warnings,
+    }
+  }, [parseResult])
+
+  return (
+    <div className="flex flex-col h-full bg-[#1e1e1e] rounded-lg overflow-hidden">
+      {/* ── Toolbar ── */}
+      <div className="flex items-center gap-1.5 px-3 py-2 bg-[#252526] border-b border-vs-border">
+        <button
+          onClick={handleReset}
+          disabled={!hasChanges}
+          className="flex items-center gap-1 px-2 py-1 text-[10px] font-mono rounded
+                     border border-vs-border text-vs-muted hover:text-white hover:bg-white/5
+                     disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          title="Hoàn tác về bản gốc"
+        >
+          <RotateCcw size={10} /> Hoàn tác
+        </button>
+
+        <div className="w-px h-4 bg-vs-border mx-1" />
+
+        <button
+          onClick={() => insertAtCursor(agentTemplate())}
+          className="flex items-center gap-1 px-2 py-1 text-[10px] font-mono rounded
+                     border border-vs-border text-vs-muted hover:text-white hover:bg-white/5 transition-colors"
+          title="Thêm agent mới"
+        >
+          <UserPlus size={10} /> Thêm Agent
+        </button>
+
+        <button
+          onClick={() => insertAtCursor(taskTemplate())}
+          className="flex items-center gap-1 px-2 py-1 text-[10px] font-mono rounded
+                     border border-vs-border text-vs-muted hover:text-white hover:bg-white/5 transition-colors"
+          title="Thêm task mới"
+        >
+          <Plus size={10} /> Thêm Task
+        </button>
+
+        <div className="flex-1" />
+
+        <button
+          onClick={handleExport}
+          className="flex items-center gap-1 px-2 py-1 text-[10px] font-mono rounded
+                     border border-vs-border text-vs-muted hover:text-white hover:bg-white/5 transition-colors"
+          title="Xuất ra file .md"
+        >
+          <Download size={10} /> Xuất MD
+        </button>
+
+        {hasChanges && (
+          <button
+            onClick={handleApply}
+            className="flex items-center gap-1 px-3 py-1 text-[10px] font-mono font-bold rounded
+                       bg-vs-accent text-white hover:bg-vs-accent2 transition-colors
+                       animate-pulse-subtle"
+          >
+            <Check size={10} /> Áp dụng thay đổi
+          </button>
+        )}
+      </div>
+
+      {/* ── Main area: Outline + Editor ── */}
+      <div className="flex flex-1 min-h-0">
+        {/* Outline sidebar */}
+        <OutlineSidebar outline={outline} onJumpTo={jumpToLine} />
+
+        {/* Editor area */}
+        <div className="flex-1 flex min-h-0 overflow-hidden">
+          {/* Line numbers */}
+          <div
+            ref={lineNumRef}
+            className="w-[40px] shrink-0 bg-[#1e1e1e] border-r border-[#333] overflow-hidden select-none"
+            aria-hidden="true"
+          >
+            <div className="py-2 pr-2">
+              {Array.from({ length: lineCount }, (_, i) => (
+                <div key={i} className="text-right text-[10px] font-mono text-[#555] leading-[18px]">
+                  {i + 1}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Textarea */}
+          <textarea
+            ref={textareaRef}
+            value={markdown}
+            onChange={(e) => setMarkdown(e.target.value)}
+            onScroll={handleScroll}
+            onKeyDown={handleKeyDown}
+            className="flex-1 bg-[#1e1e1e] text-[#d4d4d4] text-[11px] font-mono leading-[18px]
+                       p-2 resize-none outline-none border-none
+                       scrollbar-thin scrollbar-thumb-[#444] scrollbar-track-transparent
+                       selection:bg-vs-accent/30"
+            spellCheck={false}
+            autoComplete="off"
+            autoCorrect="off"
+            wrap="off"
+          />
+        </div>
+      </div>
+
+      {/* ── Status bar ── */}
+      <div className="flex items-center gap-3 px-3 py-1 bg-[#007acc] text-white text-[10px] font-mono shrink-0">
+        {stats && (
+          <>
+            <span>{stats.agents} agent{stats.agents !== 1 ? 's' : ''}</span>
+            <span>•</span>
+            <span>
+              {stats.tasks} task{stats.tasks !== 1 ? 's' : ''}
+              {stats.tasks > 0 && (
+                <span className="ml-1 text-white/70">
+                  ({stats.high > 0 ? `${stats.high}H` : ''}{stats.med > 0 ? ` ${stats.med}M` : ''}{stats.low > 0 ? ` ${stats.low}L` : ''})
+                </span>
+              )}
+            </span>
+            <span>•</span>
+          </>
+        )}
+
+        {hasChanges ? (
+          <span className="text-yellow-200">Đã chỉnh sửa</span>
+        ) : (
+          <span className="text-white/70">Không thay đổi</span>
+        )}
+
+        {stats && stats.warnings > 0 ? (
+          <span className="flex items-center gap-1 text-yellow-200" title={stats.warningList.join('\n')}>
+            <AlertTriangle size={9} /> {stats.warnings} cảnh báo
+          </span>
+        ) : stats ? (
+          <span className="flex items-center gap-1 text-green-200">
+            <Check size={9} /> Hợp lệ
+          </span>
+        ) : null}
+
+        <div className="flex-1" />
+        <span className="text-white/50">{'Ctrl+S để áp dụng'}</span>
+      </div>
+
+      {/* ── Diff Summary Modal ── */}
+      {showDiff && pendingDiff && (
+        <DiffSummary
+          diff={pendingDiff}
+          onConfirm={confirmApply}
+          onCancel={() => { setShowDiff(false); setPendingDiff(null) }}
+        />
+      )}
+
+      {/* ── Toast ── */}
+      {toast && (
+        <div className={`fixed bottom-4 right-4 z-50 px-4 py-2 rounded-lg text-xs font-mono shadow-lg
+                         animate-fade-in ${
+          toast.type === 'success' ? 'bg-green-600 text-white' :
+          toast.type === 'error' ? 'bg-red-600 text-white' :
+          'bg-[#333] text-white'
+        }`}>
+          {toast.msg}
+        </div>
+      )}
+    </div>
+  )
+}

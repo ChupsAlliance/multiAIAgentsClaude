@@ -4,6 +4,7 @@
 // path + fs are Node.js builtins; they may be absent if the webview sandbox
 // is active, so we require them lazily and fail gracefully.
 const { ipcRenderer } = require('electron');
+console.log('[webview-preload] LOADED — ipcRenderer ok');
 
 let _path = null;
 let _fs   = null;
@@ -66,6 +67,7 @@ function injectAssets() {
 // browser mode (h.postMessage = console.log only — ipcRenderer never called).
 window.acquireVsCodeApi = () => ({
   postMessage(data) {
+    console.log('[webview-preload] postMessage type:', data?.type);
     try {
       if (data?.type === 'webviewReady') {
         injectAssets(); // synchronous: fires before layoutLoaded arrives
@@ -83,5 +85,6 @@ window.acquireVsCodeApi = () => ({
 
 // Forward messages from React renderer → pixel-agents event system
 ipcRenderer.on('pa:in', (_event, message) => {
+  console.log('[webview-preload] pa:in received type:', message?.type);
   dispatchToPage(message);
 });
