@@ -29,7 +29,7 @@ claude config get api_key
 
 ```bash
 git clone <repo-url>
-cd agent-teams-guide
+cd multiAIAgentsClaude
 npm install
 
 # Dev mode (hot reload)
@@ -182,39 +182,39 @@ electron/prompts/
 ## Cấu trúc thư mục
 
 ```
-agent-teams-guide/
-  electron/                       # Electron backend (Node.js)
-    main.cjs                      # App entry, window creation
-    preload.cjs                   # IPC bridge (contextBridge)
-    webview-preload.cjs           # Preload cho pixel-agents webview
+/                                   # Root repo
+  electron/                         # Electron backend (Node.js)
+    main.cjs                        # App entry, window creation
+    preload.cjs                     # IPC bridge (contextBridge)
+    webview-preload.cjs             # Preload cho pixel-agents webview
     ipc/
-      mission.cjs                 # Mission lifecycle: launch, deploy, continue, stop, replan
-      history.cjs                 # History: load/save/delete + snapshot recovery
-      files.cjs                   # File picker, folder scan, skill folder bundler
-      system.cjs                  # System info, enable agent teams, open terminal
-      pixelAgents.cjs             # Virtual Office: save/load layout và seats
-    prompts/                      # Lead agent prompt templates (.md)
+      mission.cjs                   # Mission lifecycle: launch, deploy, continue, stop, replan
+      history.cjs                   # History: load/save/delete + snapshot recovery
+      files.cjs                     # File picker, folder scan, skill folder bundler
+      system.cjs                    # System info, enable agent teams, open terminal
+      pixelAgents.cjs               # Virtual Office: save/load layout và seats
+    prompts/                        # Lead agent prompt templates (.md)
 
-  src/                            # Frontend (React + Vite)
+  src/                              # Frontend (React + Vite)
     hooks/
-      useMission.js               # Core hook: mission state + tất cả actions
+      useMission.js                 # Core hook: mission state + tất cả actions
     components/office/
       bridge/
-        pixelAgentsProtocol.js    # Mission state → pixel-agents format translation
+        pixelAgentsProtocol.js      # Mission state → pixel-agents format translation
       hooks/
-        useAgentSync.js           # Sync agent status sang Virtual Office
+        useAgentSync.js             # Đồng bộ agent status sang Virtual Office
     pages/
-      MissionControlPage.jsx      # Mission launcher + dashboard + history
+      MissionControlPage.jsx        # Mission launcher + dashboard + history
     data/
-      planMarkdown.js             # buildAgentPrompt() — build full prompt từ plan
+      planMarkdown.js               # buildAgentPrompt() — build full prompt từ plan
 
   src/assets/pixel-agents-webview/  # Pixel-agents webview UI (bundled)
     assets/
-      default-layout-1.json       # Default office layout
+      default-layout-1.json         # Default office layout
 
   scripts/
-    build-patch.cjs               # Build + generate patch zip
-    build-pixel-agents.cjs        # Rebuild pixel-agents webview từ nguồn
+    build-patch.cjs                 # Build + generate patch zip
+    build-pixel-agents.cjs          # Rebuild pixel-agents webview từ nguồn
 ```
 
 ---
