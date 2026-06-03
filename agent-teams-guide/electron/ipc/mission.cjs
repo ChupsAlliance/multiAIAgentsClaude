@@ -563,6 +563,34 @@ function collectFiles(dir, base, out = new Set()) {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// buildMissionSummary — build completed/in-progress/pending/logs/files summary
+// Used in launch_mission (history context) and continue_mission (both paths)
+// ─────────────────────────────────────────────────────────────────
+function buildMissionSummary(state, logLimit = 30) {
+  const parts = [];
+  const tasks = state.tasks || [];
+  const done   = tasks.filter(t => t.status === 'completed')
+    .map(t => `- [DONE] ${t.title} (by ${t.assigned_agent || 'unknown'})`);
+  const inProg = tasks.filter(t => t.status === 'in_progress')
+    .map(t => `- [IN PROGRESS] ${t.title} (by ${t.assigned_agent || 'unknown'})`);
+  const pend   = tasks.filter(t => t.status === 'pending')
+    .map(t => `- [PENDING] ${t.title}`);
+  if (done.length)   parts.push(`Completed:\n${done.join('\n')}`);
+  if (inProg.length) parts.push(`In Progress:\n${inProg.join('\n')}`);
+  if (pend.length)   parts.push(`Pending:\n${pend.join('\n')}`);
+
+  const logs = (state.log || []).filter(l => l.log_type !== 'raw').slice(-logLimit)
+    .map(l => `[${l.agent}] ${(l.message || '').slice(0, 300)}`);
+  if (logs.length) parts.push(`Recent activity:\n${logs.join('\n')}`);
+
+  const files = (state.file_changes || []).slice(0, 50)
+    .map(f => `- ${f.path} (${f.action})`);
+  if (files.length) parts.push(`Files created/modified:\n${files.join('\n')}`);
+
+  return parts.join('\n\n');
+}
+
+// ─────────────────────────────────────────────────────────────────
 // startFileWatcher — agent_teams mode: poll tasks dir + project dir
 // mirrors watch_agent_teams_mission in Rust
 // ─────────────────────────────────────────────────────────────────
@@ -1779,25 +1807,7 @@ function readProcessStdout_deploy(proc, sendToWindow, isContMode) {
 
     try {
       const existingPaths = new Set(missionState.file_changes.map(f => f.path));
-      const foundFiles    = [];
-
-      function scanDir(dir, base) {
-        let entries;
-        try { entries = fs.readdirSync(dir); } catch (_) { return; }
-        for (const name of entries) {
-          if (['node_modules', '.git', '.claude', 'dist', 'build', 'target'].includes(name) || name.startsWith('.')) continue;
-          const full = path.join(dir, name);
-          let stat;
-          try { stat = fs.statSync(full); } catch (_) { continue; }
-          if (stat.isDirectory()) {
-            scanDir(full, base);
-          } else {
-            const rel = path.relative(base, full).replace(/\\/g, '/');
-            foundFiles.push(rel);
-          }
-        }
-      }
-      scanDir(projPath, projPath);
+      const foundFiles    = collectFiles(projPath, projPath);
 
       for (const fpath of foundFiles) {
         if (!existingPaths.has(fpath)) {
@@ -1929,30 +1939,11 @@ module.exports = function registerMission(getMainWindow) {
     // Build "previous work" summary if continuing from history
     let previousWorkSection = '';
     if (historyState) {
-      const parts = [];
-      const hTasks = historyState.tasks || [];
-      const completed  = hTasks.filter(t => t.status === 'completed')
-        .map(t => `- [DONE] ${t.title} (by ${t.assigned_agent || 'unknown'})`);
-      const inProgress = hTasks.filter(t => t.status === 'in_progress')
-        .map(t => `- [IN PROGRESS] ${t.title} (by ${t.assigned_agent || 'unknown'})`);
-      const pending    = hTasks.filter(t => t.status === 'pending')
-        .map(t => `- [PENDING] ${t.title}`);
-      if (completed.length)  parts.push(`Completed tasks:\n${completed.join('\n')}`);
-      if (inProgress.length) parts.push(`In Progress:\n${inProgress.join('\n')}`);
-      if (pending.length)    parts.push(`Pending:\n${pending.join('\n')}`);
-
-      const hLogs = (historyState.log || []).filter(l => l.log_type !== 'raw').slice(-20)
-        .map(l => `[${l.agent}] ${(l.message || '').slice(0, 300)}`);
-      if (hLogs.length) parts.push(`Recent activity:\n${hLogs.join('\n')}`);
-
-      const hFiles = (historyState.file_changes || []).slice(0, 50)
-        .map(f => `- ${f.path} (${f.action})`);
-      if (hFiles.length) parts.push(`Files created/modified:\n${hFiles.join('\n')}`);
-
-      if (parts.length) {
+      const summary = buildMissionSummary(historyState);
+      if (summary) {
         previousWorkSection = '\n\n## PREVIOUS WORK (from earlier mission)\n' +
           'This is a continuation of a previous mission. Below is what was accomplished:\n\n' +
-          parts.join('\n\n') +
+          summary +
           '\n\nTake this context into account when planning. Reuse existing work where applicable. ' +
           'Focus on what the NEW requirement asks — do NOT redo completed work unless the user explicitly wants changes.\n';
         // Safety cap — prevents 32MB API limit errors from oversized history context
@@ -2202,28 +2193,7 @@ module.exports = function registerMission(getMainWindow) {
       const leadEntry  = (historyState.agents || []).find(a => a.name === 'Lead') || {};
       leadModel        = (leadEntry.model || 'sonnet').toString();
 
-      // Build rich summary from history snapshot (tasks + logs + files)
-      const parts = [];
-      const hTasks = historyState.tasks || [];
-      const completed  = hTasks.filter(t => t.status === 'completed')
-        .map(t => `- [DONE] ${t.title} (by ${t.assigned_agent || 'unknown'})`);
-      const inProgress = hTasks.filter(t => t.status === 'in_progress')
-        .map(t => `- [IN PROGRESS] ${t.title} (by ${t.assigned_agent || 'unknown'})`);
-      const pending    = hTasks.filter(t => t.status === 'pending')
-        .map(t => `- [PENDING] ${t.title}`);
-      if (completed.length)  parts.push(`Completed:\n${completed.join('\n')}`);
-      if (inProgress.length) parts.push(`In Progress:\n${inProgress.join('\n')}`);
-      if (pending.length)    parts.push(`Pending:\n${pending.join('\n')}`);
-
-      const hLogs = (historyState.log || []).filter(l => l.log_type !== 'raw').slice(-30)
-        .map(l => `[${l.agent}] ${(l.message || '').slice(0, 300)}`);
-      if (hLogs.length) parts.push(`Recent activity:\n${hLogs.join('\n')}`);
-
-      const hFiles = (historyState.file_changes || []).slice(0, 50)
-        .map(f => `- ${f.path} (${f.action})`);
-      if (hFiles.length) parts.push(`Files created/modified:\n${hFiles.join('\n')}`);
-
-      completedSummary = parts.join('\n\n');
+      completedSummary = buildMissionSummary(historyState);
       // Safety cap — prevents 32MB API limit errors from oversized history context
       if (completedSummary.length > 40_000) {
         completedSummary = completedSummary.slice(0, 40_000) + '\n... (context truncated to fit API limits)';
@@ -2280,30 +2250,7 @@ module.exports = function registerMission(getMainWindow) {
       leadModel   = (missionState.agents.find(a => a.name === 'Lead') || {}).model || 'sonnet';
       projectPath = missionState.project_path || '';
 
-      const completed   = missionState.tasks.filter(t => t.status === 'completed')
-        .map(t => `- [DONE] ${t.title} (by ${t.assigned_agent || 'unknown'})`);
-      const inProgress  = missionState.tasks.filter(t => t.status === 'in_progress')
-        .map(t => `- [IN PROGRESS] ${t.title} (by ${t.assigned_agent || 'unknown'})`);
-      const pending     = missionState.tasks.filter(t => t.status === 'pending')
-        .map(t => `- [PENDING] ${t.title}`);
-
-      const parts = [];
-      if (completed.length)  parts.push(`Completed:\n${completed.join('\n')}`);
-      if (inProgress.length) parts.push(`In Progress:\n${inProgress.join('\n')}`);
-      if (pending.length)    parts.push(`Pending:\n${pending.join('\n')}`);
-
-      // Recent logs (last 30, exclude "raw" type)
-      const recentLogs = missionState.log
-        .filter(l => l.log_type !== 'raw')
-        .slice(-30)
-        .map(l => `[${l.agent}] ${l.message}`);
-      if (recentLogs.length) parts.push(`Recent activity:\n${recentLogs.join('\n')}`);
-
-      // File changes
-      const fileChanges = missionState.file_changes.map(f => `- ${f.path} (${f.action})`);
-      if (fileChanges.length) parts.push(`Files created/modified:\n${fileChanges.join('\n')}`);
-
-      completedSummary = parts.join('\n\n');
+      completedSummary = buildMissionSummary(missionState);
 
       // Log intervention
       const ts = now();
@@ -2378,7 +2325,7 @@ module.exports = function registerMission(getMainWindow) {
     startAutosave();
 
     // Start file watcher if agent_teams mode (detect file changes from subagents)
-    if (useAgentTeams) {
+    if (execMode === 'agent_teams') {
       startFileWatcher(projectPath, sendToWindow);
     }
 

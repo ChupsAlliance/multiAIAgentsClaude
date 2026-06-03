@@ -10,6 +10,73 @@ Format dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.5.0] — 2026-06-03
+
+### Đã sửa — Bugs & Cleanup
+- **Fix bug nghiêm trọng**: `useAgentTeams` undefined trong `continue_mission` — file watcher không bao giờ start ở Agent Teams mode khi dùng Continue. Fix: dùng `execMode === 'agent_teams'`
+- **Xóa debug code khỏi production**: Bỏ `openDevTools()` trên main window và webview, xóa toàn bộ `[DEBUG]` console logs trong `main.cjs`
+
+### Refactor
+- **`buildMissionSummary()`**: Extract helper function thay thế 3 đoạn code trùng lặp (trong `launch_mission`, `continue_mission` fork path, `continue_mission` normal path)
+- **`collectFiles()` tái sử dụng**: Thay inline `scanDir` function trong `readProcessStdout_deploy` bằng `collectFiles` có sẵn
+
+### Tài liệu
+- Cập nhật toàn bộ CHANGELOG, README, USER_GUIDE theo version
+- Tạo git tags cho tất cả các version milestone (v0.1.0 – v0.5.0)
+
+---
+
+## [0.4.0] — 2026-05-30
+
+### Thêm mới — Virtual Office (Pixel Agents)
+- **Pixel Agents Webview**: Thay thế hoàn toàn CSS canvas bằng `<webview>` nhúng pixel-art animation — agent characters di chuyển real-time trên office floor theo mission state
+- **`pixelAgentsProtocol.js`**: Translation layer giữa `missionState` (Electron) và định dạng native của pixel-agents; có test coverage
+- **`useAgentSync` hook**: Bridge state từ mission events sang pixel-agents protocol — agent di chuyển, ngồi vào desk, nói chuyện bubble khi tool đang chạy
+- **TileEditor**: Chỉnh sửa office layout tương tác — thêm/bớt/đổi tile, Undo/Redo, export JSON
+- **IPC handlers mới**: `pa:save-layout`, `pa:save-seats`, `load_office_layout` (pixel-agents native format)
+- **Webview preload**: Mock `acquireVsCodeApi` + inject asset paths để pixel-agents webview hoạt động trong Electron sandbox
+- **Default layout**: Bundle sẵn `default-layout-1.json` làm fallback khi chưa có layout lưu
+
+### Đã sửa
+- Fix pixel-agents không render agent characters — gửi đúng native layout format
+- Fix webview reload khi mission start để `webviewReady` event re-fire
+- Fix webview-preload không hoạt động trong sandbox mode
+- Fix global CSP hook làm vỡ main renderer
+- Fix canvas blank — dynamic tileSize và correct ResizeObserver
+- Disable `AGENT_TEAMS` env trong planning phase (Lead phải output JSON plan thay vì spawn agents ngay)
+- Enable `AGENT_TEAMS` trong deploy/continue phases để Lead có Agent tool
+
+### Kỹ thuật
+- Pixel-agents webview-ui dist bundled tại `src/assets/pixel-agents-webview/`
+- Build script: `node scripts/build-pixel-agents.cjs` để rebuild webview từ nguồn
+- Vitest test runner thay thế custom test runner; 48 tests (4 test files)
+
+---
+
+## [0.3.0] — 2026-04-17
+
+### Thêm mới — Deep Plan Mode
+- **Deep Plan** (chế độ permission thứ 4): Thêm Phase 0 brainstorming trước khi lên plan — Lead chạy superpowers brainstorming skill, tự động đặt câu hỏi làm rõ yêu cầu trước khi ra kế hoạch chi tiết
+- **`read_superpowers_skill` IPC handler**: Tự động tìm và đọc SKILL.md từ thư mục plugins cache, hỗ trợ semver sort để lấy version mới nhất
+- **Phase 0 self-contained**: Phase 0 block Phase 1 hoàn toàn cho đến khi Q&A xong; deep_plan mode luôn bắt buộc Q&A
+
+### Thêm mới — Prompt Preview Verbatim
+- **PromptPreview verbatim path**: Khi user đã xem preview và chỉnh sửa prompt, `deploy_mission` dùng đúng prompt đó (verbatim) thay vì rebuild từ task list
+- **`buildAgentPrompt()`**: Helper function tại `src/data/planMarkdown.js` build full agent prompt từ template, task list, skill file, và custom instructions
+- **agentPrompts map**: Frontend truyền `agentPrompts` riêng qua IPC để backend không cần rebuild
+
+### Thêm mới — Crash-safe Persistence
+- **Auto-save snapshot**: Mission state được lưu mỗi 10 giây vào `~/.claude/agent-teams-snapshots/`
+- **Crash recovery**: `get_incomplete_missions` scan snapshots tìm missions chưa hoàn thành (< 7 ngày tuổi)
+- **Resizable agent sidebar**: Panel tỷ lệ được lưu vào localStorage
+
+### Đã sửa
+- Fix stale closure trong PlanReview agent sync useEffect
+- Fix Q&A resume — file watcher restart sau khi answer question trong agent_teams mode
+- Fix Phase 0 không block Phase 1: planning process bị kill ngay khi plan JSON được phát hiện
+
+---
+
 ## [0.2.0] — 2026-03-20
 
 ### Added — Agent Question Protocol

@@ -9,8 +9,11 @@
 6. [Agent Teams Mode (Thử nghiệm)](#agent-teams-mode-thử-nghiệm)
 7. [Quy trình Mission chi tiết](#quy-trình-mission-chi-tiết)
 8. [Tính năng nâng cao](#tính-năng-nâng-cao)
-9. [Mẹo & Thủ thuật](#mẹo--thủ-thuật)
-10. [Khắc phục sự cố](#khắc-phục-sự-cố)
+9. [Permission Modes — 4 chế độ quyền hạn](#permission-modes--4-chế-độ-quyền-hạn)
+10. [Deep Plan Mode](#deep-plan-mode)
+11. [Virtual Office (Pixel Agents)](#virtual-office-pixel-agents)
+12. [Mẹo & Thủ thuật](#mẹo--thủ-thuật)
+13. [Khắc phục sự cố](#khắc-phục-sự-cố)
 
 ---
 
@@ -459,6 +462,140 @@ Bạn có thể tiếp tục công việc từ bất kỳ mission cũ nào:
 - Trong History, mission fork hiện badge: `↳ từ: {tên mission gốc}`
 - Context từ mission gốc (tasks, logs, files) được truyền vào prompt mới
 - Model của Lead agent được kế thừa từ mission gốc
+
+---
+
+## Permission Modes — 4 chế độ quyền hạn
+
+Chọn ở Launcher → **Permission Mode** trước khi launch mission.
+
+### Auto-pilot (mặc định)
+Lead agent tự quyết mọi thứ — không hỏi, không dừng lại. Phù hợp với đa số task có yêu cầu rõ ràng.
+
+### Interactive
+Lead agent có thể **dừng lại và hỏi bạn** khi thiếu thông tin quan trọng. Sử dụng giao thức:
+```
+<<<QUESTION>>>
+{"question": "...", "options": [...]}
+<<<END_QUESTION>>>
+<<<QUESTIONS_END>>>
+```
+Khi có câu hỏi, một **QuestionCard** xuất hiện trong dashboard — chọn option hoặc gõ free text → Submit. Lead tiếp tục từ chỗ đã dừng.
+
+**Khi nào dùng:** Yêu cầu có nhiều cách tiếp cận khác nhau, hoặc bạn muốn Lead xác nhận trước khi đưa ra quyết định quan trọng (chọn tech stack, architecture, etc.).
+
+### Plan Only
+Lead chỉ lên kế hoạch và dừng lại — không deploy agents. Dùng để xem plan trước khi quyết định.
+
+### Deep Plan
+Xem phần [Deep Plan Mode](#deep-plan-mode) bên dưới.
+
+---
+
+## Deep Plan Mode
+
+*(Có từ v0.3.0)*
+
+Deep Plan là chế độ permission mode thứ 4, thêm **Phase 0 brainstorming** trước khi lên kế hoạch chính thức.
+
+### Cách hoạt động
+
+```
+Phase 0: Brainstorming (Deep Plan)
+  └─ Lead chạy superpowers brainstorming skill
+  └─ Lead đặt câu hỏi làm rõ yêu cầu
+  └─ Bạn trả lời → Lead tổng hợp insights
+  └─ [Phase 0 hoàn thành]
+         ↓
+Phase 1: Planning (bình thường)
+  └─ Lead lên kế hoạch chi tiết dựa trên answers từ Phase 0
+  └─ Output: JSON plan (agents + tasks)
+         ↓
+Phase 2: Review → Deploy (bình thường)
+```
+
+Phase 0 là **bắt buộc** và **tự hoàn thành** — Lead không chuyển sang Phase 1 cho đến khi Q&A hoàn tất.
+
+### Yêu cầu
+
+- Cần có **superpowers plugin** cài trong Claude CLI:
+  ```bash
+  # Kiểm tra
+  ls ~/.claude/plugins/cache/claude-plugins-official/superpowers/
+  ```
+  Nếu chưa có → cài từ [claude-plugins-official](https://github.com/anthropics/claude-plugins-official)
+
+### Khi nào nên dùng Deep Plan
+
+| Tình huống | Dùng Deep Plan? |
+|-----------|----------------|
+| Yêu cầu rõ ràng, cụ thể | ❌ Không cần (dùng Auto-pilot) |
+| Yêu cầu có nhiều cách tiếp cận, chưa biết tech stack | ✅ Nên dùng |
+| Project phức tạp, nhiều components liên quan | ✅ Nên dùng |
+| Muốn AI hỏi để hiểu ý định sâu hơn | ✅ Nên dùng |
+
+### Ví dụ
+
+**Yêu cầu**: "Xây dựng hệ thống quản lý đơn hàng"
+
+**Không có Deep Plan** → Lead sẽ tự đưa ra các quyết định (tech stack, database, auth...).
+
+**Có Deep Plan** → Lead hỏi trước:
+- "Backend framework nào? Node.js/Django/Laravel?"
+- "Database quan hệ hay NoSQL?"
+- "Cần authentication không? Nếu có, dùng JWT hay session?"
+- "Có tích hợp payment gateway không?"
+
+Sau khi bạn trả lời, plan sẽ chính xác và phù hợp với context của bạn hơn.
+
+---
+
+## Virtual Office (Pixel Agents)
+
+*(Có từ v0.4.0)*
+
+Virtual Office là panel hiển thị trong **MissionDashboard** khi mission đang chạy. Các agent characters pixel-art di chuyển, ngồi vào desk, nói chuyện qua speech bubble theo real-time.
+
+### Giao diện
+
+```
+┌─────────────────────────────────────────────┐
+│  [Activity Log]  [Virtual Office]  [Tasks]   │
+├─────────────────────────────────────────────┤
+│                                             │
+│   🖥️  [Lead]──────────────[Backend]  🖥️    │
+│   💬 "Planning..."       💬 "Writing..."    │
+│                                             │
+│   🖥️  [Frontend]                            │
+│   💬 "Building..."                          │
+│                                             │
+│                          [⚙️ Edit Layout]   │
+└─────────────────────────────────────────────┘
+```
+
+### Đọc trạng thái agents
+
+| Hiển thị | Ý nghĩa |
+|----------|---------|
+| Character đang đi | Agent đang di chuyển đến desk |
+| Character ngồi tại desk | Agent đang làm việc |
+| Speech bubble xuất hiện | Agent đang dùng tool (Read, Write, Bash...) |
+| Character đứng yên | Agent Idle hoặc Done |
+
+### Chỉnh sửa layout với TileEditor
+
+1. Click nút **⚙️** (góc dưới phải Virtual Office)
+2. TileEditor mở ra với grid hiển thị layout hiện tại
+3. **Thêm tile**: Click loại tile muốn thêm (Desk, Plant, Bookshelf...) → Click vào ô trống
+4. **Xóa tile**: Click tile → Delete hoặc chọn "Empty"
+5. **Undo/Redo**: Ctrl+Z / Ctrl+Y
+6. **Lưu**: Click "Save Layout" — layout được lưu vào userData, tự dùng cho các mission sau
+
+### Lưu ý kỹ thuật
+
+- Agent characters được assign vào desk slots theo thứ tự spawn
+- Nếu nhiều agents hơn số desk, agents thừa sẽ đứng ở floor
+- Layout mặc định (`default-layout-1.json`) được dùng nếu chưa có layout tùy chỉnh
 
 ---
 
