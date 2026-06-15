@@ -31,6 +31,8 @@ export const changelog = [
         text: 'Không drag được task vào agent section rỗng — thêm useDroppable vào AgentSection và unassigned pool' },
       { type: 'improved', badge: 'UX',
         text: 'Visual feedback khi drag: agent section glow xanh, unassigned pool glow vàng khi hover' },
+      { type: 'fixed', badge: 'Parser',
+        text: '"No plan structure found" sau khi AI trả lời câu hỏi — JSON parser giờ tự động sanitize literal newlines bên trong JSON string values (AI đôi khi output newline thật thay vì \\n escape)' },
     ],
   },
   {
