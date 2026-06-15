@@ -870,6 +870,36 @@ function upsertFileChange(fc) {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// sanitizePlanJson — fix literal newlines/tabs inside JSON strings
+// AI sometimes outputs real \n characters instead of \\n escape sequences
+// which makes JSON.parse throw. Walk char-by-char and escape them.
+// ─────────────────────────────────────────────────────────────────
+function sanitizePlanJson(text) {
+  let result = '';
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (escaped) { result += ch; escaped = false; continue; }
+    if (ch === '\\') { escaped = true; result += ch; continue; }
+    if (ch === '"') { inString = !inString; result += ch; continue; }
+    if (inString) {
+      if (ch === '\n') { result += '\\n'; continue; }
+      if (ch === '\r') { result += '\\r'; continue; }
+      if (ch === '\t') { result += '\\t'; continue; }
+    }
+    result += ch;
+  }
+  return result;
+}
+
+function tryJsonParse(text) {
+  try { return JSON.parse(text); } catch (_) {}
+  try { return JSON.parse(sanitizePlanJson(text)); } catch (_) {}
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────────────
 // tryParsePlanFromBuffer — attempt to extract plan JSON from text
 // Returns { agents, tasks } or null
 // ─────────────────────────────────────────────────────────────────
@@ -882,10 +912,8 @@ function tryParsePlanFromBuffer(buffer) {
     const js = planText.indexOf('{');
     const je = planText.lastIndexOf('}');
     if (js >= 0 && je > js) {
-      try {
-        const parsed = JSON.parse(planText.slice(js, je + 1));
-        if (parsed.agents && parsed.tasks) return parsed;
-      } catch (_) {}
+      const parsed = tryJsonParse(planText.slice(js, je + 1));
+      if (parsed && parsed.agents && parsed.tasks) return parsed;
     }
   }
 
@@ -904,13 +932,11 @@ function tryParsePlanFromBuffer(buffer) {
   const candidate = buffer.slice(startIdx, endIdx + 1);
   if (!candidate.includes('"agents"') || !candidate.includes('"tasks"')) return null;
 
-  try {
-    const parsed = JSON.parse(candidate);
-    if (Array.isArray(parsed.agents) && parsed.agents.length > 0 &&
-        Array.isArray(parsed.tasks)  && parsed.tasks.length  > 0) {
-      return parsed;
-    }
-  } catch (_) {}
+  const parsed = tryJsonParse(candidate);
+  if (parsed && Array.isArray(parsed.agents) && parsed.agents.length > 0 &&
+      Array.isArray(parsed.tasks) && parsed.tasks.length > 0) {
+    return parsed;
+  }
 
   return null;
 }
