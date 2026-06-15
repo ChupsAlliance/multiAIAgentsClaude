@@ -346,8 +346,8 @@ export function useMission() {
 
         // ── Plan ready (one-time — apply immediately) ──
         listen('mission:plan-ready', (e) => {
-          const { agents, tasks } = e.payload
-          setPlanReady({ agents, tasks })
+          const { agents, tasks, mission_context } = e.payload
+          setPlanReady({ agents, tasks, mission_context: mission_context || null })
 
           setMissionState(prev => {
             if (!prev) return prev

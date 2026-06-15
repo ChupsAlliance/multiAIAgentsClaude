@@ -57,7 +57,9 @@ const PERMISSION_MODES = [
 export function MissionLauncher({ onLaunch }) {
   const [requirement, setRequirement] = useState('')
   const [projectPath, setProjectPath] = useState('')
-  const [teamHint, setTeamHint] = useState(3)
+  const [teamHint, setTeamHint] = useState(4)
+  const [teamHintInput, setTeamHintInput] = useState('4') // raw string for the number input
+  const [teamHintAuto, setTeamHintAuto] = useState(false)
   const [model, setModel] = useState('sonnet')
   const [executionMode, setExecutionMode] = useState('standard')
   const [permissionMode, setPermissionMode] = useState(() =>
@@ -269,15 +271,19 @@ export function MissionLauncher({ onLaunch }) {
 
   const [previewPrompt, setPreviewPrompt] = useState('')
 
+  const teamHintStr = teamHintAuto
+    ? 'Choose the optimal number of agents based on task complexity (typically 2-3 for simple tasks, 4-6 for medium, up to 8 for very complex projects).'
+    : `Use ${teamHint} teammates for this task`
+
   useEffect(() => {
     if (!requirement.trim()) { setPreviewPrompt(''); return }
     buildMissionPrompt(requirement, {
       projectPath: projectPath || '(chưa chọn)',
-      teamHint: `Use ${teamHint} teammates for this task`,
+      teamHint: teamHintStr,
       references,
       permissionMode,
     }).then(setPreviewPrompt).catch(() => setPreviewPrompt(''))
-  }, [requirement, projectPath, teamHint, references, permissionMode])
+  }, [requirement, projectPath, teamHint, teamHintAuto, teamHintStr, references, permissionMode])
 
   useEffect(() => {
     invoke('load_history').then(setHistory).catch(() => {})
@@ -297,7 +303,7 @@ export function MissionLauncher({ onLaunch }) {
     try {
       const prompt = await buildMissionPrompt(requirement, {
         projectPath,
-        teamHint: `Use ${teamHint} teammates for this task`,
+        teamHint: teamHintStr,
         references,
         permissionMode,
       })
@@ -307,7 +313,7 @@ export function MissionLauncher({ onLaunch }) {
         entry: {
           description: requirement,
           project_path: projectPath,
-          team_size: teamHint,
+          team_size: teamHintAuto ? 'auto' : teamHint,
           timestamp: Date.now(),
         }
       }).catch(() => {})
@@ -329,7 +335,14 @@ export function MissionLauncher({ onLaunch }) {
   const handleReuse = (entry) => {
     setRequirement(entry.description || '')
     setProjectPath(entry.project_path || '')
-    setTeamHint(entry.team_size || 3)
+    if (entry.team_size === 'auto') {
+      setTeamHintAuto(true)
+    } else {
+      setTeamHintAuto(false)
+      const n = entry.team_size || 4
+      setTeamHint(n)
+      setTeamHintInput(String(n))
+    }
   }
 
   return (
@@ -648,22 +661,61 @@ export function MissionLauncher({ onLaunch }) {
 
         {/* Team size */}
         <div className="space-y-1.5">
-          <label className="text-xs font-mono text-vs-muted uppercase tracking-wider">
-            Team Size: {teamHint} agents
-          </label>
-          <input
-            type="range"
-            min={2}
-            max={6}
-            value={teamHint}
-            onChange={(e) => setTeamHint(Number(e.target.value))}
-            className="w-full accent-vs-accent"
-          />
-          <div className="flex justify-between text-[10px] text-vs-muted font-mono">
-            <span>2 (nhỏ)</span>
-            <span>4 (tiêu chuẩn)</span>
-            <span>6 (lớn)</span>
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-mono text-vs-muted uppercase tracking-wider">
+              Team Size
+            </label>
+            {/* Auto toggle */}
+            <button
+              onClick={() => setTeamHintAuto(v => !v)}
+              className="flex items-center gap-1.5 text-[10px] font-mono text-vs-muted hover:text-vs-text transition-colors"
+            >
+              <div className={`relative w-7 h-3.5 rounded-full transition-colors ${teamHintAuto ? 'bg-vs-accent' : 'bg-vs-border'}`}>
+                <div className={`absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white transition-transform ${teamHintAuto ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+              </div>
+              <span className={teamHintAuto ? 'text-vs-accent' : ''}>Để Lead quyết định</span>
+            </button>
           </div>
+
+          {!teamHintAuto ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={1}
+                max={12}
+                value={teamHintInput}
+                onChange={(e) => {
+                  setTeamHintInput(e.target.value)
+                  const v = parseInt(e.target.value)
+                  if (!isNaN(v) && v >= 1) setTeamHint(Math.min(v, 12))
+                }}
+                onBlur={() => setTeamHintInput(String(teamHint))}
+                className="w-14 bg-vs-panel border border-vs-border rounded px-2 py-1
+                           text-xs font-mono text-vs-text text-center
+                           focus:border-vs-accent focus:outline-none"
+              />
+              <span className="text-[11px] text-vs-muted font-mono">agents</span>
+              <input
+                type="range"
+                min={1}
+                max={12}
+                value={teamHint}
+                onChange={(e) => {
+                  const v = Number(e.target.value)
+                  setTeamHint(v)
+                  setTeamHintInput(String(v))
+                }}
+                className="flex-1 accent-vs-accent"
+              />
+              <span className="text-[10px] text-vs-muted font-mono w-8 text-right">{teamHint}</span>
+            </div>
+          ) : (
+            <div className="px-2.5 py-2 rounded bg-vs-accent/8 border border-vs-accent/20">
+              <p className="text-[10px] text-vs-accent/80 font-mono leading-relaxed">
+                Lead sẽ tự chọn số lượng agents tối ưu dựa trên độ phức tạp của task
+              </p>
+            </div>
+          )}
         </div>
 
         {/* System Prompt Preview */}
@@ -735,7 +787,7 @@ export function MissionLauncher({ onLaunch }) {
                 >
                   <p className="text-xs text-vs-text truncate">{entry.description}</p>
                   <p className="text-[10px] text-vs-muted font-mono truncate">
-                    {entry.project_path} · {entry.team_size || 3} agents
+                    {entry.project_path} · {entry.team_size === 'auto' ? 'Lead quyết định agents' : `${entry.team_size || 3} agents`}
                   </p>
                 </button>
                 <button

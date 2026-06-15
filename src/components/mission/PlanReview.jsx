@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { DndContext, closestCenter, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
+import { DndContext, closestCenter, DragOverlay, PointerSensor, useSensor, useSensors, useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
@@ -199,6 +199,11 @@ function AgentSection({ agent, tasks, onModelChange, onCustomPromptChange, onRem
 
   const taskIds = useMemo(() => tasks.map(t => t.id), [tasks])
 
+  const { setNodeRef: setDropRef, isOver: isOverContainer } = useDroppable({
+    id: agent.name,
+    data: { type: 'agent-container', agentName: agent.name },
+  })
+
   return (
     <div className="border border-vs-border rounded-lg overflow-hidden bg-vs-panel/50" data-agent={agent.name}>
       {/* Agent header */}
@@ -274,7 +279,12 @@ function AgentSection({ agent, tasks, onModelChange, onCustomPromptChange, onRem
       {expanded && (
         <div className="border-t border-vs-border/50">
           {/* Droppable task area */}
-          <div className="px-3 py-2 min-h-[40px]">
+          <div
+            ref={setDropRef}
+            className={`px-3 py-2 min-h-[40px] rounded transition-colors ${
+              isOverContainer ? 'bg-vs-accent/10 ring-1 ring-inset ring-vs-accent/25' : ''
+            }`}
+          >
             <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
               {tasks.length === 0 ? (
                 <p className="text-[10px] text-vs-muted/50 font-mono py-2 text-center italic">
@@ -689,6 +699,8 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
     tasks.map((t, i) => ({
       id: t.id || `task-${i}`,
       title: t.title,
+      why: t.why || '',
+      depends_on: Array.isArray(t.depends_on) ? t.depends_on : [],
       detail: t.detail || '',
       priority: t.priority || 'medium',
       assigned_agent: t.agent || t.assigned_agent,
@@ -699,6 +711,8 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
   const [activeId, setActiveId] = useState(null)
   const [showBulkSkill, setShowBulkSkill] = useState(false)
   const [showTaskPanel, setShowTaskPanel] = useState(true)
+  const [taskPanelHeight, setTaskPanelHeight] = useState(240)
+  const [taskPanelCollapsed, setTaskPanelCollapsed] = useState(false)
   const [editingDetailId, setEditingDetailId] = useState(null)
   // Track if manager changed anything (for re-plan button)
   const [hasChanges, setHasChanges] = useState(false)
@@ -720,6 +734,8 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
     setLocalTasks(tasks.map((t, i) => ({
       id: t.id || `task-${i}`,
       title: t.title,
+      why: t.why || '',
+      depends_on: Array.isArray(t.depends_on) ? t.depends_on : [],
       detail: t.detail || '',
       priority: t.priority || 'medium',
       assigned_agent: t.agent || t.assigned_agent,
@@ -819,7 +835,29 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
   const handleViewDetail = useCallback((taskId) => {
     setEditingDetailId(prev => prev === taskId ? null : taskId)
     setShowTaskPanel(true)
+    setTaskPanelCollapsed(false)
   }, [])
+
+  const handleResizeStart = useCallback((e) => {
+    e.preventDefault()
+    const startY = e.clientY
+    const startH = taskPanelHeight
+    const onMove = (ev) => {
+      const newH = startH + ev.clientY - startY
+      if (newH < 40) {
+        setTaskPanelCollapsed(true)
+      } else {
+        setTaskPanelCollapsed(false)
+        setTaskPanelHeight(Math.min(520, Math.max(80, newH)))
+      }
+    }
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [taskPanelHeight])
 
   // ── Drag and Drop ──
   const handleDragStart = (event) => {
@@ -834,16 +872,18 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
     const activeTask = localTasks.find(t => t.id === active.id)
     if (!activeTask) return
 
-    // Determine target: over could be a task (inherit its agent) or an agent container
+    // Determine target: over could be a task (inherit its agent) or a droppable container
     let targetAgent = null
     const overTask = localTasks.find(t => t.id === over.id)
     if (overTask) {
+      // Dropped over another task — inherit that task's agent
       targetAgent = overTask.assigned_agent
     } else if (over.id === '__unassigned__') {
       targetAgent = null
     } else {
-      // Dropped on agent section by name
-      targetAgent = over.id
+      // Check if dropped on an agent container (useDroppable id = agent.name)
+      const overAgent = localAgents.find(a => a.name === over.id)
+      if (overAgent) targetAgent = overAgent.name
     }
 
     if (activeTask.assigned_agent !== targetAgent) {
@@ -892,6 +932,12 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
     if (!onReplan) return
     onReplan(localAgents, localTasks)
   }
+
+  // ── Droppable: unassigned pool ──
+  const { setNodeRef: setUnassignedRef, isOver: isOverUnassigned } = useDroppable({
+    id: '__unassigned__',
+    data: { type: 'unassigned-container' },
+  })
 
   // ── Derived ──
   const unassignedTasks = localTasks.filter(t => !t.assigned_agent)
@@ -998,7 +1044,7 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
 
       {/* ──────── TASK OVERVIEW PANEL ──────── */}
       {showTaskPanel && (
-        <div className="border-b border-vs-border bg-vs-bg/60">
+        <div className="border-b border-vs-border bg-vs-bg/60 flex flex-col">
           <div className="px-5 py-3">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-xs font-semibold text-white flex items-center gap-1.5">
@@ -1011,25 +1057,36 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
                   </span>
                 )}
               </h3>
-              {/* Re-plan button */}
-              {hasChanges && onReplan && (
+              <div className="flex items-center gap-1.5">
+                {/* Re-plan button */}
+                {hasChanges && onReplan && (
+                  <button
+                    onClick={handleReplan}
+                    disabled={isReplanning}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-colors ${
+                      isReplanning
+                        ? 'bg-orange-500/10 border border-orange-500/30 text-orange-300 cursor-wait'
+                        : 'bg-orange-500/20 border border-orange-500/40 text-orange-400 hover:bg-orange-500/30'
+                    }`}
+                    title="Gửi thay đổi cho Lead review lại plan (incremental update)"
+                  >
+                    <RefreshCw size={11} className={isReplanning ? 'animate-spin' : ''} />
+                    {isReplanning ? 'Đang re-plan...' : 'Re-plan'}
+                  </button>
+                )}
+                {/* Collapse button */}
                 <button
-                  onClick={handleReplan}
-                  disabled={isReplanning}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-colors ${
-                    isReplanning
-                      ? 'bg-orange-500/10 border border-orange-500/30 text-orange-300 cursor-wait'
-                      : 'bg-orange-500/20 border border-orange-500/40 text-orange-400 hover:bg-orange-500/30'
-                  }`}
-                  title="Gửi thay đổi cho Lead review lại plan (incremental update)"
+                  onClick={() => setTaskPanelCollapsed(prev => !prev)}
+                  className="p-1 rounded text-vs-muted hover:text-white hover:bg-white/5 transition-colors"
+                  title={taskPanelCollapsed ? 'Mở rộng' : 'Thu gọn'}
                 >
-                  <RefreshCw size={11} className={isReplanning ? 'animate-spin' : ''} />
-                  {isReplanning ? 'Đang re-plan...' : 'Re-plan'}
+                  {taskPanelCollapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
                 </button>
-              )}
+              </div>
             </div>
 
-            <div className="space-y-1.5 max-h-[280px] overflow-y-auto scrollbar-thin pr-1">
+            {!taskPanelCollapsed && (
+            <div className="space-y-1.5 overflow-y-auto scrollbar-thin pr-1" style={{ maxHeight: taskPanelHeight }}>
               {localTasks.map((task, idx) => {
                 const agent = localAgents.find(a => a.name === task.assigned_agent)
                 const pri = PRIORITIES.find(p => p.id === (task.priority || 'medium'))
@@ -1071,6 +1128,24 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
                     {/* Detail editor (expanded) */}
                     {isEditing && (
                       <div className="px-3 pb-3 border-t border-vs-border/30">
+                        {/* Business rationale */}
+                        {task.why && (
+                          <div className="mt-2 px-2.5 py-1.5 rounded-md bg-vs-accent/8 border border-vs-accent/20">
+                            <div className="text-[9px] text-vs-accent font-mono uppercase tracking-wider mb-0.5">Mục tiêu nghiệp vụ</div>
+                            <div className="text-[11px] text-vs-text/80 leading-relaxed">{task.why}</div>
+                          </div>
+                        )}
+                        {/* Dependencies */}
+                        {task.depends_on?.length > 0 && (
+                          <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[9px] text-vs-muted font-mono">Phụ thuộc:</span>
+                            {task.depends_on.map((dep, i) => (
+                              <span key={i} className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-vs-border/40 text-vs-muted">
+                                {dep}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                         <div className="mt-2">
                           <label className="text-[9px] text-vs-muted font-mono uppercase tracking-wider block mb-1">
                             Chi tiết implementation (tech stack, thư viện, files, criteria)
@@ -1156,6 +1231,18 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
                 <Plus size={10} /> Thêm task mới
               </button>
             </div>
+            )}
+          </div>
+          {/* Resize handle — always visible; drag down from collapsed state to re-expand */}
+          <div
+            className={`cursor-row-resize flex items-center justify-center shrink-0 select-none group transition-colors ${
+              taskPanelCollapsed ? 'h-2.5 hover:bg-vs-accent/10' : 'h-2'
+            }`}
+            onMouseDown={handleResizeStart}
+          >
+            <div className={`rounded-full bg-vs-muted/25 group-hover:bg-vs-accent/50 transition-colors ${
+              taskPanelCollapsed ? 'w-16 h-0.5' : 'w-10 h-0.5'
+            }`} />
           </div>
         </div>
       )}
@@ -1215,9 +1302,13 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
                 Chưa phân công ({unassignedTasks.length})
               </span>
             </div>
-            <div className={`px-3 py-2 min-h-[32px] border-t ${
-              unassignedTasks.length > 0 ? 'border-yellow-500/20' : 'border-vs-border/20'
-            }`}>
+            <div
+              ref={setUnassignedRef}
+              className={`px-3 py-2 min-h-[32px] border-t transition-colors ${
+                isOverUnassigned ? 'bg-yellow-500/10' :
+                unassignedTasks.length > 0 ? 'border-yellow-500/20' : 'border-vs-border/20'
+              }`}
+            >
               <SortableContext items={unassignedIds} strategy={verticalListSortingStrategy}>
                 {unassignedTasks.length === 0 ? (
                   <p className="text-[10px] text-vs-muted/50 font-mono py-1 text-center italic">

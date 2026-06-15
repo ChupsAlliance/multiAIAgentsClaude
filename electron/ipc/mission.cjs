@@ -938,14 +938,18 @@ function applyPlanToState(planJson, planNow, logMsg, sendToWindow) {
     newTasks.push({
       id: `task-${i}`,
       title: t.title || '',
+      why: t.why || '',
+      depends_on: Array.isArray(t.depends_on) ? t.depends_on : [],
       detail: t.detail || '',
       status: 'pending',
-      assigned_agent: t.agent || null,
+      assigned_agent: t.agent || t.assigned_agent || null,
       started_at: null,
       completed_at: null,
       priority: t.priority || null,
     });
   }
+
+  const missionContext = planJson.mission_context || null;
 
   if (missionState) {
     for (const agent of newAgents) {
@@ -955,13 +959,14 @@ function applyPlanToState(planJson, planNow, logMsg, sendToWindow) {
     }
     missionState.tasks = newTasks;
     missionState.phase = 'ReviewPlan';
+    if (missionContext) missionState.mission_context = missionContext;
     const lead = missionState.agents.find(a => a.name === 'Lead');
     if (lead) { lead.status = 'Idle'; lead.current_task = 'Plan ready — waiting for review'; }
     missionState.log.push(makeLogEntry(planNow, 'System', logMsg, 'plan-ready'));
     saveMissionSnapshot(missionState); // milestone: plan ready
   }
 
-  sendToWindow('mission:plan-ready', { agents: newAgents, tasks: newTasks });
+  sendToWindow('mission:plan-ready', { agents: newAgents, tasks: newTasks, mission_context: missionContext });
 }
 
 // ─────────────────────────────────────────────────────────────────

@@ -2,12 +2,77 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import {
   FileText, Plus, UserPlus, Check, AlertTriangle, Download,
-  RotateCcw, ChevronRight, ChevronDown, X, Bot, ListTodo, Link2
+  RotateCcw, ChevronRight, ChevronDown, X, Bot, ListTodo, Link2, Eye, Code2
 } from 'lucide-react'
 import {
   planToMarkdown, parseMissionPlan, diffPlanChanges,
   extractOutline, agentTemplate, taskTemplate,
 } from '../../utils/planMarkdown'
+
+// ─── Markdown Preview Renderer ─────────────────────────────────────────────
+
+function renderMarkdownHtml(md) {
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const inline = s => esc(s)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*]+?)\*/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,0.3);padding:1px 4px;border-radius:3px;color:#569cd6">$1</code>')
+
+  const lines = md.split('\n')
+  const out = []
+  let i = 0
+
+  while (i < lines.length) {
+    const line = lines[i]
+
+    if (line.startsWith('#### ')) { out.push(`<h4>${inline(line.slice(5))}</h4>`); i++; continue }
+    if (line.startsWith('### '))  { out.push(`<h3>${inline(line.slice(4))}</h3>`);  i++; continue }
+    if (line.startsWith('## '))   { out.push(`<h2>${inline(line.slice(3))}</h2>`);  i++; continue }
+    if (line.startsWith('# '))    { out.push(`<h1>${inline(line.slice(2))}</h1>`);  i++; continue }
+    if (line.trim() === '---')    { out.push('<hr/>'); i++; continue }
+
+    // Table block
+    if (line.startsWith('|')) {
+      const rows = []
+      while (i < lines.length && lines[i].startsWith('|')) { rows.push(lines[i]); i++ }
+      if (rows.length >= 2) {
+        const parseRow = r => r.split('|').slice(1, -1).map(c => c.trim())
+        const heads = parseRow(rows[0])
+        const body = rows.slice(2).map(r => parseRow(r))
+        out.push(
+          '<table>' +
+          '<thead><tr>' + heads.map(h => `<th>${inline(h)}</th>`).join('') + '</tr></thead>' +
+          '<tbody>' + body.map(r => '<tr>' + r.map(c => `<td>${inline(c)}</td>`).join('') + '</tr>').join('') + '</tbody>' +
+          '</table>'
+        )
+      }
+      continue
+    }
+
+    // Blockquote (consecutive lines)
+    if (line.startsWith('> ')) {
+      const items = []
+      while (i < lines.length && lines[i].startsWith('> ')) { items.push(lines[i].slice(2)); i++ }
+      out.push('<blockquote>' + items.map(inline).join('<br/>') + '</blockquote>')
+      continue
+    }
+
+    // Unordered list (consecutive items)
+    if (line.startsWith('- ')) {
+      const items = []
+      while (i < lines.length && lines[i].startsWith('- ')) { items.push(lines[i].slice(2)); i++ }
+      out.push('<ul>' + items.map(t => `<li>${inline(t)}</li>`).join('') + '</ul>')
+      continue
+    }
+
+    if (line.trim() === '') { i++; continue }
+
+    out.push(`<p>${inline(line)}</p>`)
+    i++
+  }
+
+  return out.join('')
+}
 
 // ─── Outline Sidebar ───────────────────────────────────────────────────────
 
@@ -183,13 +248,12 @@ function DiffSummary({ diff, onConfirm, onCancel }) {
 
 // ─── Main PlanDocument Component ───────────────────────────────────────────
 
-export function PlanDocument({ agents, tasks, projectPath, requirement, onApply, onExport, isReplanning }) {
+export function PlanDocument({ agents, tasks, missionContext, projectPath, requirement, onApply, onExport, isReplanning }) {
   const textareaRef = useRef(null)
-  const lineNumRef = useRef(null)
 
   // Generate initial markdown from plan data
   const initialMd = useMemo(() =>
-    planToMarkdown(agents, tasks, { projectPath, requirement }),
+    planToMarkdown(agents, tasks, { projectPath, requirement, mission_context: missionContext }),
     [] // Only generate once on mount
   )
 
@@ -201,10 +265,12 @@ export function PlanDocument({ agents, tasks, projectPath, requirement, onApply,
   const [showDiff, setShowDiff] = useState(false)
   const [pendingDiff, setPendingDiff] = useState(null)
   const [toast, setToast] = useState(null)
+  const [viewMode, setViewMode] = useState('raw') // 'raw' | 'preview'
+  const pendingJumpRef = useRef(null)
 
   // Regenerate markdown when agents/tasks change externally (e.g. after replan)
   useEffect(() => {
-    const newMd = planToMarkdown(agents, tasks, { projectPath, requirement })
+    const newMd = planToMarkdown(agents, tasks, { projectPath, requirement, mission_context: missionContext })
     setMarkdown(newMd)
     setOriginalMd(newMd)
     setHasChanges(false)
@@ -225,12 +291,6 @@ export function PlanDocument({ agents, tasks, projectPath, requirement, onApply,
     setHasChanges(markdown !== originalMd)
   }, [markdown, originalMd])
 
-  // Sync textarea scroll with line numbers
-  const handleScroll = useCallback(() => {
-    if (textareaRef.current && lineNumRef.current) {
-      lineNumRef.current.scrollTop = textareaRef.current.scrollTop
-    }
-  }, [])
 
   // Apply ref for keyboard shortcut access
   const applyRef = useRef(null)
@@ -271,6 +331,25 @@ export function PlanDocument({ agents, tasks, projectPath, requirement, onApply,
     const lineHeight = 18 // approximate
     ta.scrollTop = Math.max(0, lineNum * lineHeight - ta.clientHeight / 3)
   }, [])
+
+  // Outline jump — if in preview, switch to raw first then jump
+  const handleOutlineJump = useCallback((lineNum) => {
+    if (viewMode === 'preview') {
+      pendingJumpRef.current = lineNum
+      setViewMode('raw')
+    } else {
+      jumpToLine(lineNum)
+    }
+  }, [viewMode, jumpToLine])
+
+  // After switching preview → raw, execute pending outline jump
+  useEffect(() => {
+    if (viewMode === 'raw' && pendingJumpRef.current !== null) {
+      const line = pendingJumpRef.current
+      pendingJumpRef.current = null
+      requestAnimationFrame(() => jumpToLine(line))
+    }
+  }, [viewMode, jumpToLine])
 
   // Insert template at cursor
   const insertAtCursor = useCallback((template) => {
@@ -341,6 +420,8 @@ export function PlanDocument({ agents, tasks, projectPath, requirement, onApply,
     const newTasks = edited.tasks.map((t, idx) => ({
       id: t.id || `task-${Date.now()}-${idx}`,
       title: t.title,
+      why: t.why || '',
+      depends_on: Array.isArray(t.depends_on) ? t.depends_on : [],
       detail: t.detail || '',
       priority: t.priority || 'medium',
       assigned_agent: t.assigned_agent,
@@ -380,9 +461,6 @@ export function PlanDocument({ agents, tasks, projectPath, requirement, onApply,
     setToast({ msg, type })
     setTimeout(() => setToast(null), 3000)
   }
-
-  // Line count for gutter
-  const lineCount = markdown.split('\n').length
 
   // Stats from parse result
   const stats = useMemo(() => {
@@ -446,6 +524,34 @@ export function PlanDocument({ agents, tasks, projectPath, requirement, onApply,
           <Download size={10} /> Xuất MD
         </button>
 
+        <div className="w-px h-4 bg-vs-border mx-0.5" />
+
+        {/* Raw / Preview toggle */}
+        <div className="flex items-center border border-vs-border rounded overflow-hidden">
+          <button
+            onClick={() => setViewMode('raw')}
+            className={`flex items-center gap-1 px-2 py-1 text-[10px] font-mono transition-colors ${
+              viewMode === 'raw'
+                ? 'bg-vs-accent/20 text-vs-accent'
+                : 'text-vs-muted hover:text-white hover:bg-white/5'
+            }`}
+            title="Chế độ chỉnh sửa"
+          >
+            <Code2 size={9} /> Raw
+          </button>
+          <button
+            onClick={() => setViewMode('preview')}
+            className={`flex items-center gap-1 px-2 py-1 text-[10px] font-mono border-l border-vs-border transition-colors ${
+              viewMode === 'preview'
+                ? 'bg-vs-accent/20 text-vs-accent'
+                : 'text-vs-muted hover:text-white hover:bg-white/5'
+            }`}
+            title="Xem trước có render"
+          >
+            <Eye size={9} /> Preview
+          </button>
+        </div>
+
         {hasChanges && (
           <button
             onClick={handleApply}
@@ -458,45 +564,56 @@ export function PlanDocument({ agents, tasks, projectPath, requirement, onApply,
         )}
       </div>
 
-      {/* ── Main area: Outline + Editor ── */}
+      {/* ── Main area: Outline + Editor/Preview ── */}
       <div className="flex flex-1 min-h-0">
         {/* Outline sidebar */}
-        <OutlineSidebar outline={outline} onJumpTo={jumpToLine} />
+        <OutlineSidebar outline={outline} onJumpTo={handleOutlineJump} />
 
-        {/* Editor area */}
-        <div className="flex-1 flex min-h-0 overflow-hidden">
-          {/* Line numbers */}
-          <div
-            ref={lineNumRef}
-            className="w-[40px] shrink-0 bg-[#1e1e1e] border-r border-[#333] overflow-hidden select-none"
-            aria-hidden="true"
-          >
-            <div className="py-2 pr-2">
-              {Array.from({ length: lineCount }, (_, i) => (
-                <div key={i} className="text-right text-[10px] font-mono text-[#555] leading-[18px]">
-                  {i + 1}
-                </div>
-              ))}
-            </div>
+        {viewMode === 'raw' ? (
+          /* ── Raw editor (soft-wrap; no line number gutter to avoid desync) ── */
+          <div className="flex-1 flex min-h-0 overflow-hidden">
+            <textarea
+              ref={textareaRef}
+              value={markdown}
+              onChange={(e) => setMarkdown(e.target.value)}
+              onKeyDown={handleKeyDown}
+              className="flex-1 bg-[#1e1e1e] text-[#d4d4d4] text-[11px] font-mono leading-[18px]
+                         p-3 resize-none outline-none border-none
+                         scrollbar-thin scrollbar-thumb-[#444] scrollbar-track-transparent
+                         selection:bg-vs-accent/30"
+              spellCheck={false}
+              autoComplete="off"
+              autoCorrect="off"
+            />
           </div>
-
-          {/* Textarea */}
-          <textarea
-            ref={textareaRef}
-            value={markdown}
-            onChange={(e) => setMarkdown(e.target.value)}
-            onScroll={handleScroll}
-            onKeyDown={handleKeyDown}
-            className="flex-1 bg-[#1e1e1e] text-[#d4d4d4] text-[11px] font-mono leading-[18px]
-                       p-2 resize-none outline-none border-none
-                       scrollbar-thin scrollbar-thumb-[#444] scrollbar-track-transparent
-                       selection:bg-vs-accent/30"
-            spellCheck={false}
-            autoComplete="off"
-            autoCorrect="off"
-            wrap="off"
-          />
-        </div>
+        ) : (
+          /* ── Preview mode ── */
+          <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-[#444] scrollbar-track-transparent bg-[#1e1e1e]">
+            <div
+              className="px-8 py-5 text-[12px] leading-relaxed
+                [&_h1]:text-xl [&_h1]:font-bold [&_h1]:text-white [&_h1]:mb-4 [&_h1]:mt-1
+                [&_h2]:text-sm [&_h2]:font-bold [&_h2]:text-vs-accent [&_h2]:mb-3 [&_h2]:mt-7
+                [&_h2]:border-b [&_h2]:border-vs-border/50 [&_h2]:pb-1
+                [&_h3]:text-xs [&_h3]:font-bold [&_h3]:text-white [&_h3]:mb-2 [&_h3]:mt-5
+                [&_h4]:text-xs [&_h4]:font-semibold [&_h4]:text-yellow-400/90 [&_h4]:mb-2 [&_h4]:mt-4
+                [&_blockquote]:border-l-2 [&_blockquote]:border-vs-accent/60 [&_blockquote]:pl-3
+                [&_blockquote]:my-2.5 [&_blockquote]:text-vs-text/75 [&_blockquote]:italic
+                [&_hr]:border-vs-border/50 [&_hr]:my-5
+                [&_p]:text-vs-text/80 [&_p]:leading-relaxed [&_p]:mb-3 [&_p]:break-words
+                [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-2.5 [&_ul]:mb-3
+                [&_li]:text-vs-text/80 [&_li]:leading-relaxed [&_li]:pb-0.5
+                [&_strong]:text-white [&_strong]:font-semibold
+                [&_em]:text-vs-text/70
+                [&_table]:w-full [&_table]:border-collapse [&_table]:text-[11px] [&_table]:mb-3
+                [&_th]:bg-vs-panel [&_th]:px-3 [&_th]:py-1.5 [&_th]:text-left
+                [&_th]:text-[10px] [&_th]:text-vs-muted [&_th]:font-mono [&_th]:uppercase
+                [&_th]:border [&_th]:border-vs-border/50
+                [&_td]:px-3 [&_td]:py-1.5 [&_td]:border [&_td]:border-vs-border/30
+                [&_td]:text-vs-text/80 [&_td]:align-top [&_td]:break-words [&_td]:max-w-xs"
+              dangerouslySetInnerHTML={{ __html: renderMarkdownHtml(markdown) }}
+            />
+          </div>
+        )}
       </div>
 
       {/* ── Status bar ── */}

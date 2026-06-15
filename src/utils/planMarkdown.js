@@ -1,4 +1,4 @@
-/**
+﻿/**
  * planMarkdown.js — Convert between plan data ↔ structured Markdown
  *
  * Functions:
@@ -46,6 +46,18 @@ export function planToMarkdown(agents = [], tasks = [], meta = {}) {
   if (meta.requirement) {
     lines.push(`- **M\u1EE5c ti\u00EAu**: ${meta.requirement}`)
   }
+  if (meta.mission_context) {
+    const ctx = meta.mission_context
+    if (ctx.problem) {
+      lines.push(`- **Vấn đề**: ${ctx.problem}`)
+    }
+    if (ctx.user_journey) {
+      lines.push(`- **Hành trình người dùng**: ${ctx.user_journey}`)
+    }
+    if (ctx.agent_handoff) {
+      lines.push(`- **Phối hợp agents**: ${ctx.agent_handoff}`)
+    }
+  }
   if (techHint) {
     lines.push(`- **Tech Stack**: ${techHint}`)
   }
@@ -80,6 +92,16 @@ export function planToMarkdown(agents = [], tasks = [], meta = {}) {
       agentTasks.forEach((task, idx) => {
         const pri = (task.priority || 'medium').toUpperCase()
         lines.push(`#### ${idx + 1}. [${pri}] ${task.title}`)
+
+        // Business rationale + dependencies (shown before technical detail)
+        if (task.why) {
+          lines.push(`> **Mục tiêu**: ${task.why}`)
+          lines.push('')
+        }
+        if (task.depends_on && task.depends_on.length > 0) {
+          lines.push(`**Phụ thuộc**: ${task.depends_on.join(', ')}`)
+          lines.push('')
+        }
 
         // Detail text (may be multiline)
         const detail = (task.detail || '').trim()
@@ -166,6 +188,12 @@ export function parseMissionPlan(markdown) {
     if (/T\u1ED5ng quan/.test(header) || /\uD83D\uDCCB/.test(header)) {
       meta.requirement = extractBulletValue(body, 'M\u1EE5c ti\u00EAu')
       meta.projectPath = extractBulletValue(body, 'Project Path')
+      const problem = extractBulletValue(body, 'Vấn đề')
+      const userJourney = extractBulletValue(body, 'Hành trình người dùng')
+      const agentHandoff = extractBulletValue(body, 'Phối hợp agents')
+      if (problem || userJourney || agentHandoff) {
+        meta.mission_context = { problem, user_journey: userJourney, agent_handoff: agentHandoff }
+      }
       continue
     }
 
@@ -427,7 +455,7 @@ function parseTasksFromBody(body, agentName) {
   const taskBlocks = body.split(/^(?=#### )/m).filter(b => b.trim())
 
   for (const block of taskBlocks) {
-    const headerMatch = block.match(/^####\s+\d+\.\s+\[(\w+)\]\s+(.+)$/)
+    const headerMatch = block.match(/^####\s+\d+\.\s+\[(\w+)\]\s+(.+)$/m)
     if (!headerMatch) continue
 
     const priority = headerMatch[1].toLowerCase()
@@ -436,18 +464,28 @@ function parseTasksFromBody(body, agentName) {
     // Everything after the header line is detail
     const bodyLines = block.split('\n').slice(1)
 
-    // Separate detail from **Files** line
-    let detail = ''
+    // Extract why, depends_on, and detail from body
+    let why = ''
+    let depends_on = []
     const detailLines = []
     for (const line of bodyLines) {
       if (line.startsWith('**Files**:') || line.startsWith('---')) break
+      const whyMatch = line.match(/^> \*\*Mục tiêu\*\*:\s*(.+)$/)
+      if (whyMatch) { why = whyMatch[1].trim(); continue }
+      const depMatch = line.match(/^\*\*Phụ thuộc\*\*:\s*(.+)$/)
+      if (depMatch) {
+        depends_on = depMatch[1].split(',').map(d => d.replace(/`/g, '').trim()).filter(Boolean)
+        continue
+      }
       detailLines.push(line)
     }
-    detail = detailLines.join('\n').trim()
+    const detail = detailLines.join('\n').trim()
 
     tasks.push({
       id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       title,
+      why,
+      depends_on,
       detail,
       priority: VALID_PRIORITIES.includes(priority) ? priority : 'medium',
       assigned_agent: agentName,

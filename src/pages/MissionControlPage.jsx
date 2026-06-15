@@ -159,6 +159,7 @@ export function MissionControlPage() {
                 <PlanDocument
                   agents={planReady.agents}
                   tasks={planReady.tasks}
+                  missionContext={planReady.mission_context || null}
                   projectPath={missionState?.project_path || ''}
                   requirement={missionState?.requirement || ''}
                   onApply={handleDocumentApply}
