@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { Sidebar } from '../components/Sidebar'
 import { MissionLauncher } from '../components/mission/MissionLauncher'
 import { MissionDashboard } from '../components/mission/MissionDashboard'
+import { PlanningStream } from '../components/mission/PlanningStream'
 import { PlanReview } from '../components/mission/PlanReview'
 import { PlanDocument } from '../components/mission/PlanDocument'
 import { PromptPreview } from '../components/mission/PromptPreview'
@@ -65,6 +66,7 @@ export function MissionControlPage() {
 
   const hasMission = missionState && missionState.status !== 'Idle'
   const isPlanReview = planReady && missionState?.phase === 'ReviewPlan'
+  const isPlanningPhase = isRunning && missionState?.phase === 'Planning' && !isPlanReview
 
   // Load full mission snapshot from history to view read-only
   const handleViewHistory = useCallback(async (item) => {
@@ -238,8 +240,17 @@ export function MissionControlPage() {
           </div>
         )}
 
-        {/* Active mission dashboard */}
-        {!promptPreview && !isPlanReview && !historyView && hasMission && (
+        {/* Planning phase — live streaming terminal view */}
+        {!promptPreview && !isPlanReview && !historyView && isPlanningPhase && (
+          <PlanningStream
+            state={missionState}
+            isRunning={isRunning}
+            onStop={stop}
+          />
+        )}
+
+        {/* Active mission dashboard (execution phase — not planning) */}
+        {!promptPreview && !isPlanReview && !historyView && hasMission && !isPlanningPhase && (
           <div className="flex-1 p-4 min-h-0 overflow-hidden">
             <MissionDashboard
               state={missionState}

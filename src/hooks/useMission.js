@@ -23,6 +23,7 @@ export function useMission() {
   const fileChangeBuffer = useRef([])
   const agentUpdates = useRef(new Map()) // agentName -> { status, current_task }
   const flushTimer = useRef(null)
+  const phaseRef = useRef('Idle') // tracks current mission phase for log handlers
 
   // Flush all buffered events into a single setState call
   const flushBuffers = useCallback(() => {
@@ -94,11 +95,13 @@ export function useMission() {
       // Merge agent status updates
       let newAgents = prev.agents
       if (agentMap.size > 0) {
+        const isPlanning = prev.phase === 'Planning'
         newAgents = prev.agents.map(a => {
           const update = agentMap.get(a.name)
           if (!update) return a
-          // Never downgrade Done/Error agents
-          if (a.status === 'Done' || a.status === 'Error') return a
+          // During planning, Lead can go Working↔Done freely (Q&A turns)
+          // During execution, never downgrade Done/Error agents
+          if (!isPlanning && (a.status === 'Done' || a.status === 'Error')) return a
           return { ...a, ...update }
         })
       }
@@ -185,6 +188,7 @@ export function useMission() {
           const { agent_name, name, role, timestamp, reset } = e.payload
           const agentName = agent_name || name
           const eventModel = e.payload.model || null
+          if (reset) phaseRef.current = 'Planning' // new mission starts in Planning
           setMissionState(prev => {
             if (reset) {
               const freshAgent = {
@@ -237,10 +241,24 @@ export function useMission() {
           // Buffer agent status update too
           if (entry.agent && entry.log_type !== 'error') {
             if (entry.log_type === 'result') {
-              agentUpdates.current.set(entry.agent, {
-                status: 'Done',
-                current_task: entry.message?.slice(0, 80),
-              })
+              // During Planning phase, 'result' events fire between Q&A turns —
+              // Lead is still working, not done. Only mark Done during execution.
+              const currentPhase = phaseRef.current
+              if (currentPhase === 'Planning') {
+                // Keep Working during planning regardless of result events
+                const existing = agentUpdates.current.get(entry.agent)
+                if (!existing || existing.status !== 'Working') {
+                  agentUpdates.current.set(entry.agent, {
+                    status: 'Working',
+                    current_task: entry.message?.slice(0, 80),
+                  })
+                }
+              } else {
+                agentUpdates.current.set(entry.agent, {
+                  status: 'Done',
+                  current_task: entry.message?.slice(0, 80),
+                })
+              }
             } else {
               // Only update if agent isn't already marked Done
               const existing = agentUpdates.current.get(entry.agent)
@@ -348,6 +366,7 @@ export function useMission() {
         listen('mission:plan-ready', (e) => {
           const { agents, tasks, mission_context } = e.payload
           setPlanReady({ agents, tasks, mission_context: mission_context || null })
+          phaseRef.current = 'ReviewPlan'
 
           setMissionState(prev => {
             if (!prev) return prev

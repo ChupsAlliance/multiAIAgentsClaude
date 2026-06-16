@@ -91,16 +91,22 @@ After spawning, enter a monitoring loop:
 3. When a teammate reports completion, CHECK their evidence:
    - Did they print BUILD_RESULT: PASS? If not, ask them to verify.
    - Did they list FILES_WRITTEN? If not, ask them what they wrote.
+   - **An agent that printed BUILD_RESULT: PASS is considered DONE even if it goes silent afterwards. Do NOT wait indefinitely for further messages from completed agents.**
 4. If a teammate reports FAIL or is stuck:
    - Read their error messages carefully
    - Send them specific fix instructions via SendMessage
-   - If they can't recover after 2 attempts, reassign their tasks to another teammate
-5. If Agent A produces output that Agent B needs (e.g., shared types, API endpoints),
+   - If they can't recover after 2 attempts (2 SendMessage exchanges with no progress), **reassign their remaining tasks to another active teammate** — do NOT shut down the mission
+5. If a teammate goes silent WITHOUT printing BUILD_RESULT (appears stuck/hung):
+   - Send them one "Status check" message via SendMessage
+   - If still no response after one more check, assume they are stuck
+   - **Reassign their incomplete tasks to another teammate** and continue the mission
+   - **Do NOT call TeamDelete just because one agent is unresponsive — remove only that member using TeamCleanup if available, then continue**
+6. If Agent A produces output that Agent B needs (e.g., shared types, API endpoints),
    send a DM to Agent B with the relevant file paths/information
-6. Print "[Lead] Progress: X/{{TOTAL_AGENTS}} agents completed" periodically
+7. Print "[Lead] Progress: X/{{TOTAL_AGENTS}} agents completed" periodically
 
 ### Phase 4: Integration Verification (CRITICAL — this is where most missions fail)
-When ALL agents report completion:
+When ALL agents have reported completion OR been reassigned/timed out:
 1. Run the full build yourself: {{PROJECT_TYPE}}
 2. Read the ENTIRE build output. Look for:
    - Import errors (module not found)
@@ -108,8 +114,8 @@ When ALL agents report completion:
    - Missing file errors
 3. If build fails:
    - Identify which agent's code caused the error
-   - Send them a DM with the exact error and file to fix
-   - Wait for fix, then rebuild
+   - Send them a DM with the exact error and file to fix (if still active)
+   - If agent is no longer active, fix the error yourself or spawn a new agent for it
    - Repeat until build passes
 4. If possible, run a smoke test:
    - For web apps: start dev server, check it doesn't crash immediately
@@ -119,9 +125,17 @@ When ALL agents report completion:
 
 ### Phase 5: Documentation & Cleanup
 1. Write README.md: project description, install steps, run steps, usage examples
-2. Send shutdown_request to all teammates
-3. Call TeamDelete
+2. Send shutdown_request to all teammates — **do NOT wait for acknowledgement**
+   - Some agents may have already gone idle after completing their work; that is normal
+   - If an agent does not acknowledge within a short wait, proceed anyway
+3. Call TeamDelete to clean up the team
 4. Print "[Lead] Mission complete"
+
+⚠ **CRITICAL — NEVER end the mission early:**
+- One agent going idle or failing does NOT mean the mission fails
+- Always reassign incomplete work and continue
+- Only call TeamDelete after Integration Verification PASSES (Phase 4 complete)
+- If all tasks are done and build passes, the mission is a success regardless of agent cleanup issues
 
 ## QUALITY GATES (Mission fails if ANY are not met)
 - All source files written completely (no TODO, no placeholder, no stub)

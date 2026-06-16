@@ -1,0 +1,175 @@
+import { useEffect, useRef, useMemo, memo } from 'react'
+import { Brain, Square, Wrench, Info, ChevronRight } from 'lucide-react'
+
+// ── Phase detection from recent log content ──
+const PHASE_PATTERNS = [
+  { re: /glob|grep|read.*file|list.*dir|codebase|struct/i, label: 'Đang đọc codebase...' },
+  { re: /analyz|identif|understand|require|problem/i,       label: 'Đang phân tích yêu cầu...' },
+  { re: /break.*down|task|agent|assign|plan/i,              label: 'Đang lên kế hoạch...' },
+  { re: /detail|implement|spec|accept|criteri/i,            label: 'Đang soạn task chi tiết...' },
+  { re: /MISSION PLAN|json|output|coordinat/i,              label: 'Đang hoàn thiện plan...' },
+]
+
+function detectPhase(logs) {
+  const recent = logs.slice(-8).map(l => l.message || '').join(' ')
+  for (const { re, label } of PHASE_PATTERNS) {
+    if (re.test(recent)) return label
+  }
+  return logs.length > 0 ? 'Đang xử lý...' : 'Đang khởi động...'
+}
+
+// ── Single log line renderer ──
+const LogLine = memo(function LogLine({ entry }) {
+  if (entry.log_type === 'tool') {
+    return (
+      <div className="flex items-start gap-1.5 py-0.5 text-yellow-400/70">
+        <Wrench size={10} className="shrink-0 mt-0.5 opacity-70" />
+        <span className="break-all">{entry.message}</span>
+      </div>
+    )
+  }
+  if (entry.log_type === 'info' || entry.agent === 'System') {
+    return (
+      <div className="flex items-start gap-1.5 py-0.5 text-vs-muted/60">
+        <Info size={10} className="shrink-0 mt-0.5 opacity-60" />
+        <span className="break-all">{entry.message}</span>
+      </div>
+    )
+  }
+  // thinking — split by literal \n so each paragraph shows on its own line
+  const lines = (entry.message || '').split(/\\n|\n/)
+  return (
+    <div className="py-0.5">
+      {lines.map((line, i) =>
+        line.trim() ? (
+          <div key={i} className="flex items-start gap-1.5">
+            <ChevronRight size={10} className="shrink-0 mt-0.5 text-vs-accent/50" />
+            <span className="text-vs-text/90 break-all leading-relaxed">{line}</span>
+          </div>
+        ) : (
+          <div key={i} className="h-2" />
+        )
+      )}
+    </div>
+  )
+})
+
+// ── Blinking cursor ──
+function Cursor() {
+  return <span className="inline-block w-1.5 h-3 bg-vs-green align-middle animate-pulse ml-0.5" />
+}
+
+// ── Main component ──
+export const PlanningStream = memo(function PlanningStream({ state, isRunning, onStop }) {
+  const scrollRef = useRef(null)
+  const wasAtBottomRef = useRef(true)
+
+  const agents = state?.agents || []
+  const logs   = state?.log    || []
+
+  const lead = useMemo(() => agents.find(a => a.name === 'Lead'), [agents])
+
+  // All Lead + System output, excluding errors
+  const streamLogs = useMemo(() =>
+    logs.filter(l =>
+      l.log_type !== 'error' &&
+      (l.agent === 'Lead' || (l.agent === 'System' && l.log_type === 'info'))
+    ), [logs])
+
+  const currentPhase = useMemo(() => detectPhase(streamLogs), [streamLogs])
+
+  // Track whether user has scrolled up (to not force-scroll them back down)
+  const handleScroll = () => {
+    const el = scrollRef.current
+    if (!el) return
+    wasAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40
+  }
+
+  // Auto-scroll when new content arrives
+  useEffect(() => {
+    if (!wasAtBottomRef.current) return
+    const el = scrollRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [streamLogs.length])
+
+  return (
+    <div className="flex-1 p-4 min-h-0 overflow-hidden flex flex-col">
+      <div className="flex-1 flex flex-col rounded-lg border border-vs-border overflow-hidden bg-vs-bg">
+
+        {/* ── Top header bar ── */}
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-vs-border shrink-0 bg-vs-panel">
+          <div className="flex items-center gap-2 min-w-0">
+            <Brain size={14} className="text-vs-accent shrink-0 animate-pulse" />
+            <span className="text-xs font-mono text-white font-medium">Lead đang phân tích & lên plan</span>
+            <span className="text-xs font-mono text-vs-muted truncate hidden sm:inline">
+              — {currentPhase}
+            </span>
+          </div>
+          {onStop && (
+            <button
+              onClick={onStop}
+              className="flex items-center gap-1 px-2 py-1 text-[10px] font-mono text-vs-muted hover:text-red-400 hover:border-red-400/40 border border-vs-border rounded transition-colors shrink-0"
+            >
+              <Square size={9} />
+              Stop
+            </button>
+          )}
+        </div>
+
+        {/* ── Lead status bar ── */}
+        <div className="flex items-center gap-3 px-4 py-1.5 border-b border-vs-border shrink-0 bg-vs-panel/50 text-[10px] font-mono">
+          {/* Pulsing Working badge — always Working in planning */}
+          <div className="flex items-center gap-1.5">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-vs-green opacity-75" />
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-vs-green" />
+            </span>
+            <span className="text-vs-green">Working</span>
+          </div>
+
+          <span className="text-vs-muted">Lead Coordinator</span>
+
+          {lead?.model && (
+            <span className="text-vs-muted opacity-60">{lead.model}</span>
+          )}
+
+          {lead?.current_task && (
+            <span className="text-vs-muted truncate max-w-xs opacity-80">
+              {lead.current_task}
+            </span>
+          )}
+        </div>
+
+        {/* ── Terminal stream area ── */}
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="flex-1 overflow-y-auto p-3 font-mono text-[11px] bg-[#0d1117] scrollbar-thin scrollbar-thumb-vs-border scrollbar-track-transparent"
+        >
+          {streamLogs.length === 0 ? (
+            /* Empty state — connecting */
+            <div className="flex flex-col items-start gap-1 text-vs-muted/60 py-2">
+              <div className="flex items-center gap-2">
+                <span className="animate-pulse">⠋</span>
+                <span>Đang kết nối với Claude CLI...</span>
+              </div>
+            </div>
+          ) : (
+            streamLogs.map((entry, i) => <LogLine key={i} entry={entry} />)
+          )}
+
+          {/* Blinking cursor while running */}
+          {isRunning && <Cursor />}
+        </div>
+
+        {/* ── Bottom status bar ── */}
+        <div className="flex items-center gap-3 px-3 py-1 border-t border-vs-border shrink-0 bg-vs-panel/30 text-[9px] font-mono text-vs-muted/50">
+          <span>{streamLogs.length} dòng</span>
+          <span>·</span>
+          <span>{currentPhase}</span>
+          <span className="ml-auto">Vui lòng chờ — plan sẽ hiện khi Lead hoàn thành</span>
+        </div>
+      </div>
+    </div>
+  )
+})
