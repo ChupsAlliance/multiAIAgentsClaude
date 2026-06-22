@@ -1,5 +1,5 @@
-import { useEffect, useRef, useMemo, memo } from 'react'
-import { Brain, Square, Wrench, Info, ChevronRight } from 'lucide-react'
+import { useEffect, useRef, useMemo, memo, useState } from 'react'
+import { Brain, Square, Wrench, Info, ChevronRight, Palette, ExternalLink } from 'lucide-react'
 
 // ── Phase detection from recent log content ──
 const PHASE_PATTERNS = [
@@ -59,8 +59,74 @@ function Cursor() {
   return <span className="inline-block w-1.5 h-3 bg-vs-green align-middle animate-pulse ml-0.5" />
 }
 
+// ── Mockup approval card ──
+function MockupApprovalCard({ mockupInfo, onRespond }) {
+  const [feedback, setFeedback] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  const handleApprove = async () => {
+    setSubmitting(true)
+    await onRespond('approve', '')
+  }
+
+  const handleFeedback = async () => {
+    if (!feedback.trim() || submitting) return
+    setSubmitting(true)
+    await onRespond('revise', feedback.trim())
+  }
+
+  return (
+    <div className="mx-3 mb-3 rounded-lg border border-purple-500/40 bg-purple-950/20 p-3 text-[11px] font-mono">
+      <div className="flex items-center gap-2 mb-2">
+        <Palette size={12} className="text-purple-400 shrink-0" />
+        <span className="text-purple-300 font-medium">
+          Lead đã tạo mockup: &quot;{mockupInfo.title}&quot;
+        </span>
+      </div>
+
+      <div className="flex items-center gap-2 mb-3 text-vs-muted/60">
+        <span>Đã mở trong browser.</span>
+        <button
+          onClick={() => window.open(mockupInfo.url, '_blank')}
+          className="flex items-center gap-1 text-purple-400/80 hover:text-purple-300 transition-colors"
+        >
+          <ExternalLink size={10} />
+          Mở lại
+        </button>
+      </div>
+
+      <button
+        onClick={handleApprove}
+        disabled={submitting}
+        className="w-full mb-2 px-3 py-1.5 rounded bg-purple-600/30 border border-purple-500/40 text-purple-200 hover:bg-purple-600/50 disabled:opacity-50 transition-colors"
+      >
+        ✅ Approve — tiếp tục planning
+      </button>
+
+      <div className="flex gap-1.5">
+        <input
+          type="text"
+          value={feedback}
+          onChange={e => setFeedback(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') handleFeedback() }}
+          disabled={submitting}
+          placeholder="Gửi feedback để Lead revise mockup..."
+          className="flex-1 px-2 py-1.5 rounded bg-vs-panel border border-purple-500/30 text-vs-text placeholder-vs-muted/40 focus:outline-none focus:border-purple-400/60 disabled:opacity-50"
+        />
+        <button
+          onClick={handleFeedback}
+          disabled={submitting || !feedback.trim()}
+          className="px-2 py-1.5 rounded bg-vs-panel border border-purple-500/30 text-purple-300 hover:border-purple-400/60 disabled:opacity-50 transition-colors"
+        >
+          Send
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── Main component ──
-export const PlanningStream = memo(function PlanningStream({ state, isRunning, onStop }) {
+export const PlanningStream = memo(function PlanningStream({ state, isRunning, onStop, mockupInfo, onMockupRespond }) {
   const scrollRef = useRef(null)
   const wasAtBottomRef = useRef(true)
 
@@ -161,6 +227,11 @@ export const PlanningStream = memo(function PlanningStream({ state, isRunning, o
           {/* Blinking cursor while running */}
           {isRunning && <Cursor />}
         </div>
+
+        {/* Mockup approval card — shown when planning is paused for mockup review */}
+        {!isRunning && mockupInfo && onMockupRespond && (
+          <MockupApprovalCard mockupInfo={mockupInfo} onRespond={onMockupRespond} />
+        )}
 
         {/* ── Bottom status bar ── */}
         <div className="flex items-center gap-3 px-3 py-1 border-t border-vs-border shrink-0 bg-vs-panel/30 text-[9px] font-mono text-vs-muted/50">
