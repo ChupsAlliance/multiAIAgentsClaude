@@ -2860,16 +2860,6 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
     });
   });
 
-  // ── open_url ───────────────────────────────────────────────────
-  // Opens a URL in the system browser (avoids window.open creating a BrowserWindow in Electron)
-  ipcMain.handle('open_url', (_event, args) => {
-    const { url } = args || {};
-    if (url && typeof url === 'string') {
-      shell.openExternal(url);
-    }
-    return null;
-  });
-
   // ── stop_mission ───────────────────────────────────────────────
   ipcMain.handle('stop_mission', async () => {
     stopWatcher();
