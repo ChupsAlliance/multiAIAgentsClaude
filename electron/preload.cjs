@@ -31,6 +31,7 @@ const ALLOWED_EVENTS = [
   'mission:file-change', 'mission:task-update', 'mission:raw-line',
   'mission:plan-ready', 'mission:agent-message', 'mission:team-event',
   'mission:task-reassigned', 'mission:question', 'mission:answer-sent',
+  'mission:mockup',
   'claude-output',
 ];
 
