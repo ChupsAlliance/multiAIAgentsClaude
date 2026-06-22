@@ -2681,6 +2681,41 @@ module.exports = function registerMission(getMainWindow) {
     return null;
   });
 
+  // ── mockup_respond ──────────────────────────────────────────────
+  // User approved or sent feedback on a UI mockup. Close the HTTP server
+  // and resume Lead with the result injected into stdin.
+  ipcMain.handle('mockup_respond', async (_event, args) => {
+    const { decision, feedback = '' } = args || {};
+
+    if (!missionState) return 'No active mission';
+    if (!missionState.session_id) return 'No session ID — cannot resume';
+    if (missionState.status !== 'WaitingForMockup') return 'Not waiting for mockup';
+
+    const missionId = missionState.id;
+
+    // Close HTTP server
+    if (mockupServers[missionId]) {
+      mockupServers[missionId].close();
+      delete mockupServers[missionId];
+    }
+
+    const ts = now();
+    const injection = decision === 'approve'
+      ? 'MOCKUP APPROVED: The user approved the mockup design. Continue planning and output the final plan JSON.'
+      : `MOCKUP FEEDBACK: The user wants changes to the mockup. Feedback: "${feedback}". ` +
+        'Please revise the spec and output a new <<<MOCKUP_REQUEST>>> block followed by <<<MOCKUP_PAUSE>>>.';
+
+    const logMsg = decision === 'approve'
+      ? 'Mockup approved — resuming planning'
+      : `Mockup feedback sent: "${feedback}"`;
+    const entry = makeLogEntry(ts, 'System', logMsg, 'info');
+    missionState.log.push(entry);
+    sendToWindow('mission:log', entry);
+
+    restartLeadAfterMockup(missionId, injection, sendToWindow);
+    return 'ok';
+  });
+
   // ── replan_mission ────────────────────────────────────────────
   // Incremental re-plan: manager edited tasks/agents, ask Lead to review changes
   // Returns: { agents, tasks } or error string
@@ -2824,6 +2859,12 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
     clearAgentTeamsTimer();
     killChild();
 
+    // Close any open mockup HTTP servers
+    for (const server of Object.values(mockupServers)) {
+      try { server.close(); } catch { /* ignore */ }
+    }
+    Object.keys(mockupServers).forEach(k => delete mockupServers[k]);
+
     if (missionState) {
       missionState.status = 'Stopped';
       for (const a of missionState.agents) {
@@ -2845,6 +2886,13 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
     stopAutosave();
     clearAgentTeamsTimer();
     killChild();
+
+    // Close any open mockup HTTP servers
+    for (const server of Object.values(mockupServers)) {
+      try { server.close(); } catch { /* ignore */ }
+    }
+    Object.keys(mockupServers).forEach(k => delete mockupServers[k]);
+
     missionState = null;
     sendToWindow('mission:status', { status: 'reset' });
     return null;
