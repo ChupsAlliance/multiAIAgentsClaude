@@ -229,7 +229,7 @@ export const PlanningStream = memo(function PlanningStream({ state, isRunning, o
         </div>
 
         {/* Mockup approval card — shown when planning is paused for mockup review */}
-        {!isRunning && mockupInfo && onMockupRespond && (
+        {mockupInfo && onMockupRespond && (
           <MockupApprovalCard mockupInfo={mockupInfo} onRespond={onMockupRespond} />
         )}
 
