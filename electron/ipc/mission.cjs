@@ -5,12 +5,13 @@
 // Source: src-tauri/src/lib.rs  (MissionManager + all mission commands)
 // ─────────────────────────────────────────────────────────────────
 
-const { ipcMain } = require('electron');
+const { ipcMain, shell } = require('electron');
 const { spawn }   = require('child_process');
 const readline    = require('readline');
 const fs          = require('fs');
 const path        = require('path');
 const os          = require('os');
+const http        = require('http');
 
 // ── Prompt templates (loaded once at startup) ──────────────────
 // Dev: electron/prompts/   Prod (packaged): resources/prompts/
@@ -34,6 +35,7 @@ let childProcess  = null;   // Running claude subprocess
 let watcherInterval = null; // setInterval for file watcher
 let autosaveInterval = null; // setInterval for periodic snapshot saves
 let agentTeamsCompletionTimer = null; // safety auto-complete timer for agent_teams mode
+const mockupServers = {};  // missionId → http.Server (cleanup on stop/reset)
 
 // ─────────────────────────────────────────────────────────────────
 // Helper: current timestamp in milliseconds
@@ -976,6 +978,12 @@ function applyPlanToState(planJson, planNow, logMsg, sendToWindow) {
   }
 
   const missionContext = planJson.mission_context || null;
+
+  // Warn if any tasks came through without an agent assignment (AI missed the field)
+  const unassignedCount = newTasks.filter(t => !t.assigned_agent).length;
+  if (unassignedCount > 0 && newTasks.length > 0) {
+    console.warn(`[applyPlanToState] ${unassignedCount}/${newTasks.length} tasks have no agent — AI may have omitted "agent" field`);
+  }
 
   if (missionState) {
     for (const agent of newAgents) {
@@ -2084,6 +2092,46 @@ module.exports = function registerMission(getMainWindow) {
     // Detect project type
     const projectTypeHint = detectProjectType(projectPath);
 
+    // Compute agent-level dependency graph from task depends_on fields
+    const agentDepGraph = {};
+    for (const a of agents) agentDepGraph[a.name || ''] = new Set();
+    for (const t of tasks) {
+      const owner = t.assigned_agent || t.agent || '';
+      if (!owner) continue;
+      for (const depTitle of (t.depends_on || [])) {
+        const depTask = tasks.find(x => x.title === depTitle);
+        if (depTask) {
+          const depAgent = depTask.assigned_agent || depTask.agent || '';
+          if (depAgent && depAgent !== owner) {
+            if (!agentDepGraph[owner]) agentDepGraph[owner] = new Set();
+            agentDepGraph[owner].add(depAgent);
+          }
+        }
+      }
+    }
+
+    // Compute spawn waves via topological sort
+    const spawnWaves = [];
+    const spawned = new Set();
+    const remaining = new Set(agents.map(a => a.name || ''));
+    let safeguard = 0;
+    while (remaining.size > 0 && safeguard++ < 20) {
+      const wave = [...remaining].filter(name => {
+        const deps = agentDepGraph[name] || new Set();
+        return [...deps].every(d => spawned.has(d));
+      });
+      if (wave.length === 0) { spawnWaves.push([...remaining]); break; }
+      wave.forEach(n => { spawned.add(n); remaining.delete(n); });
+      spawnWaves.push(wave);
+    }
+    const hasMultipleWaves = spawnWaves.length > 1;
+    const spawnWavesStr = hasMultipleWaves
+      ? '\n\n## SPAWN ORDER (CRITICAL — follow this exactly)\n' +
+        spawnWaves.map((w, i) => `Wave ${i + 1}: ${w.join(', ')}`).join('\n') +
+        '\n\nAgents in later waves DEPEND on outputs from earlier waves. ' +
+        'You MUST wait for each wave to complete before spawning the next wave.'
+      : '';
+
     // Build agent blocks
     const agentBlocks = agents.map(a => {
       const name       = a.name        || '';
@@ -2103,6 +2151,12 @@ module.exports = function registerMission(getMainWindow) {
         sendToWindow('mission:log', skillEntry);
       }
 
+      // Dependency annotation for Lead
+      const depAgents = [...(agentDepGraph[name] || [])];
+      const depsLine = depAgents.length > 0
+        ? `\n- Depends on agents (spawn AFTER these complete): ${depAgents.join(', ')}`
+        : '';
+
       // ── Verbatim prompt path (PromptPreview was used) ──────────
       const verbatimPrompt = agentPrompts[name];
       if (verbatimPrompt) {
@@ -2110,7 +2164,7 @@ module.exports = function registerMission(getMainWindow) {
         const finalPrompt = viRule
           ? verbatimPrompt + '\n' + viRule
           : verbatimPrompt;
-        return `### Agent: "${name}"\n- Model: ${agentModel}\n- Prompt:\n\`\`\`prompt\n${finalPrompt}\n\`\`\``;
+        return `### Agent: "${name}"\n- Model: ${agentModel}${depsLine}\n- Prompt:\n\`\`\`prompt\n${finalPrompt}\n\`\`\``;
       }
 
       // ── Fallback: task-list path (no PromptPreview used) ───────
@@ -2131,7 +2185,7 @@ module.exports = function registerMission(getMainWindow) {
         customSection = `\n- Custom instructions: ${custom}`;
       }
 
-      return `### Agent: "${name}"\n- Role: ${role}\n- Model: ${agentModel}\n- Tasks:\n${tasksStr}${customSection}${skillSection}`;
+      return `### Agent: "${name}"\n- Role: ${role}\n- Model: ${agentModel}${depsLine}\n- Tasks:\n${tasksStr}${customSection}${skillSection}`;
     });
 
     const proj      = projectPath.replace(/\\/g, '/');
@@ -2146,6 +2200,7 @@ module.exports = function registerMission(getMainWindow) {
       .replace('{{LANG_RULE}}',    viRule)
       .replace('{{TOTAL_AGENTS}}', total)
       .replace('{{PERMISSION_MODE}}', permModeSection)
+      .replace('{{SPAWN_WAVES}}', spawnWavesStr)
       .replace('{{AGENT_BLOCKS}}', agentsStr);  // last — user content may contain {{ }}
 
     // Update state to Deploying
@@ -2472,7 +2527,7 @@ module.exports = function registerMission(getMainWindow) {
   // Incremental re-plan: manager edited tasks/agents, ask Lead to review changes
   // Returns: { agents, tasks } or error string
   ipcMain.handle('replan_mission', async (_event, args) => {
-    const { agents: currentAgents = [], tasks: currentTasks = [] } = args || {};
+    const { agents: currentAgents = [], tasks: currentTasks = [], note = '' } = args || {};
 
     if (!PROMPT_REPLAN) return 'Re-plan prompt template not found';
 
@@ -2487,10 +2542,13 @@ module.exports = function registerMission(getMainWindow) {
       return `- [${t.priority || 'medium'}] "${t.title}" → agent: ${t.assigned_agent || 'unassigned'}${detail}`;
     }).join('\n');
 
-    // Build CHANGES description (what the manager changed — we don't have a diff, so describe current state)
+    // Build CHANGES description
+    const noteSection = note
+      ? `\n\nADDITIONAL INSTRUCTION FROM MANAGER:\n"${note}"\nPlease incorporate this instruction into the updated plan.`
+      : '';
     const changes = `The manager has made edits to the plan. The current state of agents and tasks is shown above.
 Some tasks may be missing detail — you MUST fill in detailed implementation specs for any task that has "(none — needs detail)".
-Keep all existing tasks that already have detail EXACTLY as they are. Only modify tasks where the manager explicitly changed something or where detail is missing.`;
+Keep all existing tasks that already have detail EXACTLY as they are. Only modify tasks where the manager explicitly changed something or where detail is missing.${noteSection}`;
 
     const replanPrompt = PROMPT_REPLAN
       .replace('{{AGENTS}}', agentsSummary)
