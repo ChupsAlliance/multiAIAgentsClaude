@@ -1347,10 +1347,12 @@ function readProcessStdout_launch(proc, missionId, sendToWindow) {
             sendToWindow('mission:log', entry);
 
           } else if (currentPhase === 'Planning') {
-            // If Lead paused to ask the user questions, don't treat this result as
-            // "no plan found". The question protocol already set status='WaitingForAnswer'
-            // via handleQuestionBatch (called from streaming events before result fires).
-            if (missionState && missionState.status === 'WaitingForAnswer') {
+            // If Lead paused (questions or mockup), don't treat this result as
+            // "no plan found". The protocol already set status before result fires.
+            if (missionState && (
+              missionState.status === 'WaitingForAnswer' ||
+              missionState.status === 'WaitingForMockup'
+            )) {
               break;
             }
 
