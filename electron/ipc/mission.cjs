@@ -739,6 +739,92 @@ function spawnClaude(args, cwd, useAgentTeams) {
   });
 }
 
+// runClaudeForHtml — spawn a one-shot Claude process to generate an HTML mockup.
+// Returns the HTML string extracted from <<<HTML>>>...<<<END_HTML>>> markers.
+async function runClaudeForHtml(prompt) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn('claude', [
+      '-p', prompt,
+      '--model', 'claude-haiku-4-5-20251001',
+      '--dangerously-skip-permissions',
+    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+    let stdout = '';
+    proc.stdout.on('data', d => { stdout += d.toString(); });
+
+    const timer = setTimeout(() => {
+      proc.kill();
+      reject(new Error('Mockup generation timed out after 60s'));
+    }, 60000);
+
+    proc.on('close', () => {
+      clearTimeout(timer);
+      const match = /<<<HTML>>>([\s\S]*?)<<<END_HTML>>>/.exec(stdout);
+      if (match) {
+        resolve(match[1].trim());
+      } else {
+        reject(new Error(`No <<<HTML>>> markers in output. First 300 chars: ${stdout.slice(0, 300)}`));
+      }
+    });
+
+    proc.on('error', (err) => {
+      clearTimeout(timer);
+      reject(new Error(`Failed to spawn claude for mockup: ${err.message}`));
+    });
+  });
+}
+
+// spawnMockupGenerator — generate HTML via runClaudeForHtml, serve on localhost,
+// open browser, send mission:mockup IPC. Handles its own errors gracefully.
+async function spawnMockupGenerator(title, spec, missionId, sendToWindow) {
+  const prompt =
+    `You are a UI mockup generator. Generate a self-contained HTML mockup for: "${title}".\n` +
+    `Spec: ${spec}\n` +
+    `Requirements:\n` +
+    `- No external dependencies (no CDN links, no external fonts, no external scripts)\n` +
+    `- All CSS in a single <style> tag\n` +
+    `- Dark VS Code theme: background #1e1e1e, text #d4d4d4, accent #569cd6, panel #252526\n` +
+    `- Polished, realistic UI — not a wireframe\n` +
+    `- Include realistic placeholder content\n` +
+    `Output ONLY the complete HTML document wrapped in <<<HTML>>> and <<<END_HTML>>> markers. Nothing else before or after.`;
+
+  try {
+    const htmlContent = await runClaudeForHtml(prompt);
+
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(htmlContent);
+    });
+
+    server.listen(0, '127.0.0.1', () => {
+      const port = server.address().port;
+      const url  = `http://127.0.0.1:${port}`;
+      if (missionId) mockupServers[missionId] = server;
+
+      shell.openExternal(url);
+      sendToWindow('mission:mockup', { title, spec, url, port });
+
+      const entry = makeLogEntry(now(), 'System',
+        `Mockup for "${title}" ready — opened in browser (${url})`, 'info');
+      if (missionState) missionState.log.push(entry);
+      sendToWindow('mission:log', entry);
+    });
+
+  } catch (err) {
+    const entry = makeLogEntry(now(), 'System',
+      `Mockup generation failed (${err.message}) — continuing planning`, 'info');
+    if (missionState) missionState.log.push(entry);
+    sendToWindow('mission:log', entry);
+
+    // Resume Lead with skip signal so planning isn't permanently blocked
+    if (missionState?.session_id) {
+      restartLeadAfterMockup(missionId,
+        'MOCKUP SKIPPED: Generation failed. Continue planning normally and output the final plan JSON.',
+        sendToWindow);
+    }
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────
 // buildToolDetail — rich tool detail string for log entry
 // ─────────────────────────────────────────────────────────────────
