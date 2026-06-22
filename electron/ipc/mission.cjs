@@ -817,7 +817,8 @@ async function spawnMockupGenerator(title, spec, missionId, sendToWindow) {
     sendToWindow('mission:log', entry);
 
     // Resume Lead with skip signal so planning isn't permanently blocked
-    if (missionState?.session_id) {
+    // Guard: only resume if mission is still in WaitingForMockup — user may have stopped it
+    if (missionState?.session_id && missionState.status === 'WaitingForMockup') {
       restartLeadAfterMockup(missionId,
         'MOCKUP SKIPPED: Generation failed. Continue planning normally and output the final plan JSON.',
         sendToWindow);
@@ -847,6 +848,9 @@ function restartLeadAfterMockup(missionId, injection, sendToWindow) {
     execMode === 'agent_teams'
   );
 
+  // Assign childProcess immediately so the proc is tracked even if stdin.write fails
+  childProcess = proc;
+
   try {
     proc.stdin.write(injection, 'utf8');
     proc.stdin.end();
@@ -854,12 +858,15 @@ function restartLeadAfterMockup(missionId, injection, sendToWindow) {
     const entry = makeLogEntry(now(), 'System', `Failed to resume Lead: ${e.message}`, 'error');
     if (missionState) missionState.log.push(entry);
     sendToWindow('mission:log', entry);
+    killChild();
     return;
   }
 
-  childProcess = proc;
   if (missionState) missionState.status = 'Running';
   startAutosave();
+
+  // Notify frontend that Lead is running again (keeps isRunning in sync)
+  sendToWindow('mission:status', { status: 'running', phase: missionState?.phase || 'Planning' });
 
   readProcessStdout_launch(proc, missionId, sendToWindow);
   readProcessStderr(proc, sendToWindow);
@@ -2687,6 +2694,7 @@ module.exports = function registerMission(getMainWindow) {
   ipcMain.handle('mockup_respond', async (_event, args) => {
     const { decision, feedback = '' } = args || {};
 
+    if (decision !== 'approve' && decision !== 'revise') return 'Invalid decision value';
     if (!missionState) return 'No active mission';
     if (!missionState.session_id) return 'No session ID — cannot resume';
     if (missionState.status !== 'WaitingForMockup') return 'Not waiting for mockup';
@@ -2850,6 +2858,16 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
         }
       }, 120000);
     });
+  });
+
+  // ── open_url ───────────────────────────────────────────────────
+  // Opens a URL in the system browser (avoids window.open creating a BrowserWindow in Electron)
+  ipcMain.handle('open_url', (_event, args) => {
+    const { url } = args || {};
+    if (url && typeof url === 'string') {
+      shell.openExternal(url);
+    }
+    return null;
   });
 
   // ── stop_mission ───────────────────────────────────────────────

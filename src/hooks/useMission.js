@@ -743,8 +743,13 @@ export function useMission() {
 
   // ── Respond to mockup: send decision back to Lead ──
   const respondToMockup = useCallback(async (decision, feedback = '') => {
-    setMockupInfo(null)
-    await invoke('mockup_respond', { decision, feedback })
+    try {
+      await invoke('mockup_respond', { decision, feedback })
+      setMockupInfo(null)
+    } catch (err) {
+      console.error('[respondToMockup] IPC failed:', err)
+      // Don't clear mockupInfo — let user retry
+    }
   }, [])
 
   return { missionState, isRunning, planReady, setPlanReady, isReplanning, pendingQuestions, mockupInfo, recoverableMission, setRecoverableMission, launch, deploy, continueM, stop, reset, replan, answerQuestion, respondToMockup }

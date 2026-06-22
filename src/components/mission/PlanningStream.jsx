@@ -66,13 +66,13 @@ function MockupApprovalCard({ mockupInfo, onRespond }) {
 
   const handleApprove = async () => {
     setSubmitting(true)
-    await onRespond('approve', '')
+    try { await onRespond('approve', '') } finally { setSubmitting(false) }
   }
 
   const handleFeedback = async () => {
     if (!feedback.trim() || submitting) return
     setSubmitting(true)
-    await onRespond('revise', feedback.trim())
+    try { await onRespond('revise', feedback.trim()) } finally { setSubmitting(false) }
   }
 
   return (
@@ -87,7 +87,7 @@ function MockupApprovalCard({ mockupInfo, onRespond }) {
       <div className="flex items-center gap-2 mb-3 text-vs-muted/60">
         <span>Đã mở trong browser.</span>
         <button
-          onClick={() => window.open(mockupInfo.url, '_blank')}
+          onClick={() => window.electronAPI?.invoke('open_url', { url: mockupInfo.url })}
           className="flex items-center gap-1 text-purple-400/80 hover:text-purple-300 transition-colors"
         >
           <ExternalLink size={10} />
