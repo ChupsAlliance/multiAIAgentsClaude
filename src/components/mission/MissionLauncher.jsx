@@ -787,7 +787,7 @@ export function MissionLauncher({ onLaunch }) {
                 >
                   <p className="text-xs text-vs-text truncate">{entry.description}</p>
                   <p className="text-[10px] text-vs-muted font-mono truncate">
-                    {entry.project_path} · {entry.team_size === 'auto' ? 'Lead quyết định agents' : `${entry.team_size || 3} agents`}
+                    {entry.project_path} · {entry.team_size === 'auto' ? 'Lead quyết định agents' : `${entry.team_size || 4} agents`}
                   </p>
                 </button>
                 <button

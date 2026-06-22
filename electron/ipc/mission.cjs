@@ -515,6 +515,7 @@ function scheduleAgentTeamsCompletion(missionId, sendToWindow) {
       description: missionState.description,
       project_path: missionState.project_path,
       execution_mode: missionState.execution_mode || 'agent_teams',
+      team_size: missionState.team_size,
       forked_from: missionState.forked_from || null,
       forked_from_desc: missionState.forked_from_desc || null,
       status: 'completed',
@@ -1512,6 +1513,7 @@ function watchProcessExit_launch(proc, missionId, sendToWindow) {
         description: missionState.description,
         project_path: missionState.project_path,
         execution_mode: missionState.execution_mode || 'standard',
+        team_size: missionState.team_size,
         status: statusStr,
         started_at: missionState.started_at,
         ended_at: ts,
@@ -2088,6 +2090,7 @@ function watchProcessExit_deploy(proc, missionId, sendToWindow) {
       description: missionState.description,
       project_path: missionState.project_path,
       execution_mode: missionState.execution_mode || 'standard',
+      team_size: missionState.team_size,
       forked_from: missionState.forked_from || null,
       forked_from_desc: missionState.forked_from_desc || null,
       status: statusStr,
@@ -2122,7 +2125,7 @@ module.exports = function registerMission(getMainWindow) {
 
   // ── launch_mission ─────────────────────────────────────────────
   ipcMain.handle('launch_mission', async (_event, args) => {
-    const { projectPath, prompt, description, model, executionMode, historyContext, permissionMode } = args || {};
+    const { projectPath, prompt, description, model, executionMode, historyContext, permissionMode, team_size } = args || {};
 
     // Prevent double-launch
     if (missionState &&
@@ -2192,6 +2195,7 @@ module.exports = function registerMission(getMainWindow) {
       messages: [],
       execution_mode: execMode,
       permission_mode: permMode,
+      team_size: team_size !== undefined ? team_size : null,
       question_history: [],
       forked_from: historyState ? (historyState.id || null) : undefined,
       forked_from_desc: historyState ? (historyState.description || null) : undefined,
