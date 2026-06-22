@@ -12,7 +12,9 @@ import { useMission } from '../hooks/useMission'
 import { buildMissionPrompt } from '../data/promptWrapper'
 
 export function MissionControlPage() {
-  const { missionState, isRunning, planReady, setPlanReady, isReplanning, pendingQuestions, recoverableMission, setRecoverableMission, launch, deploy, continueM, stop, reset, replan, answerQuestion } = useMission()
+  const { missionState, isRunning, planReady, setPlanReady, isReplanning, pendingQuestions,
+          mockupInfo, recoverableMission, setRecoverableMission,
+          launch, deploy, continueM, stop, reset, replan, answerQuestion, respondToMockup } = useMission()
   const [elapsed, setElapsed] = useState('0:00')
   const [promptPreview, setPromptPreview] = useState(null) // { agents, tasks }
   const [planViewTab, setPlanViewTab] = useState('visual') // 'visual' | 'document'
@@ -66,7 +68,10 @@ export function MissionControlPage() {
 
   const hasMission = missionState && missionState.status !== 'Idle'
   const isPlanReview = planReady && missionState?.phase === 'ReviewPlan'
-  const isPlanningPhase = isRunning && missionState?.phase === 'Planning' && !isPlanReview
+  const isPlanningPhase = (
+    (isRunning || missionState?.status === 'WaitingForMockup') &&
+    missionState?.phase === 'Planning' && !isPlanReview
+  )
 
   // Load full mission snapshot from history to view read-only
   const handleViewHistory = useCallback(async (item) => {
@@ -246,6 +251,8 @@ export function MissionControlPage() {
             state={missionState}
             isRunning={isRunning}
             onStop={stop}
+            mockupInfo={mockupInfo}
+            onMockupRespond={respondToMockup}
           />
         )}
 
