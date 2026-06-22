@@ -30,12 +30,12 @@ Wrap it with the markers shown below:
   ],
   "tasks": [
     {
+      "agent": "<agent_name>",
       "title": "<short task name>",
+      "priority": "<high|medium|low>",
       "why": "<Business rationale: what this task enables for the user, how it fits the overall workflow, who depends on its output>",
       "depends_on": ["<title of task that must complete before this one>"],
-      "detail": "<DETAILED implementation spec — see rules below>",
-      "agent": "<agent_name>",
-      "priority": "<high|medium|low>"
+      "detail": "<DETAILED implementation spec — see rules below>"
     }
   ],
   "coordination": ["<shared files or deps>"]
@@ -68,7 +68,9 @@ Every task MUST also have:
 
 ✅ GOOD task (structured with line breaks):
   {
+    "agent": "frontend-ui",
     "title": "Create login form",
+    "priority": "high",
     "why": "Entry point for all users — without authentication, no user can access any feature of the app. The dashboard and profile pages both depend on the session produced here.",
     "depends_on": ["REST API endpoints"],
     "detail": "Build login form with React Hook Form + Zod validation.\nFields: email (email format), password (min 8 chars). Use shadcn/ui Input + Button.\n\nSteps:\n1. POST /api/auth/login on submit\n2. Handle 401 → show error toast\n3. On success → router.push('/dashboard')\n\nFiles: src/components/LoginForm.tsx, src/schemas/auth.ts\n\nAcceptance: form renders, submit triggers API call, 401 shows toast, success redirects to dashboard"
@@ -76,7 +78,9 @@ Every task MUST also have:
 
 ✅ GOOD task (backend, no dependencies):
   {
+    "agent": "backend-api",
     "title": "REST API endpoints",
+    "priority": "high",
     "why": "Defines the API contract that the frontend login form and all future UI features depend on. Must be built first so other agents can code against a real interface.",
     "depends_on": [],
     "detail": "Create Express.js router for quiz CRUD operations.\n\nEndpoints:\n- GET /api/quizzes — list all, paginated (?page=&limit=)\n- POST /api/quizzes — create, validate body with Joi\n- GET /api/quizzes/:id — single quiz\n- DELETE /api/quizzes/:id — remove\n\nData model: { title, questions: [{ text, options: string[], correctIndex: number }] }. Use Mongoose ODM.\n\nFiles: src/routes/quiz.ts, src/models/Quiz.ts, src/validators/quiz.ts\n\nAcceptance: all 4 routes respond correctly, Joi rejects invalid bodies with 400, Mongoose saves to MongoDB"
@@ -114,10 +118,30 @@ Use .claude-agent-team/ directory for coordination:
 - mission-progress.md -- Task list and status
 - Any shared interfaces or contracts between teammates
 
-## ⚠ TOOL RESTRICTIONS (CRITICAL — read carefully)
-You are running in NON-INTERACTIVE mode (`-p` flag). The following tools DO NOT WORK:
-- **AskUserQuestion** — WILL BE DENIED. Do NOT use it. It requires interactive stdin.
-- **EnterPlanMode** — Not applicable, you ARE the planner.
+## MOCKUP PROTOCOL (UI Missions Only)
 
-If you need to ask the user a question (e.g., clarify requirements, choose between approaches):
-{{PERMISSION_MODE}}
+**When to use:** Only if the mission involves creating or significantly modifying
+visible UI — new screens, components, layouts, forms, dashboards.
+Skip entirely for: backend APIs, CLI tools, config changes, refactoring,
+testing, database migrations, or any non-visual work.
+
+**Step 1 — Output mockup request then STOP your turn:**
+When you detect a UI mission, output this block BEFORE the plan JSON,
+then end your turn immediately:
+
+<<<MOCKUP_REQUEST>>>
+{"title": "<short UI name, e.g. Login Screen>", "spec": "<concise description: components, layout, color scheme, interactions, key states — 2-4 sentences>"}
+<<<END_MOCKUP_REQUEST>>>
+<<<MOCKUP_PAUSE>>>
+
+**Step 2 — After the user responds:**
+- If you receive `MOCKUP APPROVED` → continue normally, output the final plan JSON.
+- If you receive `MOCKUP FEEDBACK: "..."` → output a revised <<<MOCKUP_REQUEST>>> with
+  an updated spec, then <<<MOCKUP_PAUSE>>> again.
+- If you receive `MOCKUP SKIPPED` → continue normally and output the final plan JSON.
+
+**Rules:**
+- One mockup per planning session (do not repeat unless explicitly responding to MOCKUP FEEDBACK).
+- Keep spec concise (2-4 sentences) — the mockup generator handles rendering details.
+- Never output plan JSON in the same turn as <<<MOCKUP_PAUSE>>>.
+- The <<<MOCKUP_PAUSE>>> marker MUST be the very last thing you output before ending your turn.
