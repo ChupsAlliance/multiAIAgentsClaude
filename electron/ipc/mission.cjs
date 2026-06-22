@@ -826,6 +826,47 @@ async function spawnMockupGenerator(title, spec, missionId, sendToWindow) {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// restartLeadAfterMockup — resume Lead after mockup approve/feedback/skip.
+// Mirrors the answer_question restart pattern exactly.
+// ─────────────────────────────────────────────────────────────────
+function restartLeadAfterMockup(missionId, injection, sendToWindow) {
+  if (!missionState || !missionState.session_id) return;
+
+  killChild();
+
+  const sessionId   = missionState.session_id;
+  const leadModel   = missionState.agents.find(a => a.name === 'Lead')?.model || 'sonnet';
+  const projectPath = missionState.project_path;
+  const execMode    = missionState.execution_mode || 'standard';
+
+  const proc = spawnClaude(
+    ['-p', '--resume', sessionId, '--dangerously-skip-permissions',
+     '--model', leadModel,
+     '--output-format', 'stream-json', '--verbose', '--max-turns', '200'],
+    projectPath,
+    execMode === 'agent_teams'
+  );
+
+  try {
+    proc.stdin.write(injection, 'utf8');
+    proc.stdin.end();
+  } catch (e) {
+    const entry = makeLogEntry(now(), 'System', `Failed to resume Lead: ${e.message}`, 'error');
+    if (missionState) missionState.log.push(entry);
+    sendToWindow('mission:log', entry);
+    return;
+  }
+
+  childProcess = proc;
+  if (missionState) missionState.status = 'Running';
+  startAutosave();
+
+  readProcessStdout_launch(proc, missionId, sendToWindow);
+  readProcessStderr(proc, sendToWindow);
+  watchProcessExit_launch(proc, missionId, sendToWindow);
+}
+
+// ─────────────────────────────────────────────────────────────────
 // buildToolDetail — rich tool detail string for log entry
 // ─────────────────────────────────────────────────────────────────
 function buildToolDetail(tool, input) {
@@ -1101,6 +1142,7 @@ function readProcessStdout_launch(proc, missionId, sendToWindow) {
   let planEmitted = false;
   // Question protocol: accumulate text for marker detection
   let questionTextBuf = '';
+  let mockupTextBuf   = '';
   let questionBatch   = [];
   // Capture session_id for resume-based question protocol
   let capturedSessionId = null;
@@ -1181,6 +1223,28 @@ function readProcessStdout_launch(proc, missionId, sendToWindow) {
                   questionTextBuf.indexOf('<<<QUESTIONS_END>>>') + '<<<QUESTIONS_END>>>'.length
                 );
               }
+            }
+
+            // ── Mockup protocol ──────────────────────────────────────────────
+            mockupTextBuf += text;
+            if (mockupTextBuf.includes('<<<MOCKUP_PAUSE>>>')) {
+              const reqMatch = /<<<MOCKUP_REQUEST>>>([\s\S]*?)<<<END_MOCKUP_REQUEST>>>/.exec(mockupTextBuf);
+              if (reqMatch) {
+                let parsed = null;
+                try { parsed = JSON.parse(reqMatch[1].trim()); } catch { /* skip */ }
+                if (parsed && parsed.title && parsed.spec) {
+                  if (missionState) missionState.status = 'WaitingForMockup';
+                  const entry = makeLogEntry(now(), 'Lead',
+                    `Requesting UI mockup for "${parsed.title}" — generating preview...`, 'info');
+                  if (missionState) missionState.log.push(entry);
+                  sendToWindow('mission:log', entry);
+                  spawnMockupGenerator(parsed.title, parsed.spec, missionState?.id, sendToWindow);
+                }
+              }
+              // Clear consumed buffer
+              mockupTextBuf = mockupTextBuf.slice(
+                mockupTextBuf.indexOf('<<<MOCKUP_PAUSE>>>') + '<<<MOCKUP_PAUSE>>>'.length
+              );
             }
 
             // Check for plan markers / fallback JSON in accumulated text
@@ -1404,6 +1468,14 @@ function watchProcessExit_launch(proc, missionId, sendToWindow) {
       missionState.log.push(entry);
       sendToWindow('mission:log', entry);
       // Keep phase='Planning', status='WaitingForAnswer', don't emit completed
+      return;
+    }
+
+    if (missionState && missionState.status === 'WaitingForMockup') {
+      const entry = makeLogEntry(now(), 'System',
+        'Planning paused — review the UI mockup in your browser, then approve or send feedback', 'info');
+      missionState.log.push(entry);
+      sendToWindow('mission:log', entry);
       return;
     }
 
