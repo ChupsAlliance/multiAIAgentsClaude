@@ -14,6 +14,7 @@ export function useMission() {
   const [isRunning, setIsRunning] = useState(false)
   const [planReady, setPlanReady] = useState(null)
   const [pendingQuestions, setPendingQuestions] = useState(null)
+  const [mockupInfo, setMockupInfo] = useState(null)
   const [recoverableMission, setRecoverableMission] = useState(null)
   const unlistenersRef = useRef([])
 
@@ -365,6 +366,7 @@ export function useMission() {
         // ── Plan ready (one-time — apply immediately) ──
         listen('mission:plan-ready', (e) => {
           const { agents, tasks, mission_context } = e.payload
+          setMockupInfo(null)
           setPlanReady({ agents, tasks, mission_context: mission_context || null })
           phaseRef.current = 'ReviewPlan'
 
@@ -469,6 +471,11 @@ export function useMission() {
 
         listen('mission:answer-sent', () => {
           setPendingQuestions(null)
+        }),
+
+        // ── Mockup protocol (rare — apply immediately) ──
+        listen('mission:mockup', (e) => {
+          setMockupInfo(e.payload)
         }),
       ])
 
@@ -683,6 +690,7 @@ export function useMission() {
     await invoke('stop_mission')
     setIsRunning(false)
     setPlanReady(null)
+    setMockupInfo(null)
   }, [])
 
   const reset = useCallback(async () => {
@@ -695,10 +703,10 @@ export function useMission() {
   // ── Re-plan: send modified agents/tasks to Lead for incremental update ──
   const [isReplanning, setIsReplanning] = useState(false)
 
-  const replan = useCallback(async (agents, tasks) => {
+  const replan = useCallback(async (agents, tasks, note = '') => {
     setIsReplanning(true)
     try {
-      const result = await invoke('replan_mission', { agents, tasks })
+      const result = await invoke('replan_mission', { agents, tasks, note })
       if (typeof result === 'string') {
         // Error string returned
         console.error('[replan] Error:', result)
@@ -733,5 +741,11 @@ export function useMission() {
     }
   }, [])
 
-  return { missionState, isRunning, planReady, setPlanReady, isReplanning, pendingQuestions, recoverableMission, setRecoverableMission, launch, deploy, continueM, stop, reset, replan, answerQuestion }
+  // ── Respond to mockup: send decision back to Lead ──
+  const respondToMockup = useCallback(async (decision, feedback = '') => {
+    setMockupInfo(null)
+    await invoke('mockup_respond', { decision, feedback })
+  }, [])
+
+  return { missionState, isRunning, planReady, setPlanReady, isReplanning, pendingQuestions, mockupInfo, recoverableMission, setRecoverableMission, launch, deploy, continueM, stop, reset, replan, answerQuestion, respondToMockup }
 }
