@@ -18,7 +18,7 @@ const ALLOWED_COMMANDS = [
   'launch_mission', 'deploy_mission', 'continue_mission', 'replan_mission',
   'stop_mission', 'reset_mission', 'get_mission_state', 'get_incomplete_missions',
   'update_agent_model',
-  'read_planning_template', 'answer_question', 'read_superpowers_skill',
+  'read_planning_template', 'answer_question', 'read_superpowers_skill', 'mockup_respond',
   // office
   'load_office_layout', 'save_office_layout',
   // pixel-agents persistence
