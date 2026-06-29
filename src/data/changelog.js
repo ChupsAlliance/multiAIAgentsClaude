@@ -6,9 +6,47 @@
  * badge: optional short label shown as colored tag
  */
 
-export const APP_VERSION = '0.6.0'
+export const APP_VERSION = '0.7.1'
 
 export const changelog = [
+  {
+    version: '0.7.1',
+    date: '2026-06-29',
+    title: 'Mockup Agent',
+    highlights: [
+      'Lead tự động generate UI mockup trước khi lên plan — xem preview trong browser, approve hoặc gửi feedback',
+      'Mockup server chạy local, không cần internet',
+    ],
+    items: [
+      { type: 'added', badge: 'Mockup',
+        text: 'Mockup Agent: Lead detect UI mission → generate HTML mockup via claude-haiku → serve trên localhost → mở browser tự động' },
+      { type: 'added', badge: 'Mockup',
+        text: 'MockupApprovalCard: card màu tím trong planning stream để Approve (tiếp tục planning) hoặc gửi feedback để Lead revise mockup' },
+      { type: 'fixed', badge: 'Mission',
+        text: 'team_size không được lưu vào history — field bị drop tại backend, mọi saveToHistory call đều thiếu. Fix: extract và persist đúng cách' },
+      { type: 'fixed', badge: 'IPC',
+        text: 'Duplicate open_url IPC handler gây crash khi khởi động, làm mất toàn bộ mission handlers' },
+    ],
+  },
+  {
+    version: '0.7.0',
+    date: '2026-06-19',
+    title: 'Agent Dependency Ordering & Task Assignment Fix',
+    highlights: [
+      'Agents với depends_on giờ spawn theo đúng thứ tự — không còn bị "early shutdown"',
+      'Tasks trong plan review không còn bị unassigned do AI quên field "agent"',
+    ],
+    items: [
+      { type: 'fixed', badge: 'Mission',
+        text: 'Agent team shutdown sớm do depends_on không được xử lý — backend tính toán dependency graph và inject spawn waves vào prompt cho Lead (Wave 1 → chờ xong → Wave 2 ...)' },
+      { type: 'fixed', badge: 'Mission',
+        text: 'Depends_on_agents annotation trong mỗi agent block — Lead biết chính xác agent nào phải chạy trước agent nào' },
+      { type: 'fixed', badge: 'Plan',
+        text: 'Tasks trong Plan Review hiện tất cả "Chưa phân công" — AI quên field "agent" khi detail quá dài. Fix: đặt "agent" làm field đầu tiên trong JSON template để AI commit assignment trước khi viết detail' },
+      { type: 'improved', badge: 'Prompt',
+        text: 'Planning prompt examples cập nhật: "agent" và "priority" xuất hiện trước "detail" trong mọi task example' },
+    ],
+  },
   {
     version: '0.6.0',
     date: '2026-06-08',
