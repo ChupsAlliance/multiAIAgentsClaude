@@ -789,8 +789,24 @@ async function spawnMockupGenerator(title, spec, missionId, sendToWindow) {
     `- Include realistic placeholder content\n` +
     `Output ONLY the complete HTML document wrapped in <<<HTML>>> and <<<END_HTML>>> markers. Nothing else before or after.`;
 
+  const warn30 = setTimeout(() => {
+    const entry = makeLogEntry(now(), 'System', 'Mockup đang generate (30s)...', 'info');
+    if (missionState) missionState.log.push(entry);
+    sendToWindow('mission:log', entry);
+  }, 30000);
+
+  const warn50 = setTimeout(() => {
+    const entry = makeLogEntry(now(), 'System',
+      'Mockup sắp timeout — nếu thất bại sẽ tiếp tục planning tự động', 'info');
+    if (missionState) missionState.log.push(entry);
+    sendToWindow('mission:log', entry);
+  }, 50000);
+
+  const cleanup = () => { clearTimeout(warn30); clearTimeout(warn50); };
+
   try {
     const htmlContent = await runClaudeForHtml(prompt);
+    cleanup();
 
     const server = http.createServer((_req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -812,6 +828,7 @@ async function spawnMockupGenerator(title, spec, missionId, sendToWindow) {
     });
 
   } catch (err) {
+    cleanup();
     const entry = makeLogEntry(now(), 'System',
       `Mockup generation failed (${err.message}) — continuing planning`, 'info');
     if (missionState) missionState.log.push(entry);

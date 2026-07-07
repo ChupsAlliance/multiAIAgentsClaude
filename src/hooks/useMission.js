@@ -274,6 +274,12 @@ export function useMission() {
         // ── HIGH-FREQUENCY: Log entries → buffer ──
         listen('mission:log', (e) => {
           const entry = e.payload
+
+          // Mockup timeout warning — show toast when 50s warning log entry arrives
+          if (entry.message?.includes('sắp timeout')) {
+            toast.warn('Mockup sắp timeout', 'Nếu thất bại sẽ tiếp tục planning tự động')
+          }
+
           logBuffer.current.push(entry)
 
           // Buffer agent status update too
