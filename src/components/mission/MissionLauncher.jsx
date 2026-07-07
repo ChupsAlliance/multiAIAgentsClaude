@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { Rocket, FolderOpen, Zap, History, Trash2, Cpu, Eye, EyeOff, Users, FlaskConical, Paperclip, FileText, Image, Folder, Upload, X, AtSign, Shield, ShieldCheck, ShieldQuestion, Brain } from 'lucide-react'
 import { buildMissionPrompt } from '../../data/promptWrapper'
 import { useTauriFileDrop } from '../../hooks/useTauriFileDrop'
+import { useToast } from '../../hooks/useToast'
 
 const MODELS = [
   { id: 'sonnet',  label: 'Sonnet 4.6',  desc: 'Nhanh, tiết kiệm — phù hợp task đơn giản', badge: 'Fast' },
@@ -55,6 +56,7 @@ const PERMISSION_MODES = [
 ]
 
 export function MissionLauncher({ onLaunch }) {
+  const toast = useToast()
   const [requirement, setRequirement] = useState('')
   const [projectPath, setProjectPath] = useState('')
   const [teamHint, setTeamHint] = useState(4)
@@ -321,6 +323,7 @@ export function MissionLauncher({ onLaunch }) {
       await onLaunch({ projectPath, prompt, description: requirement, model, executionMode, permissionMode })
     } catch (err) {
       console.error('Launch failed:', err)
+      toast.error(`Launch thất bại: ${err.message || 'Lỗi không xác định'}`)
     } finally {
       setLaunching(false)
     }

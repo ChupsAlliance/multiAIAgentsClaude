@@ -27,7 +27,8 @@ let _cachedTemplate = null
 async function loadPlanningTemplate() {
   if (_cachedTemplate) return _cachedTemplate
   try {
-    _cachedTemplate = await invoke('read_planning_template')
+    const result = await invoke('read_planning_template')
+    _cachedTemplate = result || bundledTemplate
   } catch {
     // Fallback: Tauri mode or handler not available → use bundled
     _cachedTemplate = bundledTemplate
