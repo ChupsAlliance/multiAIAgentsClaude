@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo, memo, useState, useCallback } from 'react'
+import { useEffect, useRef, useMemo, memo, useState } from 'react'
 import { Brain, Square, Wrench, Info, ChevronRight, Palette, ExternalLink } from 'lucide-react'
 
 // ── Phase detection from recent log content ──
