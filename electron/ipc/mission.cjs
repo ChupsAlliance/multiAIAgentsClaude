@@ -3059,11 +3059,11 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
     if (!agent) return { ok: false, error: `Agent "${agentName}" not found` };
 
     const task = missionState.tasks.find(t =>
-      t.agent === agentName && ['error', 'in-progress'].includes(t.status)
+      t.assigned_agent === agentName && ['in_progress'].includes(t.status)
     );
     if (!task) return { ok: false, error: 'No retryable task found' };
 
-    agent.status = 'idle';
+    agent.status = 'Idle';
     agent.error = null;
     task.status = 'pending';
 
