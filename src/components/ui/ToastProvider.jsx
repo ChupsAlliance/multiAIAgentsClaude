@@ -1,4 +1,4 @@
-import { createContext, useCallback, useState } from 'react'
+import { createContext, useCallback, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertCircle, AlertTriangle, CheckCircle, Info, X } from 'lucide-react'
 
@@ -58,15 +58,18 @@ function ToastStack({ toasts, onDismiss }) {
 
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([])
+  const timersRef = useRef({})
 
   const removeToast = useCallback((id) => {
+    clearTimeout(timersRef.current[id])
+    delete timersRef.current[id]
     setToasts(prev => prev.filter(t => t.id !== id))
   }, [])
 
   const addToast = useCallback((toast) => {
     const id = Date.now().toString() + Math.random().toString(36).slice(2, 6)
     setToasts(prev => [{ ...toast, id }, ...prev].slice(0, 5))
-    setTimeout(() => removeToast(id), toast.duration)
+    timersRef.current[id] = setTimeout(() => removeToast(id), toast.duration)
   }, [removeToast])
 
   return (
