@@ -27,6 +27,31 @@ export function useMission() {
   const agentUpdates = useRef(new Map()) // agentName -> { status, current_task }
   const flushTimer = useRef(null)
   const phaseRef = useRef('Idle') // tracks current mission phase for log handlers
+  const planningTimerRef = useRef(null)
+  const planningElapsedRef = useRef(0)
+
+  // ── Planning timer helpers ──
+  const startPlanningTimer = useCallback(() => {
+    if (planningTimerRef.current) return // already running
+    planningElapsedRef.current = 0
+    planningTimerRef.current = setInterval(() => {
+      planningElapsedRef.current += 1
+      if (planningElapsedRef.current === 180) {
+        toast.info('Lead đang suy nghĩ...', 'Bình thường mất 3–8 phút cho dự án lớn')
+      }
+      if (planningElapsedRef.current === 480) {
+        toast.warn('Planning kéo dài bất thường', 'Bạn có thể Stop và thử lại nếu bị kẹt')
+      }
+    }, 1000)
+  }, [toast])
+
+  const clearPlanningTimer = useCallback(() => {
+    if (planningTimerRef.current) {
+      clearInterval(planningTimerRef.current)
+      planningTimerRef.current = null
+    }
+    planningElapsedRef.current = 0
+  }, [])
 
   // Flush all buffered events into a single setState call
   const flushBuffers = useCallback(() => {
@@ -142,6 +167,7 @@ export function useMission() {
           const { status } = e.payload
 
           if (status === 'reset') {
+            clearPlanningTimer()
             setMissionState(null)
             setIsRunning(false)
             setPlanReady(null)
@@ -164,6 +190,11 @@ export function useMission() {
             return prev
           })
           setIsRunning(['running', 'launching', 'deploying'].includes(status))
+
+          // Planning timer: start when entering running in Planning phase, clear on terminal states
+          if (['completed', 'stopped', 'failed'].includes(status)) {
+            clearPlanningTimer()
+          }
 
           if (['completed', 'stopped', 'failed'].includes(status)) {
             // Flush any remaining buffered data before hydrating
@@ -191,7 +222,11 @@ export function useMission() {
           const { agent_name, name, role, timestamp, reset } = e.payload
           const agentName = agent_name || name
           const eventModel = e.payload.model || null
-          if (reset) phaseRef.current = 'Planning' // new mission starts in Planning
+          if (reset) {
+            phaseRef.current = 'Planning' // new mission starts in Planning
+            clearPlanningTimer()
+            startPlanningTimer()
+          }
           setMissionState(prev => {
             if (reset) {
               const freshAgent = {
@@ -368,6 +403,7 @@ export function useMission() {
         // ── Plan ready (one-time — apply immediately) ──
         listen('mission:plan-ready', (e) => {
           const { agents, tasks, mission_context } = e.payload
+          clearPlanningTimer()
           setMockupInfo(null)
           setPlanReady({ agents, tasks, mission_context: mission_context || null })
           phaseRef.current = 'ReviewPlan'
@@ -516,9 +552,10 @@ export function useMission() {
 
     return () => {
       if (flushTimer.current) clearTimeout(flushTimer.current)
+      clearPlanningTimer()
       unlistenersRef.current.forEach(fn => fn())
     }
-  }, [flushBuffers, scheduleFlush])
+  }, [flushBuffers, scheduleFlush, startPlanningTimer, clearPlanningTimer])
 
   const launch = useCallback(async ({ projectPath, prompt, description, model, executionMode, historyContext, permissionMode }) => {
     setPlanReady(null)
@@ -694,10 +731,11 @@ export function useMission() {
     } catch (err) {
       toast.error('Không thể dừng mission', err?.message)
     }
+    clearPlanningTimer()
     setIsRunning(false)
     setPlanReady(null)
     setMockupInfo(null)
-  }, [toast])
+  }, [toast, clearPlanningTimer])
 
   const reset = useCallback(async () => {
     await invoke('reset_mission').catch(() => {})
@@ -710,6 +748,9 @@ export function useMission() {
   const [isReplanning, setIsReplanning] = useState(false)
 
   const replan = useCallback(async (agents, tasks, note = '') => {
+    // Reset planning timer on replan so toasts don't duplicate
+    clearPlanningTimer()
+    startPlanningTimer()
     setIsReplanning(true)
     try {
       const result = await invoke('replan_mission', { agents, tasks, note })
@@ -729,10 +770,11 @@ export function useMission() {
       return null
     } catch (err) {
       toast.error('Replan thất bại', err?.message)
+      clearPlanningTimer()
       setIsReplanning(false)
       return null
     }
-  }, [toast])
+  }, [toast, clearPlanningTimer, startPlanningTimer])
 
   // ── Answer question: send answers back to Lead ──
   const answerQuestion = useCallback(async (answers) => {

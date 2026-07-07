@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo, memo, useState } from 'react'
+import { useEffect, useRef, useMemo, memo, useState, useCallback } from 'react'
 import { Brain, Square, Wrench, Info, ChevronRight, Palette, ExternalLink } from 'lucide-react'
 
 // ── Phase detection from recent log content ──
@@ -125,10 +125,23 @@ function MockupApprovalCard({ mockupInfo, onRespond }) {
   )
 }
 
+function formatElapsed(s) {
+  const m = Math.floor(s / 60)
+  const sec = s % 60
+  return `${m}:${sec.toString().padStart(2, '0')}`
+}
+
 // ── Main component ──
 export const PlanningStream = memo(function PlanningStream({ state, isRunning, onStop, mockupInfo, onMockupRespond }) {
   const scrollRef = useRef(null)
   const wasAtBottomRef = useRef(true)
+  const [elapsed, setElapsed] = useState(0)
+
+  useEffect(() => {
+    if (!isRunning) { setElapsed(0); return }
+    const interval = setInterval(() => setElapsed(s => s + 1), 1000)
+    return () => clearInterval(interval)
+  }, [isRunning])
 
   const agents = state?.agents || []
   const logs   = state?.log    || []
@@ -171,6 +184,9 @@ export const PlanningStream = memo(function PlanningStream({ state, isRunning, o
               — {currentPhase}
             </span>
           </div>
+          <span className="text-[10px] font-mono text-vs-muted/50 shrink-0">
+            {formatElapsed(elapsed)}
+          </span>
           {onStop && (
             <button
               onClick={onStop}
