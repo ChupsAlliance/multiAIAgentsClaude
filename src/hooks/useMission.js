@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { useToast } from './useToast'
 
 // ── Batched event system ──
 // Instead of calling setState on every single event (10-20 per second),
@@ -17,6 +18,7 @@ export function useMission() {
   const [mockupInfo, setMockupInfo] = useState(null)
   const [recoverableMission, setRecoverableMission] = useState(null)
   const unlistenersRef = useRef([])
+  const { toast } = useToast()
 
   // ── Batch buffers (mutable refs, no re-render) ──
   const logBuffer = useRef([])
@@ -534,7 +536,7 @@ export function useMission() {
       setMissionState(initialState)
       setIsRunning(true)
     } catch (err) {
-      console.error('[launch] Error:', err)
+      toast.error('Không thể khởi động mission', err?.message)
       setMissionState({
         id: `m-${Date.now()}`,
         description: description || 'Mission',
@@ -585,7 +587,7 @@ export function useMission() {
         return { ...prev, phase: 'Deploying', status: 'Running', agents: updatedAgents }
       })
     } catch (err) {
-      console.error('[deploy] Error:', err)
+      toast.error('Deploy thất bại', err?.message)
       setMissionState(prev => prev ? {
         ...prev,
         status: 'Failed',
@@ -673,7 +675,7 @@ export function useMission() {
         } : prev)
       }
     } catch (err) {
-      console.error('[continueM] Exception:', err)
+      toast.error('Không thể tiếp tục mission', err?.message)
       setMissionState(prev => prev ? {
         ...prev,
         status: 'Failed',
@@ -687,11 +689,15 @@ export function useMission() {
   }, [])
 
   const stop = useCallback(async () => {
-    await invoke('stop_mission')
+    try {
+      await invoke('stop_mission')
+    } catch (err) {
+      toast.error('Không thể dừng mission', err?.message)
+    }
     setIsRunning(false)
     setPlanReady(null)
     setMockupInfo(null)
-  }, [])
+  }, [toast])
 
   const reset = useCallback(async () => {
     await invoke('reset_mission').catch(() => {})
@@ -722,7 +728,7 @@ export function useMission() {
       setIsReplanning(false)
       return null
     } catch (err) {
-      console.error('[replan] Exception:', err)
+      toast.error('Replan thất bại', err?.message)
       setIsReplanning(false)
       return null
     }
@@ -737,9 +743,9 @@ export function useMission() {
       }
       setPendingQuestions(null)
     } catch (err) {
-      console.error('[answerQuestion] Exception:', err)
+      toast.warn('Không gửi được câu trả lời', 'Thử lại hoặc reload trang')
     }
-  }, [])
+  }, [toast])
 
   // ── Respond to mockup: send decision back to Lead ──
   const respondToMockup = useCallback(async (decision, feedback = '') => {
@@ -747,10 +753,10 @@ export function useMission() {
       await invoke('mockup_respond', { decision, feedback })
       setMockupInfo(null)
     } catch (err) {
-      console.error('[respondToMockup] IPC failed:', err)
+      toast.warn('Không gửi được phản hồi mockup', err?.message)
       // Don't clear mockupInfo — let user retry
     }
-  }, [])
+  }, [toast])
 
   return { missionState, isRunning, planReady, setPlanReady, isReplanning, pendingQuestions, mockupInfo, recoverableMission, setRecoverableMission, launch, deploy, continueM, stop, reset, replan, answerQuestion, respondToMockup }
 }
