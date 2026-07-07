@@ -19,7 +19,7 @@ const baseTabs = [
   { id: 'files',    label: 'Files',    icon: FolderOpen },
 ]
 
-export const MissionDashboard = memo(function MissionDashboard({ state, isRunning, onStop, onContinue, onNewMission, elapsed, isHistoryView, pendingQuestions, onAnswerQuestion }) {
+export const MissionDashboard = memo(function MissionDashboard({ state, isRunning, onStop, onContinue, onNewMission, elapsed, isHistoryView, pendingQuestions, onAnswerQuestion, onRetryAgent }) {
   const [activeTab, setActiveTab] = useState('tasks')
   const [selectedAgent, setSelectedAgent] = useState(null)
   const [sidebarWidth, setSidebarWidth] = useState(224) // px, default w-56
@@ -177,6 +177,7 @@ export const MissionDashboard = memo(function MissionDashboard({ state, isRunnin
               logs={logs}
               selectedAgent={selectedAgent}
               onSelectAgent={handleSelectAgent}
+              onRetryAgent={onRetryAgent}
             />
           </div>
 

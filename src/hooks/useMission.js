@@ -806,5 +806,14 @@ export function useMission() {
     }
   }, [toast])
 
-  return { missionState, isRunning, planReady, setPlanReady, isReplanning, pendingQuestions, mockupInfo, recoverableMission, setRecoverableMission, launch, deploy, continueM, stop, reset, replan, answerQuestion, respondToMockup }
+  const retryAgent = useCallback(async (agentName) => {
+    try {
+      await invoke('retry_agent', { agentName })
+      toast.info(`Đang retry agent "${agentName}"`)
+    } catch (err) {
+      toast.error(`Không thể retry agent "${agentName}"`, err?.message)
+    }
+  }, [toast])
+
+  return { missionState, isRunning, planReady, setPlanReady, isReplanning, pendingQuestions, mockupInfo, recoverableMission, setRecoverableMission, launch, deploy, continueM, stop, reset, replan, answerQuestion, respondToMockup, retryAgent }
 }

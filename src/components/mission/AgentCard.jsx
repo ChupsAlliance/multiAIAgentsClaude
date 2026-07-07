@@ -1,6 +1,6 @@
 import { useState, useMemo, memo } from 'react'
 import { StatusBadge } from './StatusBadge'
-import { Zap, Brain, Coins, ChevronDown, ChevronRight, Eye } from 'lucide-react'
+import { Zap, Brain, Coins, ChevronDown, ChevronRight, Eye, RotateCcw } from 'lucide-react'
 
 const MODEL_META = {
   sonnet: { icon: Zap,   label: 'Sonnet', cls: 'text-blue-400 bg-blue-400/10' },
@@ -31,7 +31,7 @@ const LogLine = memo(function LogLine({ log }) {
   )
 })
 
-export const AgentCard = memo(function AgentCard({ agent, logs = [], isSelected, onSelect }) {
+export const AgentCard = memo(function AgentCard({ agent, logs = [], isSelected, onSelect, onRetryAgent }) {
   const [expanded, setExpanded] = useState(false)
   const { name, role, status, current_task, model } = agent
   const modelInfo = model ? MODEL_META[model] : null
@@ -74,6 +74,17 @@ export const AgentCard = memo(function AgentCard({ agent, logs = [], isSelected,
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <StatusBadge status={status} size="xs" />
+            {(status === 'Error' || status === 'error') && onRetryAgent && (
+              <button
+                onClick={() => onRetryAgent(agent.name)}
+                className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-mono
+                           border border-vs-border text-vs-muted hover:text-orange-300
+                           hover:border-orange-400/40 rounded transition-colors"
+              >
+                <RotateCcw size={8} />
+                Retry
+              </button>
+            )}
             {/* View button — click to open this agent's logs in the Activity tab */}
             <button
               onClick={onSelect}

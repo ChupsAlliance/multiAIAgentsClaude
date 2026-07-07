@@ -3049,4 +3049,36 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
     }
     return null;
   });
+
+  // ── retry_agent ────────────────────────────────────────────────
+  ipcMain.handle('retry_agent', async (_event, args) => {
+    const { agentName } = args || {};
+    if (!missionState) return { ok: false, error: 'No active mission' };
+
+    const agent = missionState.agents.find(a => a.name === agentName);
+    if (!agent) return { ok: false, error: `Agent "${agentName}" not found` };
+
+    const task = missionState.tasks.find(t =>
+      t.agent === agentName && ['error', 'in-progress'].includes(t.status)
+    );
+    if (!task) return { ok: false, error: 'No retryable task found' };
+
+    agent.status = 'idle';
+    agent.error = null;
+    task.status = 'pending';
+
+    const agentEntry = makeLogEntry(now(), 'System',
+      `[Lead] Retrying agent "${agentName}"...`, 'info');
+    missionState.log.push(agentEntry);
+    sendToWindow('mission:log', agentEntry);
+    sendToWindow('mission:agent-spawned', { ...agent, reset: true });
+
+    if (missionState.process && !missionState.process.killed) {
+      missionState.process.stdin.write(
+        `\n[System] Agent "${agentName}" encountered an error. Please re-spawn it with the same task.\n`
+      );
+    }
+
+    return { ok: true };
+  });
 };

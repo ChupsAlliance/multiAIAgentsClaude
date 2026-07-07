@@ -14,7 +14,7 @@ import { buildMissionPrompt } from '../data/promptWrapper'
 export function MissionControlPage() {
   const { missionState, isRunning, planReady, setPlanReady, isReplanning, pendingQuestions,
           mockupInfo, recoverableMission, setRecoverableMission,
-          launch, deploy, continueM, stop, reset, replan, answerQuestion, respondToMockup } = useMission()
+          launch, deploy, continueM, stop, reset, replan, answerQuestion, respondToMockup, retryAgent } = useMission()
   const [elapsed, setElapsed] = useState('0:00')
   const [promptPreview, setPromptPreview] = useState(null) // { agents, tasks }
   const [planViewTab, setPlanViewTab] = useState('visual') // 'visual' | 'document'
@@ -268,6 +268,7 @@ export function MissionControlPage() {
               elapsed={elapsed}
               pendingQuestions={pendingQuestions}
               onAnswerQuestion={answerQuestion}
+              onRetryAgent={retryAgent}
             />
           </div>
         )}
