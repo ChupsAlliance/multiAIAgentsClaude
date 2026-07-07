@@ -555,7 +555,7 @@ export function useMission() {
         started_at: Date.now(),
       })
     }
-  }, [])
+  }, [toast])
 
   const deploy = useCallback(async (agents, tasks, agentPrompts = {}) => {
     setPlanReady(null)
@@ -598,7 +598,7 @@ export function useMission() {
         }],
       } : prev)
     }
-  }, [])
+  }, [toast])
 
   const continueM = useCallback(async (message, agentsOrContext = null) => {
     // agentsOrContext can be:
@@ -686,7 +686,7 @@ export function useMission() {
         }],
       } : prev)
     }
-  }, [])
+  }, [toast])
 
   const stop = useCallback(async () => {
     try {
@@ -732,7 +732,7 @@ export function useMission() {
       setIsReplanning(false)
       return null
     }
-  }, [])
+  }, [toast])
 
   // ── Answer question: send answers back to Lead ──
   const answerQuestion = useCallback(async (answers) => {

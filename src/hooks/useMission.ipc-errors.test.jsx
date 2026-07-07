@@ -1,4 +1,4 @@
-import { renderHook, act } from '@testing-library/react'
+import { renderHook, act, cleanup } from '@testing-library/react'
 import { vi } from 'vitest'
 import { useMission } from './useMission'
 import { ToastProvider } from '../components/ui/ToastProvider'
@@ -12,6 +12,8 @@ vi.mock('@tauri-apps/api/event', () => ({
 }))
 
 const wrapper = ({ children }) => <ToastProvider>{children}</ToastProvider>
+
+afterEach(cleanup)
 
 test('stop failure shows toast error', async () => {
   const { result } = renderHook(() => useMission(), { wrapper })
