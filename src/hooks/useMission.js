@@ -808,8 +808,12 @@ export function useMission() {
 
   const retryAgent = useCallback(async (agentName) => {
     try {
-      await invoke('retry_agent', { agentName })
-      toast.info(`Đang retry agent "${agentName}"`)
+      const result = await invoke('retry_agent', { agentName })
+      if (result?.ok === false) {
+        toast.error(`Không thể retry agent "${agentName}"`, result.error)
+      } else {
+        toast.info(`Đang retry agent "${agentName}"`)
+      }
     } catch (err) {
       toast.error(`Không thể retry agent "${agentName}"`, err?.message)
     }

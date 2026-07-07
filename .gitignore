@@ -28,3 +28,4 @@ release/
 *.sw?
 *.zip
 data/
+.superpowers/

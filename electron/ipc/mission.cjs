@@ -3059,7 +3059,7 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
     if (!agent) return { ok: false, error: `Agent "${agentName}" not found` };
 
     const task = missionState.tasks.find(t =>
-      t.assigned_agent === agentName && ['in_progress'].includes(t.status)
+      t.assigned_agent === agentName && ['in_progress', 'completed'].includes(t.status)
     );
     if (!task) return { ok: false, error: 'No retryable task found' };
 
@@ -3071,7 +3071,7 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
       `[Lead] Retrying agent "${agentName}"...`, 'info');
     missionState.log.push(agentEntry);
     sendToWindow('mission:log', agentEntry);
-    sendToWindow('mission:agent-spawned', { ...agent, reset: true });
+    sendToWindow('mission:agent-spawned', { ...agent });
 
     if (missionState.process && !missionState.process.killed) {
       missionState.process.stdin.write(

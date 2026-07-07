@@ -68,7 +68,17 @@ export function ToastProvider({ children }) {
 
   const addToast = useCallback((toast) => {
     const id = Date.now().toString() + Math.random().toString(36).slice(2, 6)
-    setToasts(prev => [{ ...toast, id }, ...prev].slice(0, 5))
+    setToasts(prev => {
+      const next = [{ ...toast, id }, ...prev]
+      if (next.length > 5) {
+        const evicted = next.slice(5)
+        evicted.forEach(t => {
+          clearTimeout(timersRef.current[t.id])
+          delete timersRef.current[t.id]
+        })
+      }
+      return next.slice(0, 5)
+    })
     timersRef.current[id] = setTimeout(() => removeToast(id), toast.duration)
   }, [removeToast])
 

@@ -7,6 +7,7 @@ Project type: {{PROJECT_TYPE}}
 ## AGENTS TO SPAWN
 
 {{AGENT_BLOCKS}}
+{{SPAWN_WAVES}}
 
 ## EXECUTION PROTOCOL (Agent Teams — Phased)
 
@@ -14,8 +15,18 @@ Project type: {{PROJECT_TYPE}}
 1. Call TeamCreate with team_name="mission" and description="Mission execution".
 2. Print "[Lead] Team created"
 
-### Phase 2: Spawn All Agents
-For EACH agent listed above, call the Agent tool with:
+### Phase 2: Spawn Agents (Wave-by-Wave if Dependencies Exist)
+
+**If a SPAWN ORDER section appears above:** Spawn agents wave by wave.
+- Spawn all agents in Wave 1 in the SAME Agent tool call (parallel).
+- Wait until EVERY Wave 1 agent prints BUILD_RESULT: PASS (or is reassigned after failure).
+- Then spawn Wave 2 agents in the SAME Agent tool call (parallel).
+- Continue until all waves are spawned and completed.
+- Print "[Lead] Wave N complete — spawning Wave N+1" between waves.
+
+**If NO SPAWN ORDER section appears above:** Spawn ALL agents in one parallel call (no dependencies).
+
+For EACH agent, call the Agent tool with:
 - name: the agent's exact name
 - team_name: "mission"
 - subagent_type: "general-purpose"
@@ -79,7 +90,7 @@ For EACH agent listed above, call the Agent tool with:
 - If an agent block has a ```prompt``` section: use its content VERBATIM as the entire prompt — skill content is already included inside.
 - If an agent block has a ```skill``` section (legacy path only): paste skill content VERBATIM into the prompt BEFORE the task list. Do NOT truncate it.
 
-Spawn ALL agents in the SAME message (parallel). Print "[Lead] Spawning <name>" for each.
+Follow the SPAWN ORDER if present (wave-by-wave). Otherwise spawn ALL agents in the SAME message (parallel). Print "[Lead] Spawning <name>" for each agent.
 
 ### Phase 3: Active Monitoring
 After spawning, enter a monitoring loop:

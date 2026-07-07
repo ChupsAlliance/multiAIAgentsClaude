@@ -716,6 +716,7 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
   const [editingDetailId, setEditingDetailId] = useState(null)
   // Track if manager changed anything (for re-plan button)
   const [hasChanges, setHasChanges] = useState(false)
+  const [replanNote, setReplanNote] = useState('')
 
   // Sync when re-plan returns new data (preserve ALL local edits)
   useEffect(() => {
@@ -927,10 +928,10 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
     onDeploy(finalAgents, finalTasks)
   }
 
-  // ── Re-plan — send changes to Lead for incremental update ──
+  // ── Re-plan — send changes + optional note to Lead ──
   const handleReplan = () => {
     if (!onReplan) return
-    onReplan(localAgents, localTasks)
+    onReplan(localAgents, localTasks, replanNote.trim())
   }
 
   // ── Droppable: unassigned pool ──
@@ -1058,21 +1059,32 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
                 )}
               </h3>
               <div className="flex items-center gap-1.5">
-                {/* Re-plan button */}
+                {/* Re-plan input + button */}
                 {hasChanges && onReplan && (
-                  <button
-                    onClick={handleReplan}
-                    disabled={isReplanning}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-colors ${
-                      isReplanning
-                        ? 'bg-orange-500/10 border border-orange-500/30 text-orange-300 cursor-wait'
-                        : 'bg-orange-500/20 border border-orange-500/40 text-orange-400 hover:bg-orange-500/30'
-                    }`}
-                    title="Gửi thay đổi cho Lead review lại plan (incremental update)"
-                  >
-                    <RefreshCw size={11} className={isReplanning ? 'animate-spin' : ''} />
-                    {isReplanning ? 'Đang re-plan...' : 'Re-plan'}
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="text"
+                      value={replanNote}
+                      onChange={e => setReplanNote(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' && !isReplanning) handleReplan() }}
+                      placeholder="Ghi chú thêm cho Lead... (tùy chọn)"
+                      disabled={isReplanning}
+                      className="w-52 px-2 py-1.5 rounded-md text-[11px] font-mono bg-vs-panel border border-orange-500/30 text-vs-text placeholder-vs-muted/50 focus:outline-none focus:border-orange-400/60 disabled:opacity-50"
+                    />
+                    <button
+                      onClick={handleReplan}
+                      disabled={isReplanning}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-colors shrink-0 ${
+                        isReplanning
+                          ? 'bg-orange-500/10 border border-orange-500/30 text-orange-300 cursor-wait'
+                          : 'bg-orange-500/20 border border-orange-500/40 text-orange-400 hover:bg-orange-500/30'
+                      }`}
+                      title="Gửi thay đổi + ghi chú cho Lead review lại plan"
+                    >
+                      <RefreshCw size={11} className={isReplanning ? 'animate-spin' : ''} />
+                      {isReplanning ? 'Đang re-plan...' : 'Re-plan'}
+                    </button>
+                  </div>
                 )}
                 {/* Collapse button */}
                 <button
@@ -1380,18 +1392,29 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
             Cancel
           </button>
           {hasChanges && onReplan && (
-            <button
-              onClick={handleReplan}
-              disabled={isReplanning}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                isReplanning
-                  ? 'bg-orange-500/10 border border-orange-500/30 text-orange-300 cursor-wait'
-                  : 'bg-orange-500/20 border border-orange-500/40 text-orange-400 hover:bg-orange-500/30'
-              }`}
-            >
-              <RefreshCw size={11} className={isReplanning ? 'animate-spin' : ''} />
-              {isReplanning ? 'Re-planning...' : 'Re-plan'}
-            </button>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="text"
+                value={replanNote}
+                onChange={e => setReplanNote(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !isReplanning) handleReplan() }}
+                placeholder="Ghi chú thêm... (tùy chọn)"
+                disabled={isReplanning}
+                className="w-48 px-2.5 py-2 rounded-lg text-xs font-mono bg-vs-panel border border-orange-500/30 text-vs-text placeholder-vs-muted/50 focus:outline-none focus:border-orange-400/60 disabled:opacity-50"
+              />
+              <button
+                onClick={handleReplan}
+                disabled={isReplanning}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                  isReplanning
+                    ? 'bg-orange-500/10 border border-orange-500/30 text-orange-300 cursor-wait'
+                    : 'bg-orange-500/20 border border-orange-500/40 text-orange-400 hover:bg-orange-500/30'
+                }`}
+              >
+                <RefreshCw size={11} className={isReplanning ? 'animate-spin' : ''} />
+                {isReplanning ? 'Re-planning...' : 'Re-plan'}
+              </button>
+            </div>
           )}
           <button
             onClick={handleDeploy}
