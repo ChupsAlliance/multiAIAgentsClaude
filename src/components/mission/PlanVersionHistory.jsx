@@ -10,8 +10,13 @@ export function PlanVersionHistory({ missionId, currentAgents, currentTasks, onR
   const [loading, setLoading] = useState(false)
 
   const loadVersions = useCallback(async () => {
-    const result = await window.electron.ipcRenderer.invoke('get_plan_versions', { missionId })
-    setVersions(result || [])
+    try {
+      const result = await window.electron.ipcRenderer.invoke('get_plan_versions', { missionId })
+      setVersions(result || [])
+    } catch (err) {
+      console.error('Failed to load plan versions:', err)
+      setVersions([])
+    }
   }, [missionId])
 
   useEffect(() => { loadVersions() }, [loadVersions])
@@ -24,16 +29,21 @@ export function PlanVersionHistory({ missionId, currentAgents, currentTasks, onR
   const handleRollbackConfirm = async () => {
     if (!confirmRollback) return
     setLoading(true)
-    await window.electron.ipcRenderer.invoke('save_plan_version', {
-      missionId,
-      trigger: 'rollback',
-      agents: confirmRollback.agents,
-      tasks: confirmRollback.tasks,
-    })
-    onRollback(confirmRollback.agents, confirmRollback.tasks)
-    setConfirmRollback(null)
-    await loadVersions()
-    setLoading(false)
+    try {
+      await window.electron.ipcRenderer.invoke('save_plan_version', {
+        missionId,
+        trigger: 'rollback',
+        agents: confirmRollback.agents,
+        tasks: confirmRollback.tasks,
+      })
+      onRollback(confirmRollback.agents, confirmRollback.tasks)
+      setConfirmRollback(null)
+      await loadVersions()
+    } catch (err) {
+      console.error('Rollback failed:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   // Diff selected version vs current state
@@ -56,7 +66,7 @@ export function PlanVersionHistory({ missionId, currentAgents, currentTasks, onR
 
         {/* Summary */}
         <div className="px-3 py-2 border-b border-vs-border">
-          <span className="text-[10px] font-mono text-vs-muted">{diff?.summary || 'No changes'}</span>
+          <span className="text-[10px] font-mono text-vs-muted">{diff?.summary || 'Không có thay đổi'}</span>
         </div>
 
         {/* Diff list */}
@@ -81,8 +91,8 @@ export function PlanVersionHistory({ missionId, currentAgents, currentTasks, onR
               + Task: {t.title}
             </div>
           ))}
-          {diff?.removedTasks?.map(t => (
-            <div key={t.id} className="px-2 py-1 rounded bg-red-500/10 border border-red-500/30 text-xs font-mono text-red-400">
+          {diff?.removedTasks?.map((t, i) => (
+            <div key={t.title || t.id || i} className="px-2 py-1 rounded bg-red-500/10 border border-red-500/30 text-xs font-mono text-red-400">
               - Task: {t.title}
             </div>
           ))}
@@ -92,7 +102,7 @@ export function PlanVersionHistory({ missionId, currentAgents, currentTasks, onR
             </div>
           ))}
           {!diff?.hasChanges && (
-            <p className="text-[10px] text-vs-muted font-mono text-center py-4">No differences</p>
+            <p className="text-[10px] text-vs-muted font-mono text-center py-4">Không có sự khác biệt</p>
           )}
         </div>
       </div>
@@ -106,12 +116,12 @@ export function PlanVersionHistory({ missionId, currentAgents, currentTasks, onR
           <button onClick={() => setConfirmRollback(null)} className="text-vs-muted hover:text-vs-text">
             <ChevronLeft size={14} />
           </button>
-          <span className="text-xs font-mono text-vs-text">Confirm rollback</span>
+          <span className="text-xs font-mono text-vs-text">Xác nhận khôi phục</span>
         </div>
         <div className="p-4 space-y-3">
           <p className="text-xs font-mono text-vs-text">
-            Roll back to <span className="text-amber-300">{confirmRollback.label}</span>?
-            This will create a new version.
+            Khôi phục về <span className="text-amber-300">{confirmRollback.label}</span>?
+            Thao tác này sẽ tạo version mới.
           </p>
           <div className="flex gap-2">
             <button
@@ -119,13 +129,13 @@ export function PlanVersionHistory({ missionId, currentAgents, currentTasks, onR
               disabled={loading}
               className="px-3 py-1.5 text-xs font-mono bg-vs-accent text-white rounded hover:bg-vs-accent/80 disabled:opacity-50"
             >
-              {loading ? 'Rolling back...' : 'Rollback'}
+              {loading ? 'Đang khôi phục...' : 'Khôi phục'}
             </button>
             <button
               onClick={() => setConfirmRollback(null)}
               className="px-3 py-1.5 text-xs font-mono border border-vs-border text-vs-muted rounded hover:text-vs-text"
             >
-              Cancel
+              Hủy
             </button>
           </div>
         </div>
@@ -137,12 +147,12 @@ export function PlanVersionHistory({ missionId, currentAgents, currentTasks, onR
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-vs-border">
         <Clock size={12} className="text-vs-muted" />
-        <span className="text-xs font-mono text-vs-text font-semibold">Plan History</span>
-        <span className="text-[10px] font-mono text-vs-muted ml-auto">{versions.length} version{versions.length !== 1 ? 's' : ''}</span>
+        <span className="text-xs font-mono text-vs-text font-semibold">Lịch sử Plan</span>
+        <span className="text-[10px] font-mono text-vs-muted ml-auto">{versions.length} version</span>
       </div>
 
       {versions.length === 0 ? (
-        <p className="text-[10px] text-vs-muted font-mono text-center py-6">No history yet</p>
+        <p className="text-[10px] text-vs-muted font-mono text-center py-6">Chưa có lịch sử</p>
       ) : (
         <div className="flex-1 overflow-y-auto divide-y divide-vs-border/30">
           {versions.map((v, i) => (
@@ -154,11 +164,11 @@ export function PlanVersionHistory({ missionId, currentAgents, currentTasks, onR
                   </span>
                   {i === 0 && (
                     <span className="ml-2 text-[9px] font-mono text-vs-accent border border-vs-accent/40 rounded px-1">
-                      current
+                      hiện tại
                     </span>
                   )}
                   <p className="text-[10px] text-vs-muted font-mono mt-0.5">
-                    {new Date(v.timestamp).toLocaleString(undefined, {
+                    {new Date(v.timestamp).toLocaleString('vi-VN', {
                       hour: '2-digit',
                       minute: '2-digit',
                       day: '2-digit',
