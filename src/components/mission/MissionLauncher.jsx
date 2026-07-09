@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { Rocket, FolderOpen, Zap, History, Trash2, Cpu, Eye, EyeOff, Users, FlaskConical, Paperclip, FileText, Image, Folder, Upload, X, AtSign, Shield, ShieldCheck, ShieldQuestion, Brain } from 'lucide-react'
+import { Rocket, FolderOpen, Zap, History, Trash2, Cpu, Eye, EyeOff, Users, FlaskConical, Paperclip, FileText, Image, Folder, Upload, X, AtSign, Shield, ShieldCheck, ShieldQuestion, Brain, Search } from 'lucide-react'
 import { buildMissionPrompt } from '../../data/promptWrapper'
 import { useTauriFileDrop } from '../../hooks/useTauriFileDrop'
 import { useToast } from '../../hooks/useToast'
@@ -71,6 +71,8 @@ export function MissionLauncher({ onLaunch }) {
   const [history, setHistory] = useState([])
   const [showPrompt, setShowPrompt] = useState(false)
   const [showAllHistory, setShowAllHistory] = useState(false)
+  const [historySearch, setHistorySearch] = useState('')
+  const [historyProjectFilter, setHistoryProjectFilter] = useState('all')
   const [references, setReferences] = useState([]) // { type: 'file'|'folder'|'image', name, path, size, content? }
 
   // @mention state
@@ -347,6 +349,17 @@ export function MissionLauncher({ onLaunch }) {
       setTeamHintInput(String(n))
     }
   }
+
+  const uniqueProjects = [...new Set(history.map(e => e.project_path).filter(Boolean))]
+
+  const filteredHistory = history.filter(entry => {
+    const matchSearch = !historySearch.trim() ||
+      entry.description?.toLowerCase().includes(historySearch.toLowerCase()) ||
+      entry.project_path?.toLowerCase().includes(historySearch.toLowerCase())
+    const matchProject = historyProjectFilter === 'all' ||
+      entry.project_path === historyProjectFilter
+    return matchSearch && matchProject
+  })
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -775,10 +788,47 @@ export function MissionLauncher({ onLaunch }) {
         <div className="space-y-2">
           <p className="text-[10px] uppercase tracking-widest text-vs-muted font-mono flex items-center gap-1.5 px-1">
             <History size={10} />
-            Lịch sử ({history.length})
+            {(historySearch.trim() || historyProjectFilter !== 'all')
+              ? `Lịch sử (${filteredHistory.length}/${history.length})`
+              : `Lịch sử (${history.length})`
+            }
           </p>
           <div className="space-y-1">
-            {(showAllHistory ? history : history.slice(0, 5)).map((entry, i) => (
+            {/* Search + Filter row */}
+            <div className="flex gap-2 mb-2">
+              <div className="relative flex-1">
+                <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-vs-muted pointer-events-none" />
+                <input
+                  type="text"
+                  value={historySearch}
+                  onChange={e => setHistorySearch(e.target.value)}
+                  placeholder="Tìm mission..."
+                  className="w-full pl-7 pr-3 py-1.5 bg-vs-bg border border-vs-border rounded-md
+                             text-xs font-mono text-vs-text placeholder-vs-muted/50
+                             focus:outline-none focus:border-vs-accent/60"
+                />
+              </div>
+              {uniqueProjects.length > 1 && (
+                <select
+                  value={historyProjectFilter}
+                  onChange={e => setHistoryProjectFilter(e.target.value)}
+                  className="bg-vs-bg border border-vs-border rounded-md px-2 py-1.5
+                             text-xs font-mono text-vs-muted focus:outline-none focus:border-vs-accent/60"
+                >
+                  <option value="all">Tất cả projects</option>
+                  {uniqueProjects.map(p => (
+                    <option key={p} value={p}>{p.split(/[/\\]/).pop()}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {filteredHistory.length === 0 && (
+              <p className="text-[10px] text-vs-muted font-mono text-center py-3">
+                Không tìm thấy mission nào
+              </p>
+            )}
+            {(showAllHistory ? filteredHistory : filteredHistory.slice(0, 5)).map((entry, i) => (
               <div
                 key={i}
                 className="flex items-center gap-2 px-3 py-2 rounded-md border border-vs-border bg-vs-panel
@@ -801,12 +851,12 @@ export function MissionLauncher({ onLaunch }) {
                 </button>
               </div>
             ))}
-            {history.length > 5 && (
+            {filteredHistory.length > 5 && (
               <button
                 onClick={() => setShowAllHistory(!showAllHistory)}
                 className="w-full text-center text-[10px] font-mono text-vs-accent hover:text-white transition-colors py-1.5"
               >
-                {showAllHistory ? 'Thu gọn' : `Xem tất cả (${history.length})`}
+                {showAllHistory ? 'Thu gọn' : `Xem tất cả (${filteredHistory.length})`}
               </button>
             )}
           </div>
