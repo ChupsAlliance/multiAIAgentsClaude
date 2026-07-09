@@ -844,7 +844,7 @@ export function MissionLauncher({ onLaunch }) {
                   </p>
                 </button>
                 <button
-                  onClick={() => handleDeleteHistory(i)}
+                  onClick={() => handleDeleteHistory(history.indexOf(entry))}
                   className="opacity-0 group-hover:opacity-100 p-1 text-vs-muted hover:text-vs-red transition-colors"
                 >
                   <Trash2 size={12} />
