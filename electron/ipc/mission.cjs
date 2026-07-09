@@ -1576,6 +1576,7 @@ function watchProcessExit_launch(proc, missionId, sendToWindow) {
     const ts = now();
 
     stopAutosave();
+    stopStuckChecker();
     if (missionState) {
       missionState.status = finalStatus;
       for (const a of missionState.agents) {
