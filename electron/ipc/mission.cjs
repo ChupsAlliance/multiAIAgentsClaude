@@ -2218,8 +2218,8 @@ function watchProcessExit_deploy(proc, missionId, sendToWindow) {
 // formatVersionLabel — human-readable label for a plan version
 // ─────────────────────────────────────────────────────────────────
 function formatVersionLabel(trigger, versionNum, replanCount) {
-  const now2 = new Date();
-  const hhmm = now2.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  const now = new Date();
+  const hhmm = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
   switch (trigger) {
     case 'initial': return 'Plan ban đầu';
     case 'replan': return `Replan #${replanCount}`;
