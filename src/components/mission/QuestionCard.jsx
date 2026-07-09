@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { HelpCircle, CheckCircle, Circle, SkipForward, Send, AlertCircle } from 'lucide-react'
+import { HelpCircle, CheckCircle, SkipForward, Send, AlertCircle } from 'lucide-react'
 
 // ─── QuestionCard ─────────────────────────────────────────────
 // Multi-question UI for Agent Question Protocol.
@@ -26,8 +26,13 @@ function QuestionTab({ index, question, answer, isActive, onClick }) {
             : 'bg-vs-bg border border-vs-border text-vs-muted hover:border-vs-text/30 hover:text-vs-text'
       }`}
     >
-      {answered ? <CheckCircle size={11} /> : isActive ? <Circle size={11} /> : <Circle size={11} />}
-      Q{index + 1}
+      <span className={`w-2 h-2 rounded-full shrink-0 ${
+        answered ? 'bg-green-400' : isActive ? 'bg-vs-accent' : 'bg-vs-border'
+      }`} />
+      {answered
+        ? <CheckCircle size={10} />
+        : <span className="text-[11px]">Q{index + 1}</span>
+      }
     </button>
   )
 }
@@ -59,6 +64,11 @@ export function QuestionCard({ questions, onSubmit }) {
 
   const handleSelectOption = (option) => {
     setAnswer(activeIndex, { selectedOption: option, skipped: false })
+    // Auto-advance to next unanswered question after brief delay
+    const next = answers.findIndex((a, i) =>
+      i > activeIndex && !a.skipped && a.selectedOption == null && !a.freeText.trim()
+    )
+    if (next !== -1) setTimeout(() => setActiveIndex(next), 150)
   }
 
   const handleFreeText = (text) => {
@@ -115,7 +125,10 @@ export function QuestionCard({ questions, onSubmit }) {
         <div className="flex items-center gap-2">
           <HelpCircle size={16} className="text-amber-400" />
           <span className="text-sm font-semibold text-amber-300">
-            Lead has {questions.length} question{questions.length > 1 ? 's' : ''}
+            {answeredCount === questions.length
+              ? `Đã trả lời ${answeredCount}/${questions.length} câu`
+              : `Lead đang hỏi câu ${activeIndex + 1}/${questions.length}`
+            }
           </span>
         </div>
         <span className="text-xs text-amber-400/70 font-mono">
@@ -141,6 +154,14 @@ export function QuestionCard({ questions, onSubmit }) {
           ))}
         </div>
       )}
+
+      {/* Progress bar */}
+      <div className="h-0.5 bg-vs-border/30">
+        <div
+          className="h-full bg-vs-accent transition-all duration-300"
+          style={{ width: `${(answeredCount / questions.length) * 100}%` }}
+        />
+      </div>
 
       {/* Question content */}
       <div className="px-4 py-3 space-y-3">
