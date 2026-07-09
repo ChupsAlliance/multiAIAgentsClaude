@@ -8,9 +8,10 @@ import {
   Cpu, Rocket, ChevronDown, ChevronUp, Zap, Brain, Coins,
   Wrench, MessageSquare, Info, Plus, Trash2, X, GripVertical,
   UserPlus, PackagePlus, FileText, Upload, Layers, Check, FolderOpen,
-  RefreshCw, ListTodo, Edit3, AlertCircle
+  RefreshCw, ListTodo, Edit3, AlertCircle, GitFork
 } from 'lucide-react'
 import { SYSTEM_INFO } from '../../data/promptWrapper'
+import { PlanDependencyGraph } from './PlanDependencyGraph'
 
 const MODELS = [
   { id: 'sonnet', label: 'Sonnet', desc: 'Fast & capable', icon: Zap, color: 'text-blue-400' },
@@ -702,6 +703,7 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
   )
   const [addingAgent, setAddingAgent] = useState(false)
   const [showFlow, setShowFlow] = useState(false)
+  const [showGraph, setShowGraph] = useState(false)
   const [activeId, setActiveId] = useState(null)
   const [showBulkSkill, setShowBulkSkill] = useState(false)
   const [showTaskPanel, setShowTaskPanel] = useState(true)
@@ -948,8 +950,9 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
       'escape': () => {
         setShowBulkSkill(false)
       },
-      '1': () => setShowFlow(false),
-      '2': () => setShowFlow(true),
+      '1': () => { setShowFlow(false); setShowGraph(false) },
+      '2': () => { setShowFlow(true); setShowGraph(false) },
+      '3': () => { setShowGraph(true); setShowFlow(false) },
       'r': () => { if (!isReplanning) handleReplan() },
       'ctrl+d': () => { if (canDeploy && !isReplanning) handleDeploy() },
     },
@@ -988,12 +991,24 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
             </button>
 
             <button
-              onClick={() => setShowFlow(!showFlow)}
-              className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono
-                         bg-vs-bg border border-vs-border text-vs-muted
-                         hover:border-vs-accent hover:text-white transition-colors"
+              onClick={() => { setShowFlow(!showFlow); setShowGraph(false) }}
+              className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono transition-colors ${
+                showFlow
+                  ? 'bg-vs-accent/20 border border-vs-accent text-vs-accent'
+                  : 'bg-vs-bg border border-vs-border text-vs-muted hover:border-vs-accent hover:text-white'
+              }`}
             >
               <Info size={9} /> Flow
+            </button>
+            <button
+              onClick={() => { setShowGraph(prev => !prev); setShowFlow(false) }}
+              className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono transition-colors ${
+                showGraph
+                  ? 'bg-vs-accent/20 border border-vs-accent text-vs-accent'
+                  : 'bg-vs-bg border border-vs-border text-vs-muted hover:border-vs-accent hover:text-white'
+              }`}
+            >
+              <GitFork size={9} /> Graph
             </button>
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] text-vs-muted font-mono mr-1">Set all:</span>
@@ -1266,8 +1281,22 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
         </div>
       )}
 
+      {/* Graph View */}
+      {showGraph && (
+        <div className="flex-1 overflow-hidden">
+          <PlanDependencyGraph
+            tasks={localTasks}
+            mode="plan"
+            onNodeClick={() => {
+              // Switch to document view so user can find the task in list
+              setShowGraph(false)
+            }}
+          />
+        </div>
+      )}
+
       {/* Main — DnD */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin">
+      <div className={`flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin${showGraph ? ' hidden' : ''}`}>
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
