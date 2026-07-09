@@ -5,7 +5,7 @@
 // Source: src-tauri/src/lib.rs  (MissionManager + all mission commands)
 // ─────────────────────────────────────────────────────────────────
 
-const { ipcMain, shell } = require('electron');
+const { ipcMain, shell, dialog, BrowserWindow } = require('electron');
 const { spawn }   = require('child_process');
 const readline    = require('readline');
 const fs          = require('fs');
@@ -3257,6 +3257,58 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
       return [...versions].reverse(); // newest first
     } catch {
       return [];
+    }
+  });
+
+  // ── export_plan_pdf ────────────────────────────────────────────
+  // Renders htmlContent in a hidden BrowserWindow, prints to PDF,
+  // shows a native save dialog, and writes the file to disk.
+  // Returns: { success: true, filePath } or { success: false, error }
+  ipcMain.handle('export_plan_pdf', async (_event, { htmlContent, description }) => {
+    let pdfWindow = null;
+    try {
+      // Create a hidden, offscreen BrowserWindow for PDF rendering
+      pdfWindow = new BrowserWindow({
+        show: false,
+        webPreferences: { offscreen: true, nodeIntegration: false, contextIsolation: true },
+      });
+
+      // Load HTML content via base64 data URL
+      const encoded = Buffer.from(htmlContent, 'utf-8').toString('base64');
+      await pdfWindow.loadURL(`data:text/html;base64,${encoded}`);
+
+      // Print to PDF
+      const pdfBuffer = await pdfWindow.webContents.printToPDF({
+        printBackground: true,
+        pageSize: 'A4',
+        margins: { top: 1, bottom: 1, left: 1, right: 1 },
+      });
+
+      // Build a slug-based default filename
+      const slug = (description || 'mission')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, '')
+        .replace(/\s+/g, '-')
+        .slice(0, 40);
+      const date = new Date().toISOString().slice(0, 10);
+      const defaultFilename = `${slug}-${date}.pdf`;
+
+      // Show native save dialog
+      const { canceled, filePath } = await dialog.showSaveDialog({
+        defaultPath: defaultFilename,
+        filters: [{ name: 'PDF', extensions: ['pdf'] }],
+      });
+
+      if (canceled || !filePath) return { success: false, error: 'cancelled' };
+
+      // Write the PDF buffer to disk
+      await require('fs').promises.writeFile(filePath, pdfBuffer);
+      return { success: true, filePath };
+    } catch (err) {
+      console.error('export_plan_pdf error:', err);
+      return { success: false, error: err.message };
+    } finally {
+      if (pdfWindow && !pdfWindow.isDestroyed()) pdfWindow.destroy();
     }
   });
 };
