@@ -8,6 +8,7 @@ import {
   planToMarkdown, parseMissionPlan, diffPlanChanges,
   extractOutline, agentTemplate, taskTemplate,
 } from '../../utils/planMarkdown'
+import { useAppHotkeys } from '../../hooks/useAppHotkeys'
 
 // ─── Markdown Preview Renderer ─────────────────────────────────────────────
 
@@ -266,6 +267,7 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
   const [pendingDiff, setPendingDiff] = useState(null)
   const [toast, setToast] = useState(null)
   const [viewMode, setViewMode] = useState('raw') // 'raw' | 'preview'
+  const [showExportMenu, setShowExportMenu] = useState(false)
   const pendingJumpRef = useRef(null)
 
   // Regenerate markdown when agents/tasks change externally (e.g. after replan)
@@ -295,7 +297,7 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
   // Apply ref for keyboard shortcut access
   const applyRef = useRef(null)
 
-  // Handle Tab key → insert 2 spaces
+  // Handle Tab key → insert 2 spaces (textarea-specific, kept inline)
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Tab') {
       e.preventDefault()
@@ -308,11 +310,6 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
       requestAnimationFrame(() => {
         ta.selectionStart = ta.selectionEnd = start + 2
       })
-    }
-    // Ctrl+S → Apply
-    if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault()
-      if (applyRef.current) applyRef.current()
     }
   }, [])
 
@@ -392,6 +389,15 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
   useEffect(() => {
     applyRef.current = hasChanges ? handleApply : null
   }, [hasChanges, handleApply])
+
+  // Global hotkeys via useAppHotkeys
+  useAppHotkeys({
+    scope: 'plan-document',
+    handlers: {
+      'ctrl+s': () => applyRef.current?.(),
+      'ctrl+e': () => setShowExportMenu(prev => !prev),
+    },
+  })
 
   const confirmApply = useCallback(() => {
     const edited = parseMissionPlan(markdown)
