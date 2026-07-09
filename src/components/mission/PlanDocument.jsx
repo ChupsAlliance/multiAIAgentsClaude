@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { invoke } from '@tauri-apps/api/core'
 import {
-  FileText, Plus, UserPlus, Check, AlertTriangle, Download,
+  FileText, Plus, UserPlus, Check, AlertTriangle,
   RotateCcw, ChevronRight, ChevronDown, X, Bot, ListTodo, Link2, Eye, Code2, Clock
 } from 'lucide-react'
 import {
@@ -10,6 +9,7 @@ import {
 } from '../../utils/planMarkdown'
 import { useAppHotkeys } from '../../hooks/useAppHotkeys'
 import { PlanVersionHistory } from './PlanVersionHistory'
+import { ExportDropdown } from './ExportDropdown'
 
 // ─── Markdown Preview Renderer ─────────────────────────────────────────────
 
@@ -556,14 +556,20 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
           Lịch sử
         </button>
 
-        <button
-          onClick={handleExport}
-          className="flex items-center gap-1 px-2 py-1 text-[10px] font-mono rounded
-                     border border-vs-border text-vs-muted hover:text-white hover:bg-white/5 transition-colors"
-          title="Xuất ra file .md"
-        >
-          <Download size={10} /> Xuất MD
-        </button>
+        <ExportDropdown
+          missionState={{
+            id: missionId,
+            description: requirement,
+            project_path: projectPath,
+            requirement,
+            mission_context: missionContext,
+            agents,
+            tasks,
+          }}
+          projectPath={projectPath}
+          externalOpen={showExportMenu}
+          onToast={(type, msg) => showToast(msg, type)}
+        />
 
         <div className="w-px h-4 bg-vs-border mx-0.5" />
 
