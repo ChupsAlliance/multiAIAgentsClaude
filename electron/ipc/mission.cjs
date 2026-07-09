@@ -37,6 +37,11 @@ let autosaveInterval = null; // setInterval for periodic snapshot saves
 let agentTeamsCompletionTimer = null; // safety auto-complete timer for agent_teams mode
 const mockupServers = {};  // missionId → http.Server (cleanup on stop/reset)
 
+// ── Agent stuck detection ──
+let stuckCheckerInterval = null;
+const agentLastActivity = new Map();  // agentName → lastLogTimestamp (ms)
+const agentLastTask = new Map();      // agentName → { text, since }
+
 // ─────────────────────────────────────────────────────────────────
 // Helper: current timestamp in milliseconds
 // ─────────────────────────────────────────────────────────────────
@@ -82,6 +87,20 @@ function inferPhase(tool) {
       return 'spawning';
     default:
       return 'coding';
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// recordAgentActivity — track last log timestamp + task text per agent
+// Called every time a log entry with an agent field is emitted.
+// ─────────────────────────────────────────────────────────────────
+function recordAgentActivity(agentName, taskText) {
+  agentLastActivity.set(agentName, Date.now());
+  if (taskText !== undefined) {
+    const prev = agentLastTask.get(agentName);
+    if (!prev || prev.text !== taskText) {
+      agentLastTask.set(agentName, { text: taskText, since: Date.now() });
+    }
   }
 }
 
@@ -223,6 +242,9 @@ function handleParsedEvent(event, sendToWindow) {
         missionState.log.push(entry);
         if (missionState.log.length > 2000) missionState.log.splice(0, 500);
         sendToWindow('mission:log', entry);
+        if (entry.agent && entry.agent !== 'System' && entry.agent !== 'User') {
+          recordAgentActivity(entry.agent, entry.message);
+        }
       }
       break;
     }
@@ -469,6 +491,48 @@ function stopAutosave() {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// startStuckChecker / stopStuckChecker
+// Detects agents that go silent (60s no log) or frozen (90s same task).
+// Interval: 15s. Emits mission:agent-stuck to frontend.
+// ─────────────────────────────────────────────────────────────────
+function startStuckChecker(sendToWindow) {
+  stopStuckChecker();
+  agentLastActivity.clear();
+  agentLastTask.clear();
+  stuckCheckerInterval = setInterval(() => {
+    if (!missionState || missionState.status !== 'Running') return;
+    const now_ = Date.now();
+    for (const [agentName, lastSeen] of agentLastActivity) {
+      const silentMs = now_ - lastSeen;
+      if (silentMs >= 60_000) {
+        sendToWindow('mission:agent-stuck', {
+          agent: agentName,
+          silent_ms: silentMs,
+          reason: 'no_log',
+        });
+      }
+      const taskInfo = agentLastTask.get(agentName);
+      if (taskInfo && (now_ - taskInfo.since) >= 90_000) {
+        sendToWindow('mission:agent-stuck', {
+          agent: agentName,
+          silent_ms: now_ - taskInfo.since,
+          reason: 'task_frozen',
+        });
+      }
+    }
+  }, 15_000);
+}
+
+function stopStuckChecker() {
+  if (stuckCheckerInterval !== null) {
+    clearInterval(stuckCheckerInterval);
+    stuckCheckerInterval = null;
+  }
+  agentLastActivity.clear();
+  agentLastTask.clear();
+}
+
+// ─────────────────────────────────────────────────────────────────
 // Agent Teams completion safety timer
 // When all non-Lead subagents finish but the Lead process hangs
 // (e.g. stuck waiting on SendMessage acknowledgement or final build),
@@ -497,6 +561,7 @@ function scheduleAgentTeamsCompletion(missionId, sendToWindow) {
     killChild();
     stopWatcher();
     stopAutosave();
+    stopStuckChecker();
 
     missionState.status = 'Completed';
     missionState.phase  = 'Done';
@@ -882,6 +947,7 @@ function restartLeadAfterMockup(missionId, injection, sendToWindow) {
 
   if (missionState) missionState.status = 'Running';
   startAutosave();
+  startStuckChecker(sendToWindow);
 
   // Notify frontend that Lead is running again (keeps isRunning in sync)
   sendToWindow('mission:status', { status: 'running', phase: missionState?.phase || 'Planning' });
@@ -2080,6 +2146,7 @@ function watchProcessExit_deploy(proc, missionId, sendToWindow) {
 
     stopWatcher();
     stopAutosave();
+    stopStuckChecker();
     clearAgentTeamsTimer();
     if (missionState.status === 'Running') {
       missionState.status = code === 0 || code === null ? 'Completed' : 'Failed';
@@ -2247,6 +2314,7 @@ module.exports = function registerMission(getMainWindow) {
     childProcess = proc;
     missionState.status = 'Running';
     startAutosave();
+    startStuckChecker(sendToWindow);
     sendToWindow('mission:status', { mission_id: missionId, status: 'running' });
 
     // Wire up readers
@@ -2434,6 +2502,7 @@ module.exports = function registerMission(getMainWindow) {
     childProcess = proc;
     missionState.phase = 'Executing';
     startAutosave();
+    startStuckChecker(sendToWindow);
     saveMissionSnapshot(missionState); // milestone: deploy started
 
     // Agent_teams mode: start file watcher
@@ -2597,6 +2666,7 @@ module.exports = function registerMission(getMainWindow) {
     childProcess = proc;
     if (missionState) missionState.phase = 'Executing';
     startAutosave();
+    startStuckChecker(sendToWindow);
 
     // Start file watcher if agent_teams mode (detect file changes from subagents)
     if (execMode === 'agent_teams') {
@@ -2680,6 +2750,7 @@ module.exports = function registerMission(getMainWindow) {
     childProcess = proc;
     missionState.status = 'Running';
     startAutosave();
+    startStuckChecker(sendToWindow);
 
     // Wire up readers — use launch reader for planning phase, deploy reader for execution
     const isPlanning = missionState.phase === 'Planning';
@@ -2887,6 +2958,7 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
   ipcMain.handle('stop_mission', async () => {
     stopWatcher();
     stopAutosave();
+    stopStuckChecker();
     clearAgentTeamsTimer();
     killChild();
 
@@ -2915,6 +2987,7 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
   ipcMain.handle('reset_mission', async () => {
     stopWatcher();
     stopAutosave();
+    stopStuckChecker();
     clearAgentTeamsTimer();
     killChild();
 
