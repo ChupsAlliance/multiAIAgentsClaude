@@ -180,6 +180,7 @@ export function MissionControlPage() {
                   missionContext={planReady.mission_context || null}
                   projectPath={missionState?.project_path || ''}
                   requirement={missionState?.requirement || ''}
+                  missionId={missionState?.id || null}
                   onApply={handleDocumentApply}
                   isReplanning={isReplanning}
                 />

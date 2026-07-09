@@ -2,13 +2,14 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import {
   FileText, Plus, UserPlus, Check, AlertTriangle, Download,
-  RotateCcw, ChevronRight, ChevronDown, X, Bot, ListTodo, Link2, Eye, Code2
+  RotateCcw, ChevronRight, ChevronDown, X, Bot, ListTodo, Link2, Eye, Code2, Clock
 } from 'lucide-react'
 import {
   planToMarkdown, parseMissionPlan, diffPlanChanges,
   extractOutline, agentTemplate, taskTemplate,
 } from '../../utils/planMarkdown'
 import { useAppHotkeys } from '../../hooks/useAppHotkeys'
+import { PlanVersionHistory } from './PlanVersionHistory'
 
 // ─── Markdown Preview Renderer ─────────────────────────────────────────────
 
@@ -249,7 +250,7 @@ function DiffSummary({ diff, onConfirm, onCancel }) {
 
 // ─── Main PlanDocument Component ───────────────────────────────────────────
 
-export function PlanDocument({ agents, tasks, missionContext, projectPath, requirement, onApply, onExport, isReplanning }) {
+export function PlanDocument({ agents, tasks, missionContext, projectPath, requirement, missionId, onApply, onExport, isReplanning }) {
   const textareaRef = useRef(null)
 
   // Generate initial markdown from plan data
@@ -268,6 +269,7 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
   const [toast, setToast] = useState(null)
   const [viewMode, setViewMode] = useState('raw') // 'raw' | 'preview'
   const [showExportMenu, setShowExportMenu] = useState(false)
+  const [showVersionHistory, setShowVersionHistory] = useState(false)
   const pendingJumpRef = useRef(null)
 
   // Regenerate markdown when agents/tasks change externally (e.g. after replan)
@@ -437,7 +439,17 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
     setOriginalMd(markdown)
     setHasChanges(false)
     showToast('Đã áp dụng thay đổi', 'success')
-  }, [markdown, agents, onApply])
+
+    // Save manual_edit version after successful apply
+    if (missionId) {
+      window.electron?.ipcRenderer?.invoke('save_plan_version', {
+        missionId,
+        trigger: 'manual_edit',
+        agents: newAgents,
+        tasks: newTasks,
+      }).catch(err => console.error('Failed to save plan version:', err))
+    }
+  }, [markdown, agents, onApply, missionId])
 
   // Export to file
   const handleExport = useCallback(async () => {
@@ -461,6 +473,16 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
   const handleReset = useCallback(() => {
     setMarkdown(originalMd)
   }, [originalMd])
+
+  // Apply rollback from version history
+  const handleApplyRollback = useCallback((rolledBackAgents, rolledBackTasks) => {
+    onApply(rolledBackAgents, rolledBackTasks)
+    const newMd = planToMarkdown(rolledBackAgents, rolledBackTasks, { projectPath, requirement, mission_context: missionContext })
+    setMarkdown(newMd)
+    setOriginalMd(newMd)
+    setHasChanges(false)
+    showToast('Đã khôi phục plan', 'success')
+  }, [onApply, projectPath, requirement, missionContext])
 
   // Toast helper
   const showToast = (msg, type = 'info') => {
@@ -522,6 +544,19 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
         <div className="flex-1" />
 
         <button
+          onClick={() => setShowVersionHistory(prev => !prev)}
+          className={`flex items-center gap-1 px-2 py-1 text-xs font-mono rounded border transition-colors ${
+            showVersionHistory
+              ? 'border-vs-accent text-vs-accent bg-vs-accent/10'
+              : 'border-vs-border text-vs-muted hover:text-vs-text'
+          }`}
+          title="Lịch sử version"
+        >
+          <Clock size={11} />
+          Lịch sử
+        </button>
+
+        <button
           onClick={handleExport}
           className="flex items-center gap-1 px-2 py-1 text-[10px] font-mono rounded
                      border border-vs-border text-vs-muted hover:text-white hover:bg-white/5 transition-colors"
@@ -570,7 +605,7 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
         )}
       </div>
 
-      {/* ── Main area: Outline + Editor/Preview ── */}
+      {/* ── Main area: Outline + Editor/Preview + Version History panel ── */}
       <div className="flex flex-1 min-h-0">
         {/* Outline sidebar */}
         <OutlineSidebar outline={outline} onJumpTo={handleOutlineJump} />
@@ -617,6 +652,21 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
                 [&_td]:px-3 [&_td]:py-1.5 [&_td]:border [&_td]:border-vs-border/30
                 [&_td]:text-vs-text/80 [&_td]:align-top [&_td]:break-words [&_td]:max-w-xs"
               dangerouslySetInnerHTML={{ __html: renderMarkdownHtml(markdown) }}
+            />
+          </div>
+        )}
+
+        {/* ── Version History panel ── */}
+        {showVersionHistory && (
+          <div className="w-72 shrink-0 border-l border-vs-border bg-vs-surface overflow-hidden flex flex-col">
+            <PlanVersionHistory
+              missionId={missionId}
+              currentAgents={agents}
+              currentTasks={tasks}
+              onRollback={(rolledBackAgents, rolledBackTasks) => {
+                handleApplyRollback(rolledBackAgents, rolledBackTasks)
+                setShowVersionHistory(false)
+              }}
             />
           </div>
         )}
