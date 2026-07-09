@@ -9,7 +9,8 @@ import { RawOutput } from './RawOutput'
 import { ThinkingIndicator } from './ThinkingIndicator'
 import { InterventionPanel } from './InterventionPanel'
 import { QuestionCard } from './QuestionCard'
-import { ListTodo, Activity, FolderOpen, User, MessageSquare } from 'lucide-react'
+import { ListTodo, Activity, FolderOpen, User, MessageSquare, GitFork } from 'lucide-react'
+import { PlanDependencyGraph } from './PlanDependencyGraph'
 // import { VirtualOffice } from '../office/VirtualOffice'
 
 const baseTabs = [
@@ -17,6 +18,7 @@ const baseTabs = [
   { id: 'activity', label: 'Activity', icon: Activity },
   { id: 'messages', label: 'Messages', icon: MessageSquare },
   { id: 'files',    label: 'Files',    icon: FolderOpen },
+  { id: 'graph',    label: 'Graph',    icon: GitFork },
 ]
 
 export const MissionDashboard = memo(function MissionDashboard({ state, isRunning, onStop, onContinue, onNewMission, elapsed, isHistoryView, pendingQuestions, onAnswerQuestion, onRetryAgent }) {
@@ -235,13 +237,22 @@ export const MissionDashboard = memo(function MissionDashboard({ state, isRunnin
                 </div>
 
                 {/* Tab content */}
-                <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 scrollbar-thin min-h-0">
+                <div className={`flex-1 overflow-x-hidden min-h-0 ${activeTab === 'graph' ? 'overflow-hidden flex flex-col' : 'overflow-y-auto p-3 scrollbar-thin'}`}>
                   {activeTab === 'tasks' && <TaskList tasks={tasks} logs={logs} />}
                   {activeTab === 'activity' && <ActivityLog log={logs} />}
                   {activeTab === 'messages' && <MessagesPanel messages={messages} />}
                   {activeTab === 'files' && <FileChangesPanel changes={fileChanges} />}
                   {activeTab === 'agent' && selectedAgent && (
                     <ActivityLog log={agentLogs} title={`Logs: ${selectedAgent}`} />
+                  )}
+                  {activeTab === 'graph' && (
+                    <div className="flex-1 overflow-hidden h-full">
+                      <PlanDependencyGraph
+                        tasks={tasks}
+                        mode="live"
+                        onNodeClick={() => setActiveTab('tasks')}
+                      />
+                    </div>
                   )}
                 </div>
               </>
