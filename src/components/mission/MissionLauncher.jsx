@@ -4,6 +4,7 @@ import { Rocket, FolderOpen, Zap, History, Trash2, Cpu, Eye, EyeOff, Users, Flas
 import { buildMissionPrompt } from '../../data/promptWrapper'
 import { useTauriFileDrop } from '../../hooks/useTauriFileDrop'
 import { useToast } from '../../hooks/useToast'
+import { useAppHotkeys } from '../../hooks/useAppHotkeys'
 
 const MODELS = [
   { id: 'sonnet',  label: 'Sonnet 4.6',  desc: 'Nhanh, tiết kiệm — phù hợp task đơn giản', badge: 'Fast' },
@@ -272,6 +273,19 @@ export function MissionLauncher({ onLaunch }) {
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
+
+  // Keyboard shortcut: Ctrl+Enter to launch mission
+  useAppHotkeys({
+    scope: 'mission-launcher',
+    handlers: {
+      'ctrl+enter': () => {
+        const canLaunch = requirement.trim() && projectPath.trim() && !launching
+        if (canLaunch) {
+          handleLaunch()
+        }
+      },
+    },
+  })
 
   const [previewPrompt, setPreviewPrompt] = useState('')
 
