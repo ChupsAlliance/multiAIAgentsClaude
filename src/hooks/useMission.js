@@ -282,6 +282,21 @@ export function useMission() {
 
           logBuffer.current.push(entry)
 
+          // Clear stuck warning khi có log mới từ agent
+          if (entry.agent) {
+            setMissionState(prev => {
+              if (!prev) return prev
+              const targetAgent = prev.agents.find(a => a.name === entry.agent)
+              if (!targetAgent?.stuckWarning) return prev
+              return {
+                ...prev,
+                agents: prev.agents.map(a =>
+                  a.name === entry.agent ? { ...a, stuckWarning: false } : a
+                ),
+              }
+            })
+          }
+
           // Buffer agent status update too
           if (entry.agent && entry.log_type !== 'error') {
             if (entry.log_type === 'result') {
@@ -520,6 +535,26 @@ export function useMission() {
         // ── Mockup protocol (rare — apply immediately) ──
         listen('mission:mockup', (e) => {
           setMockupInfo(e.payload)
+        }),
+
+        // ── Agent stuck warning (backend-detected) ──
+        listen('mission:agent-stuck', (e) => {
+          const { agent, silent_ms, reason } = e.payload
+          const mins = Math.round(silent_ms / 60_000)
+          const msg = reason === 'task_frozen'
+            ? `${agent} có thể đang bị kẹt (task không đổi ${mins} phút)`
+            : `${agent} không có hoạt động trong ${mins} phút`
+          toast.warn('Agent có thể bị stuck', msg)
+
+          setMissionState(prev => {
+            if (!prev) return prev
+            return {
+              ...prev,
+              agents: prev.agents.map(a =>
+                a.name === agent ? { ...a, stuckWarning: true } : a
+              ),
+            }
+          })
         }),
       ])
 

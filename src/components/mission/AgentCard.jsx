@@ -1,6 +1,6 @@
 import { useState, useMemo, memo } from 'react'
 import { StatusBadge } from './StatusBadge'
-import { Zap, Brain, Coins, ChevronDown, ChevronRight, Eye, RotateCcw } from 'lucide-react'
+import { Zap, Brain, Coins, ChevronDown, ChevronRight, Eye, RotateCcw, AlertTriangle } from 'lucide-react'
 
 const MODEL_META = {
   sonnet: { icon: Zap,   label: 'Sonnet', cls: 'text-blue-400 bg-blue-400/10' },
@@ -33,7 +33,7 @@ const LogLine = memo(function LogLine({ log }) {
 
 export const AgentCard = memo(function AgentCard({ agent, logs = [], isSelected, onSelect, onRetryAgent }) {
   const [expanded, setExpanded] = useState(false)
-  const { name, role, status, current_task, model } = agent
+  const { name, role, status, current_task, model, stuckWarning } = agent
   const modelInfo = model ? MODEL_META[model] : null
 
   // Memoize agent log filter — only recalc when logs ref or agent name changes
@@ -44,15 +44,17 @@ export const AgentCard = memo(function AgentCard({ agent, logs = [], isSelected,
 
   return (
     <div className={`rounded-lg border transition-colors overflow-hidden ${
-      isSelected
-        ? 'border-vs-accent ring-1 ring-vs-accent/40 bg-vs-accent/10'
-        : status === 'Working'
-          ? 'border-vs-green/40 bg-vs-green/5'
-          : status === 'Error'
-            ? 'border-vs-red/40 bg-vs-red/5'
-            : status === 'Done'
-              ? 'border-vs-comment/30 bg-vs-comment/5'
-              : 'border-vs-border bg-vs-panel'
+      stuckWarning && !isSelected
+        ? 'border-yellow-500/60 bg-yellow-500/5 animate-pulse-subtle'
+        : isSelected
+          ? 'border-vs-accent ring-1 ring-vs-accent/40 bg-vs-accent/10'
+          : status === 'Working'
+            ? 'border-vs-green/40 bg-vs-green/5'
+            : status === 'Error'
+              ? 'border-vs-red/40 bg-vs-red/5'
+              : status === 'Done'
+                ? 'border-vs-comment/30 bg-vs-comment/5'
+                : 'border-vs-border bg-vs-panel'
     }`}>
       <div className="w-full p-2.5 text-left overflow-hidden">
         {/* Header */}
@@ -125,6 +127,14 @@ export const AgentCard = memo(function AgentCard({ agent, logs = [], isSelected,
         {current_task && (
           <div className="mt-1 px-2 py-1 bg-black/20 rounded text-[10px] text-vs-text font-mono leading-relaxed truncate overflow-hidden">
             {current_task}
+          </div>
+        )}
+
+        {/* Stuck warning badge */}
+        {stuckWarning && (
+          <div className="mt-1 flex items-center gap-1 text-[10px] text-yellow-400 font-mono">
+            <AlertTriangle size={9} />
+            Có thể bị stuck
           </div>
         )}
       </div>
