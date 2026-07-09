@@ -155,7 +155,7 @@ export function PlanDependencyGraph({ tasks = [], mode = 'plan', onNodeClick }) 
               xmlns="http://www.w3.org/1999/xhtml"
               onClick={() => onNodeClick?.(task)}
               className={`
-                w-full h-full border rounded-md px-2 py-1.5 cursor-pointer
+                w-full h-full border rounded-md px-2 py-1.5
                 transition-colors hover:border-vs-accent/60
                 ${nodeClasses(task, mode)}
                 ${onNodeClick ? 'cursor-pointer' : 'cursor-default'}
