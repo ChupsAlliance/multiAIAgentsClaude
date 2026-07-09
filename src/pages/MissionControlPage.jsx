@@ -10,6 +10,8 @@ import { PromptPreview } from '../components/mission/PromptPreview'
 import { MissionHistoryPanel } from '../components/mission/MissionHistoryPanel'
 import { useMission } from '../hooks/useMission'
 import { buildMissionPrompt } from '../data/promptWrapper'
+import { ShortcutsHelpModal } from '../components/common/ShortcutsHelpModal'
+import { useAppHotkeys } from '../hooks/useAppHotkeys'
 
 export function MissionControlPage() {
   const { missionState, isRunning, planReady, setPlanReady, isReplanning, pendingQuestions,
@@ -20,6 +22,15 @@ export function MissionControlPage() {
   const [planViewTab, setPlanViewTab] = useState('visual') // 'visual' | 'document'
   const [historyView, setHistoryView] = useState(null)     // full MissionState snapshot from history
   const [historyViewMode, setHistoryViewMode] = useState('view') // 'view' | 'continue'
+  const [showShortcuts, setShowShortcuts] = useState(false)
+
+  useAppHotkeys({
+    scope: 'global',
+    handlers: {
+      '?': () => setShowShortcuts(prev => !prev),
+      'escape': () => setShowShortcuts(false),
+    },
+  })
 
   // Elapsed timer
   useEffect(() => {
@@ -313,6 +324,7 @@ export function MissionControlPage() {
           </div>
         )}
       </main>
+      <ShortcutsHelpModal isOpen={showShortcuts} onClose={() => setShowShortcuts(false)} />
     </div>
   )
 }
