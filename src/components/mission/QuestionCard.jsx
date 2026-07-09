@@ -63,9 +63,12 @@ export function QuestionCard({ questions, onSubmit }) {
   }, [])
 
   const handleSelectOption = (option) => {
-    setAnswer(activeIndex, { selectedOption: option, skipped: false })
+    const updatedAnswers = answers.map((a, i) =>
+      i === activeIndex ? { ...a, selectedOption: option, skipped: false } : a
+    )
+    setAnswers(updatedAnswers)
     // Auto-advance to next unanswered question after brief delay
-    const next = answers.findIndex((a, i) =>
+    const next = updatedAnswers.findIndex((a, i) =>
       i > activeIndex && !a.skipped && a.selectedOption == null && !a.freeText.trim()
     )
     if (next !== -1) setTimeout(() => setActiveIndex(next), 150)
