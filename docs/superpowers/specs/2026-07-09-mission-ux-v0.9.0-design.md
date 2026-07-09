@@ -185,10 +185,12 @@ const handleSelectOption = (option) => {
 }
 ```
 
-### Icon import — thêm `CheckCircle` nếu chưa có
+### Icon import — bỏ `Circle` (không dùng nữa), giữ nguyên các icon khác
 ```js
+// Trước:
 import { HelpCircle, CheckCircle, Circle, SkipForward, Send, AlertCircle } from 'lucide-react'
-// CheckCircle đã có sẵn trong import hiện tại ✓
+// Sau (bỏ Circle vì QuestionTab dùng colored dot <span> thay thế):
+import { HelpCircle, CheckCircle, SkipForward, Send, AlertCircle } from 'lucide-react'
 ```
 
 ---
