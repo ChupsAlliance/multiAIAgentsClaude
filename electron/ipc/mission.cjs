@@ -1231,6 +1231,12 @@ function applyPlanToState(planJson, planNow, logMsg, sendToWindow) {
     if (lead) { lead.status = 'Idle'; lead.current_task = 'Plan ready — waiting for review'; }
     missionState.log.push(makeLogEntry(planNow, 'System', logMsg, 'plan-ready'));
     saveMissionSnapshot(missionState); // milestone: plan ready
+
+    // Save initial plan version — only on first plan (plan_versions empty)
+    if (!missionState.plan_versions || missionState.plan_versions.length === 0) {
+      savePlanVersionInternal(missionState.id, 'initial', missionState.agents, missionState.tasks)
+        .catch(e => console.error('[applyPlanToState] savePlanVersionInternal error:', e));
+    }
   }
 
   sendToWindow('mission:plan-ready', { agents: newAgents, tasks: newTasks, mission_context: missionContext });
@@ -2208,6 +2214,62 @@ function watchProcessExit_deploy(proc, missionId, sendToWindow) {
   });
 }
 
+// ─────────────────────────────────────────────────────────────────
+// formatVersionLabel — human-readable label for a plan version
+// ─────────────────────────────────────────────────────────────────
+function formatVersionLabel(trigger, versionNum, replanCount) {
+  const now2 = new Date();
+  const hhmm = now2.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  switch (trigger) {
+    case 'initial': return 'Plan ban đầu';
+    case 'replan': return `Replan #${replanCount}`;
+    case 'manual_edit': return `Chỉnh sửa lúc ${hhmm}`;
+    case 'rollback': return `Khôi phục v${versionNum}`;
+    default: return `Version ${versionNum}`;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// savePlanVersionInternal — append a plan version snapshot to mission snapshot file
+// Used internally by applyPlanToState and replan_mission handler.
+// ─────────────────────────────────────────────────────────────────
+async function savePlanVersionInternal(missionId, trigger, agents, tasks) {
+  try {
+    const snapshotPath = path.join(os.homedir(), '.claude', 'agent-teams-snapshots', `${missionId}.json`);
+    let snapshot = {};
+    try {
+      const raw = await fs.promises.readFile(snapshotPath, 'utf-8');
+      snapshot = JSON.parse(raw);
+    } catch { /* snapshot does not exist yet */ }
+
+    const versions = snapshot.plan_versions || [];
+    const nextVersion = versions.length > 0 ? Math.max(...versions.map(v => v.version)) + 1 : 1;
+    const replanCount = versions.filter(v => v.trigger === 'replan').length + (trigger === 'replan' ? 1 : 0);
+
+    const newVersion = {
+      version: nextVersion,
+      timestamp: Date.now(),
+      trigger,
+      label: formatVersionLabel(trigger, nextVersion, replanCount),
+      agents: JSON.parse(JSON.stringify(agents)),
+      tasks: JSON.parse(JSON.stringify(tasks)),
+    };
+
+    versions.push(newVersion);
+
+    // Keep at most 50 versions, drop oldest
+    const trimmed = versions.length > 50 ? versions.slice(versions.length - 50) : versions;
+
+    snapshot.plan_versions = trimmed;
+    await fs.promises.writeFile(snapshotPath, JSON.stringify(snapshot, null, 2), 'utf-8');
+
+    return { version: newVersion.version, label: newVersion.label };
+  } catch (err) {
+    console.error('savePlanVersionInternal error:', err);
+    return { error: err.message };
+  }
+}
+
 // ═════════════════════════════════════════════════════════════════
 // registerMission — main export
 // ═════════════════════════════════════════════════════════════════
@@ -2931,6 +2993,11 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
             message: `Re-plan complete: ${parsed.agents.length} agents, ${parsed.tasks.length} tasks`,
             log_type: 'info',
           });
+          // Save replan version to snapshot
+          if (missionState) {
+            savePlanVersionInternal(missionState.id, 'replan', parsed.agents, parsed.tasks)
+              .catch(e => console.error('[replan_mission] savePlanVersionInternal error:', e));
+          }
           resolve({ agents: parsed.agents, tasks: parsed.tasks });
         } else {
           sendToWindow('mission:log', {
@@ -3169,5 +3236,27 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
     }
 
     return { ok: true };
+  });
+
+  // ── save_plan_version ──────────────────────────────────────────
+  // Appends a plan version snapshot to the mission snapshot file.
+  // Returns: { version, label } or { error }
+  ipcMain.handle('save_plan_version', async (_event, { missionId, trigger, agents, tasks }) => {
+    return savePlanVersionInternal(missionId, trigger, agents, tasks);
+  });
+
+  // ── get_plan_versions ──────────────────────────────────────────
+  // Returns plan versions from the mission snapshot file, newest first.
+  // Returns: PlanVersion[] or []
+  ipcMain.handle('get_plan_versions', async (_event, { missionId }) => {
+    try {
+      const snapshotPath = path.join(os.homedir(), '.claude', 'agent-teams-snapshots', `${missionId}.json`);
+      const raw = await fs.promises.readFile(snapshotPath, 'utf-8');
+      const snapshot = JSON.parse(raw);
+      const versions = snapshot.plan_versions || [];
+      return [...versions].reverse(); // newest first
+    } catch {
+      return [];
+    }
   });
 };
