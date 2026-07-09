@@ -41,6 +41,7 @@ const mockupServers = {};  // missionId → http.Server (cleanup on stop/reset)
 let stuckCheckerInterval = null;
 const agentLastActivity = new Map();  // agentName → lastLogTimestamp (ms)
 const agentLastTask = new Map();      // agentName → { text, since }
+const agentStuckWarnedAt = new Map(); // agentName → { no_log?: timestamp, task_frozen?: timestamp }
 
 // ─────────────────────────────────────────────────────────────────
 // Helper: current timestamp in milliseconds
@@ -243,7 +244,8 @@ function handleParsedEvent(event, sendToWindow) {
         if (missionState.log.length > 2000) missionState.log.splice(0, 500);
         sendToWindow('mission:log', entry);
         if (entry.agent && entry.agent !== 'System' && entry.agent !== 'User') {
-          recordAgentActivity(entry.agent, entry.message);
+          const agentObj = missionState?.agents?.find(a => a.name === entry.agent);
+          recordAgentActivity(entry.agent, agentObj?.current_task);
         }
       }
       break;
@@ -495,29 +497,41 @@ function stopAutosave() {
 // Detects agents that go silent (60s no log) or frozen (90s same task).
 // Interval: 15s. Emits mission:agent-stuck to frontend.
 // ─────────────────────────────────────────────────────────────────
-function startStuckChecker(sendToWindow) {
-  stopStuckChecker();
-  agentLastActivity.clear();
-  agentLastTask.clear();
+function startStuckChecker(sendToWindow, fresh = true) {
+  stopStuckChecker();  // always clear the interval
+  if (fresh) {
+    agentLastActivity.clear();
+    agentLastTask.clear();
+    agentStuckWarnedAt.clear();
+  }
   stuckCheckerInterval = setInterval(() => {
     if (!missionState || missionState.status !== 'Running') return;
     const now_ = Date.now();
     for (const [agentName, lastSeen] of agentLastActivity) {
       const silentMs = now_ - lastSeen;
-      if (silentMs >= 60_000) {
+      // For no_log: only emit when newly crossing threshold (or re-crossing after 60s since last warn)
+      const warned = agentStuckWarnedAt.get(agentName) || {};
+      if (silentMs >= 60_000 && (!warned.no_log || (now_ - warned.no_log) >= 60_000)) {
         sendToWindow('mission:agent-stuck', {
           agent: agentName,
           silent_ms: silentMs,
           reason: 'no_log',
         });
-      }
-      const taskInfo = agentLastTask.get(agentName);
-      if (taskInfo && (now_ - taskInfo.since) >= 90_000) {
-        sendToWindow('mission:agent-stuck', {
-          agent: agentName,
-          silent_ms: now_ - taskInfo.since,
-          reason: 'task_frozen',
-        });
+        agentStuckWarnedAt.set(agentName, { ...warned, no_log: now_ });
+      } else {
+        // Use else if to avoid double-toast when both conditions apply
+        const taskInfo = agentLastTask.get(agentName);
+        if (taskInfo && (now_ - taskInfo.since) >= 90_000) {
+          const warned2 = agentStuckWarnedAt.get(agentName) || {};
+          if (!warned2.task_frozen || (now_ - warned2.task_frozen) >= 90_000) {
+            sendToWindow('mission:agent-stuck', {
+              agent: agentName,
+              silent_ms: now_ - taskInfo.since,
+              reason: 'task_frozen',
+            });
+            agentStuckWarnedAt.set(agentName, { ...warned2, task_frozen: now_ });
+          }
+        }
       }
     }
   }, 15_000);
@@ -530,6 +544,7 @@ function stopStuckChecker() {
   }
   agentLastActivity.clear();
   agentLastTask.clear();
+  agentStuckWarnedAt.clear();
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -947,7 +962,7 @@ function restartLeadAfterMockup(missionId, injection, sendToWindow) {
 
   if (missionState) missionState.status = 'Running';
   startAutosave();
-  startStuckChecker(sendToWindow);
+  startStuckChecker(sendToWindow, false);  // resume — preserve silence clocks
 
   // Notify frontend that Lead is running again (keeps isRunning in sync)
   sendToWindow('mission:status', { status: 'running', phase: missionState?.phase || 'Planning' });
@@ -2315,7 +2330,7 @@ module.exports = function registerMission(getMainWindow) {
     childProcess = proc;
     missionState.status = 'Running';
     startAutosave();
-    startStuckChecker(sendToWindow);
+    startStuckChecker(sendToWindow, true);  // new mission — reset all clocks
     sendToWindow('mission:status', { mission_id: missionId, status: 'running' });
 
     // Wire up readers
@@ -2503,7 +2518,7 @@ module.exports = function registerMission(getMainWindow) {
     childProcess = proc;
     missionState.phase = 'Executing';
     startAutosave();
-    startStuckChecker(sendToWindow);
+    startStuckChecker(sendToWindow, true);  // new execution phase — reset all clocks
     saveMissionSnapshot(missionState); // milestone: deploy started
 
     // Agent_teams mode: start file watcher
@@ -2667,7 +2682,7 @@ module.exports = function registerMission(getMainWindow) {
     childProcess = proc;
     if (missionState) missionState.phase = 'Executing';
     startAutosave();
-    startStuckChecker(sendToWindow);
+    startStuckChecker(sendToWindow, false);  // resume — preserve silence clocks
 
     // Start file watcher if agent_teams mode (detect file changes from subagents)
     if (execMode === 'agent_teams') {
@@ -2751,7 +2766,7 @@ module.exports = function registerMission(getMainWindow) {
     childProcess = proc;
     missionState.status = 'Running';
     startAutosave();
-    startStuckChecker(sendToWindow);
+    startStuckChecker(sendToWindow, false);  // resume after Q&A — preserve silence clocks
 
     // Wire up readers — use launch reader for planning phase, deploy reader for execution
     const isPlanning = missionState.phase === 'Planning';
