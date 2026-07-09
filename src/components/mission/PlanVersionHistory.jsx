@@ -187,7 +187,7 @@ export function PlanVersionHistory({ missionId, currentAgents, currentTasks, onR
                     <button
                       onClick={() => setConfirmRollback(v)}
                       className="text-[10px] font-mono text-vs-muted hover:text-amber-300 border border-vs-border rounded px-1.5 py-0.5"
-                      title="Rollback to this version"
+                      title="Khôi phục về version này"
                     >
                       <RotateCcw size={9} />
                     </button>
