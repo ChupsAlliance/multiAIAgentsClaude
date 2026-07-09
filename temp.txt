@@ -1,0 +1,9 @@
+Sau khi đọc kỹ codebase, tôi thấy khá nhiều chỗ có thể cải thiện. Nhưng trước khi đề xuất, cần hỏi để hiểu đúng ưu tiên của bạn.
+
+Bạn muốn tập trung vào nhóm nào nhất?
+
+A. Reliability & Feedback — Error toasts, progress indicators, retry UI cho failed agents, cảnh báo timeout trước khi nó xảy ra
+
+B. Mission UX — History search/filter, question flow rõ ràng hơn ("Lead đang hỏi câu 2/5"), agent stuck detection nhạy hơn
+
+C. Power Features — Dependency graph visualization, plan diff giữa các version, keyboard shortcuts, export/share plan

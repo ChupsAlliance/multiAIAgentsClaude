@@ -1,7 +1,7 @@
 # Architecture Documentation — Claude Agent Teams (Electron)
 
-> **Last updated:** 2026-03-14
-> **Version:** 2.1 (Electron)
+> **Last updated:** 2026-07-07
+> **Version:** 2.2 (Electron)
 > **Codebase:** `d:\multiAIAgentsClaude\agent-teams-guide`
 
 ---
@@ -17,7 +17,7 @@
    - 4.3 [Components — Layout (4)](#43-components--layout)
    - 4.4 [Components — Mission (11)](#44-components--mission)
    - 4.5 [Sections — Docs (13)](#45-sections--docs)
-   - 4.6 [Hooks (2)](#46-hooks)
+   - 4.6 [Hooks (3)](#46-hooks)
    - 4.7 [Data Files (3)](#47-data-files)
    - 4.8 [Tauri Shim Layer (4)](#48-tauri-shim-layer)
 5. [Backend Architecture (Electron)](#5-backend-architecture)
@@ -26,7 +26,7 @@
    - 5.3 [IPC Handlers — System (7)](#53-ipc-handlers--system)
    - 5.4 [IPC Handlers — Files (8)](#54-ipc-handlers--files)
    - 5.5 [IPC Handlers — History (5)](#55-ipc-handlers--history)
-   - 5.6 [IPC Handlers — Mission (8)](#56-ipc-handlers--mission)
+   - 5.6 [IPC Handlers — Mission (9)](#56-ipc-handlers--mission)
 6. [Mission Core (mission.cjs)](#6-mission-core)
    - 6.1 [Module-Level State](#61-module-level-state)
    - 6.2 [MissionState Data Structure](#62-missionstate-data-structure)
@@ -120,6 +120,8 @@ agent-teams-guide/
 │   │   ├── CodeBlock.jsx           #   Syntax-highlighted code
 │   │   ├── InfoBox.jsx             #   Tip/warning/info boxes
 │   │   ├── SectionHeader.jsx       #   Section title with number
+│   │   ├── ui/                     #   Shared UI primitives
+│   │   │   └── ToastProvider.jsx   #     Global toast notification system (React Portal)
 │   │   └── mission/                #   Mission-specific (11)
 │   │       ├── MissionLauncher.jsx     # New mission form
 │   │       ├── MissionDashboard.jsx    # Main monitoring view
@@ -152,8 +154,9 @@ agent-teams-guide/
 │   │   ├── HowItWorks.jsx
 │   │   └── Limitations.jsx
 │   │
-│   ├── hooks/                      # React hooks (2)
+│   ├── hooks/                      # React hooks (3)
 │   │   ├── useMission.js           # Core mission state management
+│   │   ├── useToast.js             # Toast notification hook (reads ToastProvider context)
 │   │   └── useTauriFileDrop.js     # Drag-drop file handling
 │   │
 │   ├── data/                       # Static data & utilities (3)
@@ -174,7 +177,7 @@ agent-teams-guide/
 │   │   ├── system.cjs              # 7 handlers: CLI check, settings, launcher
 │   │   ├── files.cjs               # 8 handlers: file ops, search, scaffold
 │   │   ├── history.cjs             # 5 handlers: save/load/delete history
-│   │   └── mission.cjs             # 8 handlers: launch/deploy/continue/stop (CORE)
+│   │   └── mission.cjs             # 9 handlers: launch/deploy/continue/stop/retry_agent (CORE)
 │   └── prompts/                    # Prompt templates (5)
 │       ├── planning.md             # Phase 1: plan generation
 │       ├── deploy_standard.md      # Phase 3: standard execution
@@ -250,6 +253,7 @@ npm run electron:build   # Production: build + package .exe
 
 **`src/main.jsx`**
 - `StrictMode` + `HashRouter` (required for `file://` protocol in Electron)
+- Wraps app tree with `<ToastProvider>` so any component can call `useToast()`
 - Loads Prism.js themes for syntax highlighting (bash, json, js, jsx, ts, yaml, toml)
 
 **`src/App.jsx`**
@@ -413,7 +417,7 @@ Edit plan before deployment:
 Per-agent prompt editor before deployment. Each agent gets a generated system prompt showing their role, tasks, and quality requirements. User can edit prompts inline.
 
 #### `AgentCard.jsx`
-**Props:** `agent`, `logs`, `isSelected`, `onSelect`
+**Props:** `agent`, `logs`, `isSelected`, `onSelect`, `onRetryAgent?`
 
 Individual agent card showing:
 - Colored initials badge (green=Done, blue=Working, gray=Idle, red=Error)
@@ -421,6 +425,7 @@ Individual agent card showing:
 - Status badge with animated dot
 - Current task (truncated)
 - Expandable recent logs (last 30 entries)
+- **Retry button** (visible when `agent.status === 'Error'` and `onRetryAgent` is provided) — calls `onRetryAgent(agent.name)` via `retry_agent` IPC
 
 #### `AgentGrid.jsx`
 **Props:** `agents`, `logs`, `selectedAgent`, `onSelectAgent`
@@ -537,6 +542,7 @@ All sections are pure display components. Data defined in `src/data/sections.js`
   stop,            // () => Promise
   reset,           // () => Promise
   replan,          // (agents, tasks) => Promise<plan>
+  retryAgent,      // (agentName: string) => Promise — resets agent to Idle + task to pending
 }
 ```
 
@@ -558,26 +564,44 @@ Low-frequency events (`mission:status`, `mission:agent-spawned`, `mission:plan-r
 **File change history tracking:**
 When multiple edits happen to the same file, the hook maintains a `history[]` array on the file change object so the FileChangesPanel can show an edit timeline.
 
-**Event listeners (10):**
+**Event listeners (13):**
 
 | Event | Handler | Frequency |
 |-------|---------|-----------|
 | `mission:status` | Update status/phase, detect terminal states | Low |
 | `mission:agent-spawned` | Add/reset agents array | Low |
-| `mission:log` | Buffer → batch flush | High |
+| `mission:log` | Buffer → batch flush; detect 'sắp timeout' → toast.warn | High |
 | `mission:file-change` | Buffer → batch flush, maintain edit history | High |
 | `mission:task-update` | Smart match by id or title fuzzy | Medium |
 | `mission:raw-line` | Buffer → batch flush | Very High |
-| `mission:plan-ready` | Set planReady, mark phase ReviewPlan | Low |
+| `mission:plan-ready` | Set planReady, mark phase ReviewPlan; clear planning timer | Low |
 | `mission:agent-message` | Append to messages | Low |
 | `mission:team-event` | Log entry | Low |
 | `mission:task-reassigned` | Log entry | Low |
+| `mission:question` | Set pendingQuestion state | Low |
+| `mission:answer-sent` | Clear pendingQuestion | Low |
+| `mission:mockup` | Set mockupInfo state (triggers MockupApprovalCard) | Low |
+
+**Planning progress timer:**
+Started when `mission:agent-spawned` fires for the Lead during planning phase. Emits `toast.info` at 180s and `toast.warn` at 480s. Cleared on `mission:plan-ready`, terminal status, `stop()`, or `replan()`.
 
 **Hydration on mount:**
 Calls `get_mission_state()` to restore state if app was reloaded mid-mission.
 
 **Error handling:**
-All IPC calls (`launch`, `deploy`, `continueM`) wrapped in try/catch with graceful state transition to `Failed`/`Done` on error.
+All IPC calls (`launch`, `deploy`, `continueM`, `stop`, `answerQuestion`, `mockupRespond`) wrapped in try/catch and show `toast.error` on failure instead of silently swallowing. Dep arrays for the 4 action callbacks include `toast` to prevent stale closure.
+
+#### `useToast()` — Toast Notification Hook
+
+**Returns:** `{ toast: { error, warn, success, info } }`
+
+Reads from `ToastProvider` context. Each method accepts `(title: string, description?: string)`:
+- `toast.error(title, desc)` — red, auto-dismiss 6s
+- `toast.warn(title, desc)` — yellow, auto-dismiss 5s
+- `toast.success(title, desc)` — green, auto-dismiss 3s
+- `toast.info(title, desc)` — blue, auto-dismiss 4s
+
+`toast` object is stable across renders (stabilized with `useMemo` inside the provider).
 
 #### `useTauriFileDrop()` — Drag-Drop Handler
 
@@ -665,7 +689,7 @@ app.whenReady() → {
 
 Exposes `window.electronAPI` via `contextBridge`:
 
-**Command whitelist (28 commands):**
+**Command whitelist (30 commands):**
 ```
 system:  check_claude_available, get_system_info, enable_agent_teams,
          read_settings, open_folder_in_explorer, launch_in_terminal, open_url
@@ -675,14 +699,15 @@ history: save_to_history, load_history, get_mission_history,
          delete_history_entry, get_mission_detail
 mission: launch_mission, deploy_mission, continue_mission, replan_mission,
          stop_mission, reset_mission, get_mission_state, update_agent_model,
-         read_planning_template
+         read_planning_template, answer_question, mockup_respond, retry_agent
 ```
 
-**Event whitelist (11 channels):**
+**Event whitelist (14 channels):**
 ```
 mission:status, mission:agent-spawned, mission:log, mission:file-change,
 mission:task-update, mission:raw-line, mission:plan-ready,
 mission:agent-message, mission:team-event, mission:task-reassigned,
+mission:question, mission:answer-sent, mission:mockup,
 claude-output
 ```
 
@@ -755,7 +780,7 @@ Non-whitelisted commands/events are rejected at the preload layer.
 
 ### 5.6 IPC Handlers — Mission
 
-**`electron/ipc/mission.cjs`** — 8 handlers (see [Section 6](#6-mission-core) for full details)
+**`electron/ipc/mission.cjs`** — 9 handlers (see [Section 6](#6-mission-core) for full details)
 
 | Command | Input | Output | Description |
 |---------|-------|--------|-------------|
@@ -768,6 +793,9 @@ Non-whitelisted commands/events are rejected at the preload layer.
 | `get_mission_state` | — | MissionState or null | Get current state (hydration) |
 | `update_agent_model` | `{ agentName, model }` | — | Update agent model field |
 | `read_planning_template` | — | markdown string | Read planning.md content |
+| `answer_question` | `{ answers }` | — | Write answers to Lead stdin (Interactive mode) |
+| `mockup_respond` | `{ action, feedback }` | — | Approve or revise mockup (Deep Plan) |
+| `retry_agent` | `{ agentName }` | `{ ok, error? }` | Reset agent→Idle + task→pending, write to Lead stdin |
 
 ---
 

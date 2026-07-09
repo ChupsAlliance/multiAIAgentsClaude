@@ -1,0 +1,19 @@
+- generic [ref=e6]:
+  - generic [ref=e7]:
+    - generic [ref=e8]: 🤖
+    - heading "Claude Code Agent Teams" [level=1] [ref=e9]
+    - paragraph [ref=e10]: Hướng dẫn nội bộ · Thiết lập lần đầu
+  - generic [ref=e11]:
+    - generic [ref=e12]:
+      - img [ref=e14]
+      - paragraph [ref=e17]: Kiểm tra Claude CLI
+    - generic [ref=e18]:
+      - img [ref=e20]
+      - paragraph [ref=e24]: Bật Agent Teams
+    - generic [ref=e25]:
+      - img [ref=e27]
+      - paragraph [ref=e30]: Sẵn sàng!
+  - button "Kiểm tra ngay" [ref=e31] [cursor=pointer]:
+    - text: Kiểm tra ngay
+    - img [ref=e32]
+  - button "Bỏ qua, vào thẳng app" [ref=e34] [cursor=pointer]

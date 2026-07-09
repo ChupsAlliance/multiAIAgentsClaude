@@ -1,0 +1,147 @@
+- generic [ref=f1e193]:
+  - complementary [ref=f1e194]:
+    - generic [ref=f1e196]:
+      - img [ref=f1e198]
+      - generic [ref=f1e201]:
+        - paragraph [ref=f1e202]: Claude Code
+        - paragraph [ref=f1e203]: Agent Teams Guide
+    - generic [ref=f1e204]:
+      - button "Tài liệu" [ref=f1e205] [cursor=pointer]:
+        - img [ref=f1e206]
+        - generic [ref=f1e208]: Tài liệu
+      - button "Playground" [ref=f1e209] [cursor=pointer]:
+        - img [ref=f1e210]
+        - generic [ref=f1e212]: Playground
+      - button "Mission Control" [ref=f1e213] [cursor=pointer]:
+        - img [ref=f1e214]
+        - generic [ref=f1e219]: Mission Control
+        - img [ref=f1e220]
+      - button "Dashboard" [ref=f1e222] [cursor=pointer]:
+        - img [ref=f1e223]
+        - generic [ref=f1e228]: Dashboard
+      - button "Setup" [ref=f1e229] [cursor=pointer]:
+        - img [ref=f1e230]
+        - generic [ref=f1e233]: Setup
+    - generic [ref=f1e235]:
+      - generic [ref=f1e236]:
+        - paragraph [ref=f1e237]: Agent Teams
+        - generic [ref=f1e240]: Enabled
+      - button "v0.8.0 · What's New" [ref=f1e241] [cursor=pointer]:
+        - img [ref=f1e242]
+        - text: v0.8.0 · What's New
+  - main [ref=f1e245]:
+    - generic [ref=f1e249]:
+      - generic [ref=f1e250]:
+        - img [ref=f1e252]
+        - heading "Mission Control" [level=1] [ref=f1e257]
+        - paragraph [ref=f1e258]: Mô tả yêu cầu bằng ngôn ngữ tự nhiên, chọn thư mục project, nhấn Launch. Agent Team sẽ tự động phân tích và thực thi.
+      - generic [ref=f1e259]:
+        - generic [ref=f1e260]:
+          - generic [ref=f1e261]:
+            - img [ref=f1e262]
+            - text: Thư mục Project
+          - generic [ref=f1e264]:
+            - textbox "D:\\projects\\my-app" [ref=f1e265]: D:\test-project
+            - button "Browse" [ref=f1e266] [cursor=pointer]
+        - generic [ref=f1e267]:
+          - generic [ref=f1e268]:
+            - img [ref=f1e269]
+            - text: Yêu cầu của bạn
+          - 'textbox "Ví dụ: Build a user authentication feature with login, register, and password reset. Use Express.js for backend and React for frontend..." [ref=f1e272]': Test launch để trigger toast error
+          - generic [ref=f1e273]:
+            - generic [ref=f1e274]:
+              - img [ref=f1e275]
+              - text: Gõ @ để mention file
+            - generic [ref=f1e278]: ·
+            - generic [ref=f1e279]: Ctrl+V để dán ảnh từ clipboard
+        - generic [ref=f1e280]:
+          - generic [ref=f1e281]:
+            - img [ref=f1e282]
+            - text: Tài liệu tham khảo
+          - generic [ref=f1e284]:
+            - img [ref=f1e285]
+            - generic [ref=f1e288]: "Kéo thả file/folder vào đây, hoặc:"
+            - generic [ref=f1e289]:
+              - button "Chọn file" [ref=f1e290] [cursor=pointer]:
+                - img [ref=f1e291]
+                - text: Chọn file
+              - button "Chọn folder" [ref=f1e294] [cursor=pointer]:
+                - img [ref=f1e295]
+                - text: Chọn folder
+            - generic [ref=f1e297]: "Hỗ trợ: docs, code, images, folders"
+        - generic [ref=f1e298]:
+          - generic [ref=f1e299]:
+            - img [ref=f1e300]
+            - text: Model
+          - generic [ref=f1e303]:
+            - button "Sonnet 4.6 Nhanh, tiết kiệm — phù hợp task đơn giản Fast" [ref=f1e304] [cursor=pointer]:
+              - generic [ref=f1e305]: Sonnet 4.6
+              - generic [ref=f1e306]: Nhanh, tiết kiệm — phù hợp task đơn giản
+              - generic [ref=f1e307]: Fast
+            - button "Opus 4.6 Mạnh nhất — task phức tạp, multi-agent Best" [ref=f1e308] [cursor=pointer]:
+              - generic [ref=f1e309]: Opus 4.6
+              - generic [ref=f1e310]: Mạnh nhất — task phức tạp, multi-agent
+              - generic [ref=f1e311]: Best
+            - button "Haiku 4.5 Siêu nhanh, rẻ — draft/prototype Cheap" [ref=f1e312] [cursor=pointer]:
+              - generic [ref=f1e313]: Haiku 4.5
+              - generic [ref=f1e314]: Siêu nhanh, rẻ — draft/prototype
+              - generic [ref=f1e315]: Cheap
+        - generic [ref=f1e316]:
+          - generic [ref=f1e317]:
+            - img [ref=f1e318]
+            - text: Execution Mode
+          - generic [ref=f1e323]:
+            - button "Standard Agents chạy tuần tự qua Lead, output đầy đủ" [ref=f1e324] [cursor=pointer]:
+              - generic [ref=f1e325]:
+                - img [ref=f1e326]
+                - text: Standard
+              - generic [ref=f1e329]: Agents chạy tuần tự qua Lead, output đầy đủ
+            - button "Agent Teams Agents giao tiếp qua SendMessage, chạy song song độc lập Exp." [ref=f1e330] [cursor=pointer]:
+              - generic [ref=f1e331]:
+                - img [ref=f1e332]
+                - text: Agent Teams
+              - generic [ref=f1e337]: Agents giao tiếp qua SendMessage, chạy song song độc lập
+              - generic [ref=f1e338]:
+                - img [ref=f1e339]
+                - text: Exp.
+        - generic [ref=f1e341]:
+          - generic [ref=f1e342]:
+            - img [ref=f1e343]
+            - text: Permission Mode
+          - generic [ref=f1e345]:
+            - button "Auto-pilot Agents tự quyết mọi thứ, chạy liên tục" [ref=f1e346] [cursor=pointer]:
+              - generic [ref=f1e347]:
+                - img [ref=f1e348]
+                - text: Auto-pilot
+              - generic [ref=f1e350]: Agents tự quyết mọi thứ, chạy liên tục
+            - button "Interactive Lead có thể hỏi bạn khi cần input" [ref=f1e351] [cursor=pointer]:
+              - generic [ref=f1e352]:
+                - img [ref=f1e353]
+                - text: Interactive
+              - generic [ref=f1e356]: Lead có thể hỏi bạn khi cần input
+            - button "Plan Only Chỉ lên plan, dừng ở PlanReview" [ref=f1e357] [cursor=pointer]:
+              - generic [ref=f1e358]:
+                - img [ref=f1e359]
+                - text: Plan Only
+              - generic [ref=f1e362]: Chỉ lên plan, dừng ở PlanReview
+            - button "Deep Plan Lead hỏi clarifying questions trước khi lên plan" [ref=f1e363] [cursor=pointer]:
+              - generic [ref=f1e364]:
+                - img [ref=f1e365]
+                - text: Deep Plan
+              - generic [ref=f1e373]: Lead hỏi clarifying questions trước khi lên plan
+        - generic [ref=f1e374]:
+          - generic [ref=f1e375]:
+            - generic [ref=f1e376]: Team Size
+            - button "Để Lead quyết định" [ref=f1e377] [cursor=pointer]:
+              - generic [ref=f1e380]: Để Lead quyết định
+          - generic [ref=f1e381]:
+            - spinbutton [ref=f1e382]: "4"
+            - generic [ref=f1e383]: agents
+            - slider [ref=f1e384]: "4"
+            - generic [ref=f1e385]: "4"
+        - button "Xem System Prompt sẽ gửi đi" [ref=f1e393] [cursor=pointer]:
+          - img [ref=f1e394]
+          - text: Xem System Prompt sẽ gửi đi
+        - button "Launch Mission" [ref=f1e386] [cursor=pointer]:
+          - img [ref=f1e407]
+          - text: Launch Mission

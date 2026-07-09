@@ -250,7 +250,7 @@ function DiffSummary({ diff, onConfirm, onCancel }) {
 
 // ─── Main PlanDocument Component ───────────────────────────────────────────
 
-export function PlanDocument({ agents, tasks, missionContext, projectPath, requirement, missionId, onApply, onExport, isReplanning }) {
+export function PlanDocument({ agents, tasks, missionContext, projectPath, requirement, missionId, onApply }) {
   const textareaRef = useRef(null)
 
   // Generate initial markdown from plan data
@@ -450,24 +450,6 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
       }).catch(err => console.error('Failed to save plan version:', err))
     }
   }, [markdown, agents, onApply, missionId])
-
-  // Export to file
-  const handleExport = useCallback(async () => {
-    if (!projectPath) {
-      showToast('Chưa có project path', 'error')
-      return
-    }
-    try {
-      const filePath = await invoke('export_plan_markdown', {
-        markdown: markdown,
-        projectPath: projectPath,
-      })
-      showToast(`Đã xuất: ${filePath}`, 'success')
-      if (onExport) onExport()
-    } catch (err) {
-      showToast(`Lỗi xuất: ${err}`, 'error')
-    }
-  }, [markdown, projectPath, onExport])
 
   // Reset to original
   const handleReset = useCallback(() => {

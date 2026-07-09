@@ -599,6 +599,76 @@ Virtual Office là panel hiển thị trong **MissionDashboard** khi mission đa
 
 ---
 
+## Reliability & Feedback *(Có từ v0.8.0)*
+
+### Toast Notifications
+
+Ứng dụng hiển thị thông báo dạng toast ở góc trên bên phải màn hình. Toast xuất hiện tự động khi:
+
+| Loại | Khi nào |
+|------|---------|
+| 🔴 **Error** | IPC command thất bại (launch, deploy, stop, answer...) |
+| 🟡 **Warning** | Planning quá 8 phút, mockup sắp timeout |
+| 🔵 **Info** | Planning vượt 3 phút, retry agent thành công |
+| 🟢 **Success** | (dùng nội bộ) |
+
+**Giới hạn**: Tối đa 5 toast cùng lúc. Toast cũ nhất tự biến mất khi toast thứ 6 xuất hiện. Nhấn **×** để đóng thủ công.
+
+**Tự động đóng theo loại:**
+- Error: 6 giây
+- Warning: 5 giây
+- Info: 4 giây
+- Success: 3 giây
+
+---
+
+### Planning Progress Timer
+
+Trong khi Lead đang lên kế hoạch (PlanningStream), header hiển thị đồng hồ đếm thời gian nhỏ (format `M:SS`) ở góc phải. Mục đích: biết Lead đã plan được bao lâu.
+
+**Toast cảnh báo tự động:**
+- Sau **3 phút**: Toast xanh (info) — "Planning đang tiếp tục..."
+- Sau **8 phút**: Toast vàng (warn) — "Planning mất khá nhiều thời gian"
+
+Khi plan hoàn thành hoặc bạn click Stop, đồng hồ tự reset.
+
+---
+
+### Agent Retry
+
+Khi một agent gặp lỗi (status **Error**), nút **Retry** xuất hiện trên agent card:
+
+```
+┌─────────────────────────┐
+│ backend-api             │
+│ Status: Error       ❌  │
+│ Current task: Build API │
+│                         │
+│ [Retry]                 │
+└─────────────────────────┘
+```
+
+**Click Retry:**
+1. Agent reset về trạng thái Idle
+2. Task của agent reset về pending
+3. Lead nhận tín hiệu để re-spawn agent đó
+4. Toast thông báo kết quả (thành công hoặc lỗi)
+
+**Lưu ý**: Retry chỉ hiện khi agent có status Error. Nếu agent Idle hoặc Done thì không có nút Retry.
+
+---
+
+### Mockup Timeout Warnings
+
+Khi Lead đang generate mockup (trong Deep Plan hoặc planning phase):
+
+- **Sau 30 giây**: Log entry "Mockup đang generate (30s)..." xuất hiện trong PlanningStream
+- **Sau 50 giây**: Log entry và toast vàng xuất hiện — "Mockup sắp timeout"
+
+Nếu mockup timeout, planning tự động tiếp tục mà không có mockup.
+
+---
+
 ## Mẹo & Thủ thuật
 
 ### 1. Viết Prompt hiệu quả
@@ -732,6 +802,18 @@ A: Kiểm tra log có `[Lead] INTEGRATION_VERIFIED: PASS` và `[Lead] Mission co
 
 ---
 
-**Phiên bản tài liệu**: 2.1
-**Cập nhật lần cuối**: 2026-03-14
+---
+
+## Mục lục cập nhật
+
+- [Reliability & Feedback](#reliability--feedback-có-từ-v080) — Toast, Planning Timer, Agent Retry, Mockup Timeout *(v0.8.0)*
+- [Virtual Office](#virtual-office-pixel-agents) — Pixel Agents *(v0.4.0)*
+- [Deep Plan Mode](#deep-plan-mode) — Brainstorming phase *(v0.3.0)*
+- [Permission Modes](#permission-modes--4-chế-độ-quyền-hạn) — Auto/Interactive/Plan Only/Deep Plan
+- [Continue từ History](#continue-từ-history-fork) — Fork mission cũ
+
+---
+
+**Phiên bản tài liệu**: 2.2
+**Cập nhật lần cuối**: 2026-07-07
 **Ngôn ngữ**: Tiếng Việt

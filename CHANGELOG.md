@@ -10,6 +10,24 @@ Format dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.8.0] — 2026-07-07
+
+### Thêm mới — Reliability & Feedback
+
+- **Toast notification system**: `ToastProvider` + `useToast` hook — thông báo lỗi, cảnh báo, thành công xuất hiện góc trên phải. Tối đa 5 toast cùng lúc, tự đóng theo loại (error 6s, warn 5s, success 3s, info 4s), có nút × để đóng thủ công. Không dùng thư viện ngoài.
+- **IPC error toasts**: 7 IPC call sites trong `useMission.js` giờ hiển thị toast lỗi thay vì im lặng — `launch_mission`, `deploy_mission`, `continue_mission`, `replan_mission`, `stop_mission`, `answer_question`, `mockup_respond`
+- **Planning progress timer**: Đồng hồ đếm thời gian hiển thị trong header PlanningStream khi đang planning. Toast cảnh báo tự động: sau 3 phút (`toast.info`) và 8 phút (`toast.warn`)
+- **Mockup timeout warnings**: Backend emit log entries sau 30s và 50s khi generate mockup. Sau 50s: toast.warn xuất hiện để người dùng biết mockup có thể hết thời gian
+- **Agent Retry button**: Nút "Retry" xuất hiện trên AgentCard khi agent có status Error. Click → IPC `retry_agent` → agent reset về Idle, task về pending, Lead nhận tín hiệu để re-spawn
+
+### Kỹ thuật
+
+- `src/components/ui/ToastProvider.jsx` + `src/hooks/useToast.js` — hệ thống toast độc lập, portal-rendered (React Portal)
+- `electron/ipc/mission.cjs`: handler `retry_agent` mới — reset agent/task state và ghi stdin cho Lead process
+- Preload whitelist: thêm `retry_agent` vào `ALLOWED_COMMANDS`, `mission:mockup` và `mockup_respond` đã có từ v0.7.1
+
+---
+
 ## [0.5.0] — 2026-06-03
 
 ### Đã sửa — Bugs & Cleanup

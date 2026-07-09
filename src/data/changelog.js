@@ -6,9 +6,31 @@
  * badge: optional short label shown as colored tag
  */
 
-export const APP_VERSION = '0.7.1'
+export const APP_VERSION = '0.8.0'
 
 export const changelog = [
+  {
+    version: '0.8.0',
+    date: '2026-07-07',
+    title: 'Reliability & Feedback',
+    highlights: [
+      'Toast notifications — lỗi IPC giờ hiển thị rõ ràng thay vì im lặng',
+      'Đồng hồ đếm thời gian planning + cảnh báo tự động sau 3 phút & 8 phút',
+      'Nút Retry trên agent card khi agent gặp lỗi',
+    ],
+    items: [
+      { type: 'added', badge: 'UI',
+        text: 'Toast notification system (ToastProvider + useToast): error/warn/success/info, tối đa 5 đồng thời, tự đóng, không dùng thư viện ngoài' },
+      { type: 'added', badge: 'Mission',
+        text: 'IPC error toasts: 7 call sites trong useMission.js giờ hiển thị toast lỗi thay vì im lặng (launch, deploy, continue, replan, stop, answer, mockup)' },
+      { type: 'added', badge: 'Planning',
+        text: 'Planning progress timer: đồng hồ M:SS trong header PlanningStream, toast.info sau 3 phút, toast.warn sau 8 phút' },
+      { type: 'added', badge: 'Planning',
+        text: 'Mockup timeout warnings: backend emit log sau 30s và 50s generate; frontend detect "sắp timeout" → toast.warn' },
+      { type: 'added', badge: 'Agent',
+        text: 'Agent Retry button: nút Retry xuất hiện trên AgentCard khi status Error — reset agent về Idle, task về pending, Lead nhận stdin prompt' },
+    ],
+  },
   {
     version: '0.7.1',
     date: '2026-06-29',

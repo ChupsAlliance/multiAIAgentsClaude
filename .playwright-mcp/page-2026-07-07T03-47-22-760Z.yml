@@ -1,0 +1,85 @@
+- generic [ref=f1e193]:
+  - complementary [ref=f1e194]:
+    - generic [ref=f1e196]:
+      - img [ref=f1e198]
+      - generic [ref=f1e201]:
+        - paragraph [ref=f1e202]: Claude Code
+        - paragraph [ref=f1e203]: Agent Teams Guide
+    - generic [ref=f1e204]:
+      - button "Tài liệu" [ref=f1e205] [cursor=pointer]:
+        - img [ref=f1e206]
+        - generic [ref=f1e208]: Tài liệu
+      - button "Playground" [ref=f1e209] [cursor=pointer]:
+        - img [ref=f1e210]
+        - generic [ref=f1e212]: Playground
+      - button "Mission Control" [ref=f1e213] [cursor=pointer]:
+        - img [ref=f1e214]
+        - generic [ref=f1e219]: Mission Control
+        - img [ref=f1e220]
+      - button "Dashboard" [ref=f1e222] [cursor=pointer]:
+        - img [ref=f1e223]
+        - generic [ref=f1e228]: Dashboard
+      - button "Setup" [ref=f1e229] [cursor=pointer]:
+        - img [ref=f1e230]
+        - generic [ref=f1e233]: Setup
+    - generic [ref=f1e235]:
+      - generic [ref=f1e236]:
+        - paragraph [ref=f1e237]: Agent Teams
+        - generic [ref=f1e240]: Enabled
+      - button "v0.8.0 · What's New" [ref=f1e241] [cursor=pointer]:
+        - img [ref=f1e242]
+        - text: v0.8.0 · What's New
+  - main [ref=f1e245]:
+    - generic [ref=f1e561]:
+      - generic [ref=f1e562]:
+        - generic [ref=f1e563]:
+          - heading "Test requirement để trigger toast error" [level=2] [ref=f1e564]
+          - generic [ref=f1e565]: Failed
+        - generic [ref=f1e567]:
+          - generic [ref=f1e568]:
+            - img [ref=f1e569]
+            - generic [ref=f1e572]: 0:00
+          - button "New Mission" [ref=f1e573] [cursor=pointer]:
+            - img [ref=f1e574]
+            - text: New Mission
+      - generic [ref=f1e577]:
+        - generic [ref=f1e579]:
+          - img [ref=f1e580]
+          - generic [ref=f1e585]: Chờ agents khởi tạo...
+        - generic "Kéo để điều chỉnh độ rộng" [ref=f1e586]
+        - generic [ref=f1e587]:
+          - generic [ref=f1e588]:
+            - button "Tasks" [ref=f1e589] [cursor=pointer]:
+              - img [ref=f1e590]
+              - generic [ref=f1e593]: Tasks
+            - button "Activity" [ref=f1e594] [cursor=pointer]:
+              - img [ref=f1e595]
+              - generic [ref=f1e597]: Activity
+            - button "Files" [ref=f1e598] [cursor=pointer]:
+              - img [ref=f1e599]
+              - generic [ref=f1e601]: Files
+          - generic [ref=f1e603]:
+            - paragraph [ref=f1e605]: Tasks (0/0)
+            - paragraph [ref=f1e606]: Chưa có tasks. Đang chờ Lead phân công...
+      - generic [ref=f1e607]:
+        - button "Intervention" [ref=f1e608] [cursor=pointer]:
+          - generic [ref=f1e609]:
+            - img [ref=f1e610]
+            - text: Intervention
+          - img [ref=f1e612]
+        - generic [ref=f1e614]:
+          - generic [ref=f1e615]:
+            - img [ref=f1e616]
+            - generic [ref=f1e618]: Lead sẽ nhận context từ mission trước (tasks, files, logs) và thực thi yêu cầu mới.
+          - button "Tùy chỉnh agents" [ref=f1e620] [cursor=pointer]:
+            - img [ref=f1e621]
+            - text: Tùy chỉnh agents
+          - generic [ref=f1e626]:
+            - textbox "Nhập yêu cầu để tiếp tục mission..." [ref=f1e627]
+            - button "Send" [disabled] [ref=f1e628]:
+              - img [ref=f1e629]
+              - text: Send
+      - button "Raw Output (0 lines)" [ref=f1e633] [cursor=pointer]:
+        - img [ref=f1e634]
+        - img [ref=f1e636]
+        - generic [ref=f1e638]: Raw Output (0 lines)
