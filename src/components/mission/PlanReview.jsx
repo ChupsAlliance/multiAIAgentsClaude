@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useAppHotkeys } from '../../hooks/useAppHotkeys'
 import { invoke } from '@tauri-apps/api/core'
 import { DndContext, closestCenter, DragOverlay, PointerSensor, useSensor, useSensors, useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
@@ -547,13 +548,6 @@ function BulkSkillModal({ agents, onApply, onClose }) {
     onClose()
   }
 
-  // Close on Escape
-  useEffect(() => {
-    const handler = (e) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [onClose])
-
   const targetCount = Object.values(selected).filter(Boolean).length
 
   return (
@@ -947,6 +941,19 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
   const canDeploy = localAgents.length > 0 && localTasks.some(t => t.assigned_agent)
   const tasksWithoutDetail = localTasks.filter(t => !t.detail?.trim())
   const editingTask = editingDetailId ? localTasks.find(t => t.id === editingDetailId) : null
+
+  useAppHotkeys({
+    scope: 'plan-review',
+    handlers: {
+      'escape': () => {
+        setShowBulkSkill(false)
+      },
+      '1': () => setShowFlow(false),
+      '2': () => setShowFlow(true),
+      'r': () => { if (!isReplanning) handleReplan() },
+      'ctrl+d': () => { if (canDeploy && !isReplanning) handleDeploy() },
+    },
+  })
 
   return (
     <div className="flex flex-col h-full animate-fade-in">
