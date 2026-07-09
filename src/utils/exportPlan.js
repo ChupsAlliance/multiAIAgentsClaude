@@ -1,5 +1,10 @@
 // src/utils/exportPlan.js
 
+function escapeHtml(s) {
+  if (s == null) return ''
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
 export function generateSlug(description) {
   if (!description?.trim()) return 'mission'
   return description
@@ -42,27 +47,27 @@ export function generateHTML(missionState) {
   const date = started_at ? new Date(started_at).toLocaleDateString('vi-VN') : ''
 
   const agentRows = agents.map(a =>
-    `<tr><td>${a.name}</td><td>${a.role}</td><td>${a.model || '—'}</td><td>${a.status}</td></tr>`
+    `<tr><td>${escapeHtml(a.name)}</td><td>${escapeHtml(a.role)}</td><td>${escapeHtml(a.model || '—')}</td><td>${escapeHtml(a.status)}</td></tr>`
   ).join('')
 
   const taskRows = tasks.map(t => `
     <div class="task">
-      <div class="task-title">${t.title} <span class="badge ${t.status}">${t.status}</span></div>
-      ${t.why ? `<div class="task-why">${t.why}</div>` : ''}
-      ${t.depends_on?.length ? `<div class="task-deps">Phụ thuộc: ${t.depends_on.join(', ')}</div>` : ''}
-      ${t.assigned_agent ? `<div class="task-agent">Agent: ${t.assigned_agent}</div>` : ''}
+      <div class="task-title">${escapeHtml(t.title)} <span class="badge ${escapeHtml(t.status)}">${escapeHtml(t.status)}</span></div>
+      ${t.why ? `<div class="task-why">${escapeHtml(t.why)}</div>` : ''}
+      ${t.depends_on?.length ? `<div class="task-deps">Phụ thuộc: ${escapeHtml(t.depends_on.join(', '))}</div>` : ''}
+      ${t.assigned_agent ? `<div class="task-agent">Agent: ${escapeHtml(t.assigned_agent)}</div>` : ''}
     </div>
   `).join('')
 
   const versionRows = plan_versions.length ? plan_versions.map(v =>
-    `<tr><td>${v.version}</td><td>${v.label}</td><td>${new Date(v.timestamp).toLocaleString('vi-VN')}</td></tr>`
+    `<tr><td>${escapeHtml(v.version)}</td><td>${escapeHtml(v.label)}</td><td>${new Date(v.timestamp).toLocaleString('vi-VN')}</td></tr>`
   ).join('') : ''
 
   return `<!DOCTYPE html>
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
-<title>${description || 'Mission Plan'}</title>
+<title>${escapeHtml(description) || 'Mission Plan'}</title>
 <style>
   body { font-family: 'Segoe UI', sans-serif; background: #1e1e2e; color: #cdd6f4; padding: 2rem; max-width: 900px; margin: 0 auto; }
   h1 { color: #89b4fa; font-size: 1.5rem; margin-bottom: 0.5rem; }
@@ -83,8 +88,8 @@ export function generateHTML(missionState) {
 </style>
 </head>
 <body>
-<h1>${description || 'Mission Plan'}</h1>
-<div class="meta">Project: ${project_path || '—'} | Ngày: ${date} | Status: ${status || '—'}</div>
+<h1>${escapeHtml(description) || 'Mission Plan'}</h1>
+<div class="meta">Project: ${escapeHtml(project_path) || '—'} | Ngày: ${escapeHtml(date)} | Status: ${escapeHtml(status) || '—'}</div>
 
 <h2>Agents (${agents.length})</h2>
 <table>
@@ -96,7 +101,7 @@ export function generateHTML(missionState) {
 ${taskRows || '<p style="color:#6c7086">Chưa có tasks</p>'}
 
 ${plan_versions.length ? `
-<h2>Lịch sử version (${plan_versions.length})</h2>
+<h2>Lịch sử version (${escapeHtml(plan_versions.length)})</h2>
 <table>
   <thead><tr><th>Version</th><th>Nhãn</th><th>Thời gian</th></tr></thead>
   <tbody>${versionRows}</tbody>

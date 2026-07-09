@@ -8,6 +8,7 @@ export function PlanVersionHistory({ missionId, currentAgents, currentTasks, onR
   const [showDiff, setShowDiff] = useState(false)
   const [confirmRollback, setConfirmRollback] = useState(null) // version to rollback to
   const [loading, setLoading] = useState(false)
+  const [rollbackError, setRollbackError] = useState(null)
 
   const loadVersions = useCallback(async () => {
     try {
@@ -41,6 +42,7 @@ export function PlanVersionHistory({ missionId, currentAgents, currentTasks, onR
       await loadVersions()
     } catch (err) {
       console.error('Rollback failed:', err)
+      setRollbackError(err.message || 'Lỗi không xác định')
     } finally {
       setLoading(false)
     }
@@ -113,7 +115,7 @@ export function PlanVersionHistory({ missionId, currentAgents, currentTasks, onR
     return (
       <div className="flex flex-col h-full">
         <div className="flex items-center gap-2 px-3 py-2 border-b border-vs-border">
-          <button onClick={() => setConfirmRollback(null)} className="text-vs-muted hover:text-vs-text">
+          <button onClick={() => { setConfirmRollback(null); setRollbackError(null) }} className="text-vs-muted hover:text-vs-text">
             <ChevronLeft size={14} />
           </button>
           <span className="text-xs font-mono text-vs-text">Xác nhận khôi phục</span>
@@ -132,12 +134,15 @@ export function PlanVersionHistory({ missionId, currentAgents, currentTasks, onR
               {loading ? 'Đang khôi phục...' : 'Khôi phục'}
             </button>
             <button
-              onClick={() => setConfirmRollback(null)}
+              onClick={() => { setConfirmRollback(null); setRollbackError(null) }}
               className="px-3 py-1.5 text-xs font-mono border border-vs-border text-vs-muted rounded hover:text-vs-text"
             >
               Hủy
             </button>
           </div>
+          {rollbackError && (
+            <p className="text-xs font-mono text-red-400 mt-2">{rollbackError}</p>
+          )}
         </div>
       </div>
     )

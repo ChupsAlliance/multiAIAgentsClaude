@@ -2263,6 +2263,11 @@ async function savePlanVersionInternal(missionId, trigger, agents, tasks) {
     snapshot.plan_versions = trimmed;
     await fs.promises.writeFile(snapshotPath, JSON.stringify(snapshot, null, 2), 'utf-8');
 
+    // Also update in-memory missionState so autosave doesn't overwrite plan_versions
+    if (missionState && missionState.id === missionId) {
+      missionState.plan_versions = trimmed;
+    }
+
     return { version: newVersion.version, label: newVersion.label };
   } catch (err) {
     console.error('savePlanVersionInternal error:', err);
@@ -2359,6 +2364,7 @@ module.exports = function registerMission(getMainWindow) {
       permission_mode: permMode,
       team_size: team_size !== undefined ? team_size : null,
       question_history: [],
+      plan_versions: [],
       forked_from: historyState ? (historyState.id || null) : undefined,
       forked_from_desc: historyState ? (historyState.description || null) : undefined,
     };

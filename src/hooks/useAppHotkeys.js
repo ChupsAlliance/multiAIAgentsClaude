@@ -41,6 +41,7 @@ export function useAppHotkeys({ scope, handlers }) {
   const ctrlEHandler = handlers['ctrl+e']
   const key1Handler = handlers['1']
   const key2Handler = handlers['2']
+  const key3Handler = handlers['3']
   const keyRHandler = handlers['r']
 
   // ctrl+s fires even inside inputs (saving plan edits)
@@ -68,6 +69,9 @@ export function useAppHotkeys({ scope, handlers }) {
 
   useHotkeys('2', () => key2Handler?.(),
     { enableOnFormTags: false, enabled: !!key2Handler })
+
+  useHotkeys('3', () => key3Handler?.(),
+    { enableOnFormTags: false, enabled: !!key3Handler })
 
   useHotkeys('r', () => keyRHandler?.(),
     { enableOnFormTags: false, enabled: !!keyRHandler })
