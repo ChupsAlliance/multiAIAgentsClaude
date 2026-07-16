@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { invoke } from '@tauri-apps/api/core'
 import { X, Sparkles, Bug, RefreshCw, ArrowUp, ChevronDown, ChevronRight, Tag } from 'lucide-react'
 import { changelog } from '../data/changelog'
 
@@ -32,6 +33,7 @@ const BADGE_COLORS = {
 export function useChangelog(currentVersion) {
   const [showChangelog, setShowChangelog] = useState(false)
   const [shouldAutoShow, setShouldAutoShow] = useState(false)
+  const [updateInfo, setUpdateInfo] = useState(null)
 
   useEffect(() => {
     if (!currentVersion) return
@@ -40,6 +42,13 @@ export function useChangelog(currentVersion) {
       setShouldAutoShow(true)
     }
   }, [currentVersion])
+
+  useEffect(() => {
+    invoke('check_for_updates').then(info => {
+      setUpdateInfo(info)
+      if (info.hasUpdate) setShouldAutoShow(true)
+    }).catch(() => setUpdateInfo({ hasUpdate: false }))
+  }, [])
 
   const openChangelog = useCallback(() => setShowChangelog(true), [])
   const closeChangelog = useCallback(() => {
@@ -52,17 +61,23 @@ export function useChangelog(currentVersion) {
     setShouldAutoShow(false)
   }, [currentVersion])
 
-  return { showChangelog, shouldAutoShow, openChangelog, closeChangelog, markSeen }
+  return { showChangelog, shouldAutoShow, openChangelog, closeChangelog, markSeen, updateInfo }
 }
 
 /**
  * Changelog modal component — "What's New" popup
  */
-export function ChangelogModal({ open, onClose, currentVersion }) {
+export function ChangelogModal({ open, onClose, currentVersion, updateInfo }) {
   const [expandedVersions, setExpandedVersions] = useState(() => {
     // Auto-expand current version, collapse others
     return { [currentVersion]: true }
   })
+
+  const handleDownload = () => {
+    if (updateInfo?.downloadUrl) {
+      invoke('open_url', { url: updateInfo.downloadUrl })
+    }
+  }
 
   // Close on Escape
   useEffect(() => {
@@ -108,6 +123,23 @@ export function ChangelogModal({ open, onClose, currentVersion }) {
 
         {/* Content — scrollable */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          {updateInfo?.hasUpdate && (
+            <div className="rounded-lg border border-vs-accent/40 bg-vs-accent/10 px-4 py-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Sparkles size={16} className="text-vs-accent shrink-0" />
+                <p className="text-[12px] text-white">
+                  <span className="font-bold">Bản mới v{updateInfo.latestVersion}</span> đã có sẵn!
+                </p>
+              </div>
+              <button
+                onClick={handleDownload}
+                className="px-3 py-1.5 rounded-md text-[11px] font-mono font-semibold shrink-0
+                           bg-vs-accent text-black hover:bg-vs-accent/80 transition-colors"
+              >
+                Tải về ngay
+              </button>
+            </div>
+          )}
           {changelog.map((release) => {
             const isExpanded = expandedVersions[release.version]
             const isCurrent = release.version === currentVersion
@@ -201,9 +233,14 @@ export function ChangelogModal({ open, onClose, currentVersion }) {
 
         {/* Footer */}
         <div className="px-6 py-3 border-t border-vs-border flex items-center justify-between bg-vs-panel/30">
-          <p className="text-[10px] text-vs-muted font-mono">
-            {changelog.length} versions &middot; CHANGELOG.md
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="text-[10px] text-vs-muted font-mono">
+              {changelog.length} versions &middot; CHANGELOG.md
+            </p>
+            {updateInfo && !updateInfo.hasUpdate && (
+              <p className="text-[10px] text-vs-green font-mono">✓ Đang dùng bản mới nhất</p>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="px-4 py-1.5 rounded-md text-[11px] font-mono font-semibold

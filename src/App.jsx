@@ -25,7 +25,7 @@ export default function App() {
   const location = useLocation()
   const [checked, setChecked] = useState(false)
   const [appVersion, setAppVersion] = useState(null)
-  const { showChangelog, shouldAutoShow, openChangelog, closeChangelog, markSeen } = useChangelog(appVersion)
+  const { showChangelog, shouldAutoShow, openChangelog, closeChangelog, markSeen, updateInfo } = useChangelog(appVersion)
 
   // Auto-show changelog on first visit after version update
   useEffect(() => {
@@ -86,7 +86,7 @@ export default function App() {
         <Route path="/dashboard"  element={<DashboardPage />} />
         <Route path="/mission"    element={<MissionControlPage />} />
       </Routes>
-      <ChangelogModal open={showChangelog} onClose={closeChangelog} currentVersion={appVersion} />
+      <ChangelogModal open={showChangelog} onClose={closeChangelog} currentVersion={appVersion} updateInfo={updateInfo} />
     </Suspense>
   )
 }
