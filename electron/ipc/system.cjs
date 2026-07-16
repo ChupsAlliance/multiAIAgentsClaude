@@ -5,6 +5,31 @@ const { execSync, spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { compareSemver } = require('../lib/compareSemver.cjs');
+
+const RELEASES_URL = 'https://api.github.com/repos/ChupsAlliance/multiAIAgentsClaude/releases/latest';
+
+async function checkForUpdates(currentVersion) {
+  try {
+    const res = await fetch(RELEASES_URL, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return { hasUpdate: false };
+
+    const release = await res.json();
+    const latestVersion = release.tag_name.replace(/^v/, '');
+    const hasUpdate = compareSemver(latestVersion, currentVersion) > 0;
+    const exeAsset = (release.assets || []).find(a => a.name.endsWith('.exe'));
+
+    return {
+      hasUpdate,
+      currentVersion,
+      latestVersion,
+      downloadUrl: exeAsset ? exeAsset.browser_download_url : release.html_url,
+      releaseNotesUrl: release.html_url,
+    };
+  } catch {
+    return { hasUpdate: false, error: true };
+  }
+}
 
 module.exports = function registerSystem(getMainWindow) {
   const userprofile = os.homedir();
@@ -52,6 +77,7 @@ module.exports = function registerSystem(getMainWindow) {
       agent_teams_enabled: agentTeamsEnabled,
       platform: process.platform === 'win32' ? 'windows' : process.platform,
       username: os.userInfo().username || '',
+      app_version: app.getVersion(),
     };
   });
 
@@ -113,6 +139,11 @@ module.exports = function registerSystem(getMainWindow) {
     shell.openExternal(url);
   });
 
+  // ─── check_for_updates ──────────────────────────────────────────
+  ipcMain.handle('check_for_updates', async () => {
+    return checkForUpdates(app.getVersion());
+  });
+
   // ─── save_office_layout (TileEditor) ────────────────────────────
   // Note: load_office_layout is handled by pixelAgents.cjs (pixel-agents native format)
   ipcMain.handle('save_office_layout', async (_event, { json }) => {
@@ -130,3 +161,5 @@ module.exports = function registerSystem(getMainWindow) {
 
   console.log('[IPC] system OK');
 };
+
+module.exports.checkForUpdates = checkForUpdates;
