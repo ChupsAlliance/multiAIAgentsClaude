@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { X, Sparkles, Bug, RefreshCw, ArrowUp, ChevronDown, ChevronRight, Tag } from 'lucide-react'
-import { changelog, APP_VERSION } from '../data/changelog'
+import { changelog } from '../data/changelog'
 
 const SEEN_KEY = 'changelog_seen_version'
 
@@ -29,27 +29,28 @@ const BADGE_COLORS = {
 /**
  * Hook: returns { showChangelog, shouldAutoShow, openChangelog, closeChangelog, markSeen }
  */
-export function useChangelog() {
+export function useChangelog(currentVersion) {
   const [showChangelog, setShowChangelog] = useState(false)
   const [shouldAutoShow, setShouldAutoShow] = useState(false)
 
   useEffect(() => {
+    if (!currentVersion) return
     const seen = localStorage.getItem(SEEN_KEY)
-    if (seen !== APP_VERSION) {
+    if (seen !== currentVersion) {
       setShouldAutoShow(true)
     }
-  }, [])
+  }, [currentVersion])
 
   const openChangelog = useCallback(() => setShowChangelog(true), [])
   const closeChangelog = useCallback(() => {
     setShowChangelog(false)
-    localStorage.setItem(SEEN_KEY, APP_VERSION)
+    if (currentVersion) localStorage.setItem(SEEN_KEY, currentVersion)
     setShouldAutoShow(false)
-  }, [])
+  }, [currentVersion])
   const markSeen = useCallback(() => {
-    localStorage.setItem(SEEN_KEY, APP_VERSION)
+    if (currentVersion) localStorage.setItem(SEEN_KEY, currentVersion)
     setShouldAutoShow(false)
-  }, [])
+  }, [currentVersion])
 
   return { showChangelog, shouldAutoShow, openChangelog, closeChangelog, markSeen }
 }
@@ -57,10 +58,10 @@ export function useChangelog() {
 /**
  * Changelog modal component — "What's New" popup
  */
-export function ChangelogModal({ open, onClose }) {
+export function ChangelogModal({ open, onClose, currentVersion }) {
   const [expandedVersions, setExpandedVersions] = useState(() => {
     // Auto-expand current version, collapse others
-    return { [APP_VERSION]: true }
+    return { [currentVersion]: true }
   })
 
   // Close on Escape
@@ -93,7 +94,7 @@ export function ChangelogModal({ open, onClose }) {
             <div>
               <h2 className="text-sm font-bold text-white">What's New</h2>
               <p className="text-[10px] text-vs-muted font-mono">
-                Agent Teams Guide v{APP_VERSION}
+                Agent Teams Guide v{currentVersion}
               </p>
             </div>
           </div>
@@ -109,7 +110,7 @@ export function ChangelogModal({ open, onClose }) {
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
           {changelog.map((release) => {
             const isExpanded = expandedVersions[release.version]
-            const isCurrent = release.version === APP_VERSION
+            const isCurrent = release.version === currentVersion
             const itemsByType = {}
             for (const item of release.items) {
               if (!itemsByType[item.type]) itemsByType[item.type] = []

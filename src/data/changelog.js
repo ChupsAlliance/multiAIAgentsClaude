@@ -6,8 +6,6 @@
  * badge: optional short label shown as colored tag
  */
 
-export const APP_VERSION = '0.8.0'
-
 export const changelog = [
   {
     version: '0.8.0',

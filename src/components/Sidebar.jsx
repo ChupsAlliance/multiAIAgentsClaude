@@ -3,7 +3,6 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { invoke } from '@tauri-apps/api/core'
 import { Bot, BookOpen, Play, LayoutDashboard, Menu, X, ChevronRight, Settings, Rocket, Sparkles } from 'lucide-react'
 import { sections } from '../data/sections'
-import { APP_VERSION } from '../data/changelog'
 
 const navItems = [
   { path: '/',           label: 'Tài liệu',        icon: BookOpen },
@@ -19,11 +18,13 @@ export function Sidebar({ activeSection }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [progress, setProgress] = useState(0)
   const [agentTeamsOk, setAgentTeamsOk] = useState(null)
+  const [appVersion, setAppVersion] = useState(null)
 
   useEffect(() => {
     // Check once on mount only — not on every route change
     invoke('get_system_info').then(info => {
       setAgentTeamsOk(info.claude_available && info.agent_teams_enabled)
+      setAppVersion(info.app_version)
     }).catch(() => setAgentTeamsOk(false))
   }, [])
 
@@ -168,7 +169,7 @@ export function Sidebar({ activeSection }) {
                        hover:text-vs-accent hover:bg-vs-accent/10 transition-colors no-drag"
           >
             <Sparkles size={10} />
-            v{APP_VERSION} &middot; What's New
+            {appVersion ? `v${appVersion}` : '...'} &middot; What's New
           </button>
         </div>
       </aside>

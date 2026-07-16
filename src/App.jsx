@@ -24,7 +24,8 @@ export default function App() {
   const navigate = useNavigate()
   const location = useLocation()
   const [checked, setChecked] = useState(false)
-  const { showChangelog, shouldAutoShow, openChangelog, closeChangelog, markSeen } = useChangelog()
+  const [appVersion, setAppVersion] = useState(null)
+  const { showChangelog, shouldAutoShow, openChangelog, closeChangelog, markSeen } = useChangelog(appVersion)
 
   // Auto-show changelog on first visit after version update
   useEffect(() => {
@@ -43,19 +44,20 @@ export default function App() {
     const done = localStorage.getItem(SETUP_DONE_KEY)
     if (done) {
       setChecked(true)
-      return
     }
-    // First run: check if already configured
+    // Always fetch system info (for setup check + app version), even if setup already done
     invoke('get_system_info').then(info => {
-      if (info.claude_available && info.agent_teams_enabled) {
-        localStorage.setItem(SETUP_DONE_KEY, '1')
-        setChecked(true)
-      } else {
-        navigate('/setup')
-        setChecked(true)
+      setAppVersion(info.app_version)
+      if (!done) {
+        if (info.claude_available && info.agent_teams_enabled) {
+          localStorage.setItem(SETUP_DONE_KEY, '1')
+        } else {
+          navigate('/setup')
+        }
       }
+      setChecked(true)
     }).catch(() => {
-      navigate('/setup')
+      if (!done) navigate('/setup')
       setChecked(true)
     })
   }, [])
@@ -84,7 +86,7 @@ export default function App() {
         <Route path="/dashboard"  element={<DashboardPage />} />
         <Route path="/mission"    element={<MissionControlPage />} />
       </Routes>
-      <ChangelogModal open={showChangelog} onClose={closeChangelog} />
+      <ChangelogModal open={showChangelog} onClose={closeChangelog} currentVersion={appVersion} />
     </Suspense>
   )
 }
