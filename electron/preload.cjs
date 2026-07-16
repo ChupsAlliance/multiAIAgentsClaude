@@ -7,6 +7,7 @@ const ALLOWED_COMMANDS = [
   // system
   'check_claude_available', 'get_system_info', 'enable_agent_teams',
   'read_settings', 'open_folder_in_explorer', 'launch_in_terminal', 'open_url',
+  'check_for_updates',
   // files
   'pick_folder', 'pick_files', 'read_file_content', 'get_file_info',
   'save_clipboard_image', 'search_project_files', 'scaffold_project',
