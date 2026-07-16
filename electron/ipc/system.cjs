@@ -15,6 +15,8 @@ async function checkForUpdates(currentVersion) {
     if (!res.ok) return { hasUpdate: false };
 
     const release = await res.json();
+    if (typeof release.tag_name !== 'string') return { hasUpdate: false };
+
     const latestVersion = release.tag_name.replace(/^v/, '');
     const hasUpdate = compareSemver(latestVersion, currentVersion) > 0;
     const exeAsset = (release.assets || []).find(a => a.name.endsWith('.exe'));

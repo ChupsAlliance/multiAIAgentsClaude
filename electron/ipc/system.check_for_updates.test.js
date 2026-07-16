@@ -78,4 +78,17 @@ describe('checkForUpdates', () => {
     const result = await checkForUpdates('0.7.1')
     expect(result).toEqual({ hasUpdate: false, error: true })
   })
+
+  it('returns no update when tag_name is missing or malformed', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        html_url: 'https://github.com/ChupsAlliance/multiAIAgentsClaude/releases/tag/latest',
+        assets: [],
+      }),
+    })
+
+    const result = await checkForUpdates('0.7.1')
+    expect(result).toEqual({ hasUpdate: false })
+  })
 })
