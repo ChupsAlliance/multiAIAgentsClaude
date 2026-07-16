@@ -8,6 +8,32 @@
 
 export const changelog = [
   {
+    version: '0.9.0',
+    date: '2026-07-10',
+    title: 'Mission UX + Power Features',
+    highlights: [
+      'Kiểm tra bản cập nhật tự động từ GitHub Releases — banner tải về ngay trong "What\'s New"',
+      'Unified keyboard shortcuts + help overlay (?)',
+      'Plan version history với rollback',
+      'Export 4 định dạng: Markdown, JSON, HTML, PDF',
+      'Dependency graph trực quan (dagre + SVG)',
+    ],
+    items: [
+      { type: 'added', badge: 'Update',
+        text: 'Tự động kiểm tra bản mới từ GitHub Releases khi khởi động — so sánh version thật (app.getVersion()) qua compareSemver, banner "Tải về ngay" trong modal What\'s New nếu có bản mới, trạng thái "Đang dùng bản mới nhất" nếu không. Lỗi mạng/timeout bị bỏ qua âm thầm' },
+      { type: 'fixed', badge: 'Cleanup',
+        text: 'Xoá hằng số APP_VERSION bị lệch version — version giờ lấy trực tiếp từ app.getVersion() qua get_system_info IPC' },
+      { type: 'added', badge: 'Shortcuts',
+        text: 'Unified shortcut registry (useAppHotkeys + SHORTCUT_GROUPS) — một nguồn duy nhất cho tất cả phím tắt, help overlay (?) hiện danh sách đầy đủ theo context' },
+      { type: 'added', badge: 'Plan',
+        text: 'Version history tự động cho mỗi plan (initial/replan/manual_edit), panel Lịch sử với diff viewer và rollback (tối đa 50 versions/mission)' },
+      { type: 'added', badge: 'Export',
+        text: 'Dropdown Xuất với 4 định dạng: Markdown, JSON (toàn bộ mission state), HTML (self-contained, XSS-safe), PDF (native save dialog)' },
+      { type: 'added', badge: 'Graph',
+        text: 'PlanDependencyGraph: dagre layout + SVG — tab Graph trong PlanReview (static) và MissionDashboard (live, click node để chuyển tab Tasks)' },
+    ],
+  },
+  {
     version: '0.8.0',
     date: '2026-07-07',
     title: 'Reliability & Feedback',

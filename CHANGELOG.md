@@ -10,6 +10,76 @@ Format dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.9.0] — 2026-07-10
+
+### Thêm mới — Kiểm tra bản cập nhật từ GitHub Releases
+
+- **Tự động kiểm tra khi khởi động**: App gọi GitHub Releases API (`/repos/ChupsAlliance/multiAIAgentsClaude/releases/latest`), so sánh với version thật (`app.getVersion()`) qua `compareSemver`
+- **Banner cập nhật** trong modal "What's New": nếu có bản mới, hiện banner + nút "Tải về ngay" mở trực tiếp link `.exe` trên GitHub Releases (fallback về trang release nếu không có asset `.exe`)
+- **Trạng thái "Đang dùng bản mới nhất"** ở footer modal khi đã là bản mới nhất
+- Lỗi mạng/rate-limit/timeout (5s) đều bị bỏ qua âm thầm — không chặn hay làm chậm app khởi động
+- **Dọn dẹp**: xoá hằng số `APP_VERSION` bị lệch version (`src/data/changelog.js`) — version hiện lấy trực tiếp từ `app.getVersion()` qua `get_system_info` IPC
+
+### Kỹ thuật (Update Check)
+
+- `electron/lib/compareSemver.cjs` — so sánh semver `x.y.z`, không thêm dependency
+- `electron/ipc/system.cjs`: `check_for_updates` IPC handler + field `app_version` trong `get_system_info`
+- `src/components/ChangelogModal.jsx`: `useChangelog()` nhận `currentVersion` làm tham số, trả thêm `updateInfo`
+
+### Thêm mới — Mission UX + Power Features
+
+#### Keyboard Shortcuts
+- **Unified shortcut registry**: `useAppHotkeys` hook + `SHORTCUT_GROUPS` — một nguồn duy nhất cho tất cả phím tắt
+- **Help overlay** (`?`): Nhấn `?` ở bất kỳ đâu → hiện danh sách đầy đủ phím tắt, nhóm theo context
+- **Phím tắt mới**:
+  - `Ctrl+Enter` — Launch mission (MissionLauncher, chỉ khi đủ điều kiện)
+  - `Ctrl+S` — Áp dụng chỉnh sửa plan (PlanDocument, kể cả khi focus trong textarea)
+  - `Ctrl+E` — Mở menu xuất file (PlanDocument)
+  - `Ctrl+D` — Deploy plan (PlanReview, khi plan ready)
+  - `1` / `2` / `3` — Chuyển tab trong PlanReview (Document / Visual / Graph)
+  - `r` — Replan (PlanReview, khi không focus input)
+  - `Escape` — Đóng modal đang mở (toàn cục)
+
+#### Plan Versioning
+- **Version history tự động**: Plan được lưu version mỗi khi parse lần đầu (`initial`), replan (`replan`), chỉnh sửa thủ công (`manual_edit`)
+- **Panel "Lịch sử"** trong PlanDocument: Timeline các version, xem diff (added/removed/modified agents & tasks), rollback về version cũ
+- **Rollback** tạo version mới (trigger `rollback`) — không bao giờ xóa lịch sử. Tối đa 50 versions/mission
+- IPC: `save_plan_version`, `get_plan_versions`
+
+#### Export Nhiều Format
+- **Dropdown "Xuất"** thay thế nút "Xuất MD" — 4 format:
+  - **Markdown** (`.md`) — xuất qua IPC như cũ
+  - **JSON** (`.json`) — toàn bộ mission state (agents, tasks, log, file_changes, plan_versions...)
+  - **HTML** (`.html`) — self-contained, inline CSS, dark theme, readable offline
+  - **PDF** (`.pdf`) — Electron `printToPDF`, native save dialog
+- HTML/PDF XSS-safe: tất cả fields được escape trước khi render
+
+#### Dependency Graph
+- **`PlanDependencyGraph`** component: dagre layout + SVG render với `foreignObject` nodes
+  - `mode="plan"`: màu theo priority (high=đỏ / medium=vàng / low=xanh)
+  - `mode="live"`: màu theo status (in_progress=accent+pulse / completed=xanh / pending=mờ), hiển thị tên agent
+  - `depends_on` (array of title strings) được resolve sang task IDs để vẽ edges có mũi tên
+- **Tab "Graph"** trong **PlanReview**: static graph, kéo-thả vẫn hoạt động khi switch về tab khác
+- **Tab "Graph"** trong **MissionDashboard**: live graph, click node → chuyển sang tab Tasks
+
+### Kỹ thuật
+
+- `src/hooks/useAppHotkeys.js` — `SHORTCUT_GROUPS` registry + `useAppHotkeys({ scope, handlers })` (react-hotkeys-hook v4)
+- `src/components/common/ShortcutsHelpModal.jsx` — help overlay đọc từ registry
+- `src/utils/exportPlan.js` — `generateSlug`, `generateFilename`, `generateHTML`, `downloadBlob`, `downloadJSON`, `downloadHTML`
+- `src/components/mission/ExportDropdown.jsx` — dropdown 4 format với loading state cho PDF
+- `src/components/mission/PlanVersionHistory.jsx` — timeline + diff viewer + rollback confirm
+- `src/components/mission/PlanDependencyGraph.jsx` — dagre + SVG, ResizeObserver, Bezier edges
+- `electron/ipc/mission.cjs`: thêm `save_plan_version`, `get_plan_versions`, `export_plan_pdf`; `dialog` + `BrowserWindow` được import; auto-save `initial` version khi parse plan, `replan` version sau replan
+- 6 tests mới cho `exportPlan.js` (generateSlug ×4, generateFilename ×1, generateHTML ×1)
+
+### Phụ thuộc mới
+
+- `react-hotkeys-hook` v4 — keyboard shortcut management
+- `@dagrejs/dagre` — graph layout algorithm
+
+---
+
 ## [0.8.0] — 2026-07-07
 
 ### Thêm mới — Reliability & Feedback
