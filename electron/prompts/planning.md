@@ -45,7 +45,19 @@ Wrap it with the markers shown below:
   "mission_context": {
     "problem": "<What user problem does this solve — 1-2 sentences>",
     "user_journey": "<How a user uses the finished product end-to-end — describe the full flow from input to outcome>",
-    "agent_handoff": "<How agents hand off work to each other — who produces what artifact, who consumes it>"
+    "agent_handoff": "<How agents hand off work to each other — who produces what artifact, who consumes it>",
+    "business": {
+      "what_it_does": "<PLAIN Vietnamese, for a NON-TECHNICAL lead: what this plan does, 1-2 sentences. No jargon, no file names, no framework names.>",
+      "what_you_get": "<PLAIN Vietnamese: the concrete outcome/output after this ships, 1-2 sentences>",
+      "how_it_works": "<PLAIN Vietnamese: how the new feature behaves overall, 2-3 sentences>",
+      "flow": {
+        "input": "<What the user/system starts with — plain Vietnamese>",
+        "steps": [
+          { "label": "<One processing step in plain Vietnamese>", "by": "<the agent name responsible for this step — must match an agent in the agents array>" }
+        ],
+        "output": "<The final result the user gets — plain Vietnamese>"
+      }
+    }
   },
   "agents": [
     { "name": "<agent_name>", "role": "<role>", "model": "<sonnet|opus|haiku>", "reason": "<why this model>" }
@@ -63,6 +75,14 @@ Wrap it with the markers shown below:
   "coordination": ["<shared files or deps>"]
 }
 === END PLAN ===
+
+### BUSINESS SUMMARY RULES (mission_context.business):
+The `business` object is read by a NON-TECHNICAL lead to review the plan at a glance. Write it in PLAIN Vietnamese:
+- No technical jargon, no file paths, no framework/library names, no code.
+- `what_it_does` / `what_you_get` / `how_it_works`: describe outcomes and behavior a non-engineer understands.
+- `flow.steps`: 2-5 steps, each a business-level action (not an implementation step). Each step's `by` MUST be one of the agent names in the `agents` array, so the reviewer can see which agent does what.
+- `flow.input` is where things start (what the user/system provides); `flow.output` is the end result the user receives.
+- Keep every field short — this is a summary, not the full plan.
 
 ### TASK DETAIL RULES (CRITICAL — do NOT output vague tasks):
 Every task MUST have a "detail" field that specifies:
