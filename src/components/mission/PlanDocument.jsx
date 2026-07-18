@@ -344,7 +344,9 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
 
   // Jump from a business-flow agent tag to that agent's heading in the markdown
   const handleJumpToAgent = useCallback((agentName) => {
-    const entry = outline.find(o => o.type === 'agent' && o.text === agentName)
+    const entry = outline.find(
+      o => o.type === 'agent' && o.text.replace(/^Agent:\s*/i, '') === agentName
+    )
     if (entry) handleOutlineJump(entry.line)
   }, [outline, handleOutlineJump])
 
