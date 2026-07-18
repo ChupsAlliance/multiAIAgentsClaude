@@ -10,6 +10,7 @@ import {
 import { useAppHotkeys } from '../../hooks/useAppHotkeys'
 import { PlanVersionHistory } from './PlanVersionHistory'
 import { ExportDropdown } from './ExportDropdown'
+import { BusinessSummary } from './BusinessSummary'
 
 // ─── Markdown Preview Renderer ─────────────────────────────────────────────
 
@@ -341,6 +342,12 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
     }
   }, [viewMode, jumpToLine])
 
+  // Jump from a business-flow agent tag to that agent's heading in the markdown
+  const handleJumpToAgent = useCallback((agentName) => {
+    const entry = outline.find(o => o.type === 'agent' && o.text === agentName)
+    if (entry) handleOutlineJump(entry.line)
+  }, [outline, handleOutlineJump])
+
   // After switching preview → raw, execute pending outline jump
   useEffect(() => {
     if (viewMode === 'raw' && pendingJumpRef.current !== null) {
@@ -592,6 +599,13 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
           </button>
         )}
       </div>
+
+      {/* ── Business summary (read-only, for non-tech reviewers) ── */}
+      <BusinessSummary
+        business={missionContext?.business}
+        agents={agents}
+        onJumpToAgent={handleJumpToAgent}
+      />
 
       {/* ── Main area: Outline + Editor/Preview + Version History panel ── */}
       <div className="flex flex-1 min-h-0">
