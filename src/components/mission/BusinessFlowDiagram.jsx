@@ -16,8 +16,8 @@ export function BusinessFlowDiagram({ nodes = [], edges = [], onJumpToAgent }) {
   }
 
   const kindLabel = (kind) => {
-    if (kind === 'input') return 'Input'
-    if (kind === 'output') return 'Output'
+    if (kind === 'input') return 'Đầu vào'
+    if (kind === 'output') return 'Đầu ra'
     return null
   }
 
