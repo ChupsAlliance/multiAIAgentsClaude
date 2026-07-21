@@ -98,6 +98,54 @@ Chọn ở Launcher → **Permission Mode**:
 
 ---
 
+### Power Features (v0.9.0)
+
+#### Keyboard Shortcuts
+
+Nhấn `?` ở bất kỳ màn hình nào để xem danh sách đầy đủ:
+
+| Phím | Chức năng | Context |
+|------|-----------|---------|
+| `Ctrl+Enter` | Launch mission | MissionLauncher |
+| `Ctrl+S` | Áp dụng chỉnh sửa plan | PlanDocument |
+| `Ctrl+E` | Mở menu xuất file | PlanDocument |
+| `Ctrl+D` | Deploy plan | PlanReview |
+| `1` / `2` / `3` | Chuyển tab Document / Visual / Graph | PlanReview |
+| `r` | Replan | PlanReview |
+| `Escape` | Đóng modal | Toàn cục |
+
+#### Plan Versioning (Lịch sử Plan)
+
+Mỗi mission tự động lưu lịch sử plan (tối đa 50 version):
+
+- **initial** — khi plan được parse lần đầu
+- **replan** — sau mỗi lần replan
+- **manual_edit** — sau khi bạn chỉnh sửa và apply plan
+- **rollback** — khi khôi phục về version cũ
+
+Click nút **"Lịch sử"** trong toolbar PlanDocument → xem timeline, so sánh diff, rollback.
+
+#### Export Nhiều Format
+
+Click dropdown **"Xuất"** trong PlanDocument:
+
+| Format | Nội dung |
+|--------|---------|
+| **Markdown** | File `.md` lưu về project folder |
+| **JSON** | Toàn bộ mission state (agents, tasks, logs, versions...) |
+| **HTML** | Self-contained, dark theme, readable offline không cần internet |
+| **PDF** | Native save dialog, print-ready A4 |
+
+#### Dependency Graph
+
+Tab **"Graph"** trong PlanReview và MissionDashboard hiển thị dependency graph giữa các tasks:
+
+- **PlanReview**: màu theo priority (đỏ=high / vàng=medium / xanh=low)
+- **MissionDashboard**: màu theo status live, pulse animation cho task đang chạy
+- Click node → chuyển về tab Tasks
+
+---
+
 ### Continue from History (Fork)
 
 Tiếp tục công việc từ bất kỳ mission cũ nào:
@@ -229,7 +277,7 @@ npm test
 npm run test:watch
 ```
 
-**48 tests / 4 test files:**
+**67 tests / 5 test files:**
 
 | Test file | Coverage |
 |-----------|----------|
@@ -237,6 +285,7 @@ npm run test:watch
 | `DeskAssigner.test.ts` | Agent ↔ desk slot assignment, idempotency |
 | `OfficeLayoutStore.test.ts` | Layout load/save/validate |
 | `pixelAgentsProtocol.test.js` | Protocol translation layer |
+| `exportPlan.test.js` | generateSlug, generateFilename, generateHTML (XSS safety) |
 
 ---
 
@@ -255,6 +304,8 @@ npm run test:watch
 
 | Version | Ngày | Nội dung chính |
 |---------|------|---------------|
+| **v0.9.0** | 10/07/2026 | Power Features: Keyboard Shortcuts, Plan Versioning, Export Formats, Dependency Graph |
+| **v0.8.0** | 07/07/2026 | Reliability: Toast notifications, planning timer, agent retry |
 | **v0.5.0** | 03/06/2026 | Cleanup: xóa debug code, fix `useAgentTeams` bug, refactor dedup |
 | **v0.4.0** | 30/05/2026 | Virtual Office: pixel-agents webview, TileEditor |
 | **v0.3.0** | 17/04/2026 | Deep Plan Mode, Prompt Preview verbatim, Crash-safe persistence |
@@ -273,6 +324,8 @@ Xem chi tiết tại [CHANGELOG.md](CHANGELOG.md).
 - **AI**: Claude CLI (`claude -p --dangerously-skip-permissions --output-format stream-json`)
 - **Agent orchestration**: Claude Agent tool (subagent spawning) / TeamCreate (experimental)
 - **Virtual Office**: pixel-agents webview UI (pixel-art sprites + tile-based office)
+- **Keyboard shortcuts**: react-hotkeys-hook v4 (`SHORTCUT_GROUPS` registry, `useAppHotkeys` hook)
+- **Dependency graph**: @dagrejs/dagre layout + SVG/foreignObject render
 - **State**: Module-level JS objects (backend) + React hooks (frontend)
 - **Build**: Vite (frontend) + electron-builder (packaging) + custom patch script
 
