@@ -855,6 +855,24 @@ async function runClaudeForHtml(prompt) {
   });
 }
 
+// retryMockupGeneration — runs runFn up to maxAttempts times, calling onRetry(attempt, maxAttempts, err)
+// after each non-final failed attempt. Resolves with the first successful result, or throws the
+// final attempt's error if all attempts fail.
+async function retryMockupGeneration(runFn, onRetry, maxAttempts = 3) {
+  let lastErr;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await runFn();
+    } catch (err) {
+      lastErr = err;
+      if (attempt < maxAttempts) {
+        onRetry(attempt, maxAttempts, err);
+      }
+    }
+  }
+  throw lastErr;
+}
+
 // spawnMockupGenerator — generate HTML via runClaudeForHtml, serve on localhost,
 // open browser, send mission:mockup IPC. Handles its own errors gracefully.
 async function spawnMockupGenerator(title, spec, missionId, sendToWindow) {
@@ -3318,3 +3336,5 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
     }
   });
 };
+
+module.exports.retryMockupGeneration = retryMockupGeneration;
