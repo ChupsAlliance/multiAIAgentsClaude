@@ -887,23 +887,42 @@ async function spawnMockupGenerator(title, spec, missionId, sendToWindow) {
     `- Include realistic placeholder content\n` +
     `Output ONLY the complete HTML document wrapped in <<<HTML>>> and <<<END_HTML>>> markers. Nothing else before or after.`;
 
-  const warn30 = setTimeout(() => {
-    const entry = makeLogEntry(now(), 'System', 'Mockup đang generate (30s)...', 'info');
-    if (missionState) missionState.log.push(entry);
-    sendToWindow('mission:log', entry);
-  }, 30000);
+  const MAX_MOCKUP_ATTEMPTS = 3;
+  let warn30, warn50;
 
-  const warn50 = setTimeout(() => {
-    const entry = makeLogEntry(now(), 'System',
-      'Mockup sắp timeout — nếu thất bại sẽ tiếp tục planning tự động', 'info');
-    if (missionState) missionState.log.push(entry);
-    sendToWindow('mission:log', entry);
-  }, 50000);
+  const armWarningTimers = () => {
+    warn30 = setTimeout(() => {
+      const entry = makeLogEntry(now(), 'System', 'Mockup đang generate (30s)...', 'info');
+      if (missionState) missionState.log.push(entry);
+      sendToWindow('mission:log', entry);
+    }, 30000);
+
+    warn50 = setTimeout(() => {
+      const entry = makeLogEntry(now(), 'System',
+        'Mockup sắp timeout — nếu thất bại sẽ tiếp tục planning tự động', 'info');
+      if (missionState) missionState.log.push(entry);
+      sendToWindow('mission:log', entry);
+    }, 50000);
+  };
 
   const cleanup = () => { clearTimeout(warn30); clearTimeout(warn50); };
 
+  const onRetry = (attempt, maxAttempts) => {
+    cleanup();
+    const entry = makeLogEntry(now(), 'System',
+      `Mockup lỗi (lần ${attempt}/${maxAttempts}), đang thử lại...`, 'info');
+    if (missionState) missionState.log.push(entry);
+    sendToWindow('mission:log', entry);
+    armWarningTimers();
+  };
+
   try {
-    const htmlContent = await runClaudeForHtml(prompt);
+    armWarningTimers();
+    const htmlContent = await retryMockupGeneration(
+      () => runClaudeForHtml(prompt),
+      onRetry,
+      MAX_MOCKUP_ATTEMPTS
+    );
     cleanup();
 
     const server = http.createServer((_req, res) => {
