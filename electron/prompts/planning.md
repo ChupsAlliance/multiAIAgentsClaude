@@ -144,6 +144,15 @@ Model choices: "sonnet" (fast, good for straightforward code), "opus" (best for 
   - The QA/tester agent is responsible for: writing automated tests, running tests after each implementation task completes, verifying acceptance criteria end-to-end, and catching regressions.
   - The QA/tester agent MUST have a final task titled "Final verification & sign-off" (or equivalent) that: (1) `depends_on` ALL implementation tasks, (2) runs the full test suite end-to-end, (3) verifies every acceptance criterion from every task is met, (4) confirms the feature works from the user's perspective. **Nothing ships until this task passes — it is the gate before the plan is considered complete.**
 
+  **QA/TESTING STANDARDS — bake these into every qa-tester task's `detail` field:**
+  - **Locators (priority order):** `getByTestId` → `getByRole` → `getByLabel` → `getByPlaceholder` → `getByText` → CSS selector (last resort only). NEVER use `nth-child`, dynamic/generated classes, or complex XPath — these break on minor UI changes.
+  - **Assertions:** Use web-first assertions only — `expect(locator).toBeVisible()`, `.toHaveText()`, `.toHaveURL()`, etc. NEVER use `waitForTimeout()` or manually compare `.textContent()`/`.innerText()` — both cause flaky, unreliable tests.
+  - **Structure (Page Object Model):** Locators and actions live in `tests/pages/*Page.ts` classes. Spec files (`tests/specs/*.spec.ts`) contain ONLY the Given/When/Then scenario — no raw selectors inline in spec files.
+  - **Scenario writing:** Every test case is written as Given/When/Then. When listing scenarios for a feature, prioritize in this order: (1) Happy path, (2) Validation errors, (3) Business-logic errors, (4) Permission/access-control cases (if applicable), (5) Edge cases.
+  - **Test-type selection:** Follow the test pyramid — most coverage should be unit and integration tests; reserve E2E (Playwright) tests for critical user flows only. Don't default to E2E for everything a task touches.
+  - **Anti-flaky requirements:** Every test must be independent (no ordering dependency on other tests), self-seed and clean up its own data (`beforeEach`/`afterEach`), and be deterministic — same input always produces the same result.
+  - **Sign-off task requirement (in addition to the requirements above):** The "Final verification & sign-off" task's `detail` must also state which test types were written (unit/integration/E2E breakdown) and confirm zero `waitForTimeout` usages remain anywhere in the test suite.
+
 ### Phase 3: Execute (only after user confirms)
 After the user confirms, you will receive a follow-up message to spawn teammates with the approved models.
 DO NOT start Phase 3 until explicitly told.
