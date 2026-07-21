@@ -10,6 +10,31 @@ Format dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.10.0] — 2026-07-21
+
+### Thêm mới — Business Summary
+
+- **Panel BusinessSummary**: tóm tắt kế hoạch bằng ngôn ngữ dễ hiểu, phi kỹ thuật, hiện ngay đầu tab Document trong PlanReview
+- Lead agent phát sinh field `mission_context.business` trong lúc lập kế hoạch (Phase 2)
+- **BusinessFlowDiagram**: component sơ đồ luồng agent dạng SVG, màu theo từng agent — click vào tag agent để nhảy tới đúng section
+
+### Sửa lỗi (Business Summary)
+
+- Chuẩn hoá tiền tố `Agent:` để tag agent trong business flow nhảy đúng section
+- Sửa nhãn tiếng Việt cho badge Input/Output trong BusinessFlowDiagram
+
+### Cải tiến — Mockup Generation & QA Standards
+
+- **Tự động thử lại khi generate mockup**: tối đa 3 lần (60s/lần, không delay giữa các lần) trước khi rơi về hành vi bỏ qua (skip) cũ; log tiến trình từng lần thử vào mission log
+- **Chuẩn QA/testing trong prompt lập kế hoạch**: nhúng thẳng thứ tự ưu tiên locator, assertion web-first, cấu trúc Page Object Model, kịch bản Given/When/Then, hướng dẫn test pyramid, và yêu cầu chống flaky vào mandate của agent `qa-tester` — mọi plan sinh ra đều bao gồm các chuẩn này
+
+### Kỹ thuật
+
+- `electron/ipc/mission.cjs`: tách `retryMockupGeneration` thành hàm thuần, dependency-injected, có unit test riêng
+- `electron/prompts/planning.md`: thêm block QA/TESTING STANDARDS sau mandate qa-tester hiện có
+
+---
+
 ## [0.9.0] — 2026-07-10
 
 ### Thêm mới — Kiểm tra bản cập nhật từ GitHub Releases

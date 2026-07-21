@@ -8,6 +8,29 @@
 
 export const changelog = [
   {
+    version: '0.10.0',
+    date: '2026-07-21',
+    title: 'Business Summary & Reliability Improvements',
+    highlights: [
+      'Business Summary — tóm tắt kế hoạch bằng ngôn ngữ dễ hiểu, hiện ngay đầu tab Document',
+      'BusinessFlowDiagram — sơ đồ luồng agent dạng SVG, màu theo agent, click để nhảy tới section',
+      'Mockup generation tự động thử lại tối đa 3 lần trước khi bỏ qua',
+      'Chuẩn QA/testing được nhúng thẳng vào prompt lập kế hoạch của Lead',
+    ],
+    items: [
+      { type: 'added', badge: 'PlanReview',
+        text: 'Panel BusinessSummary hiện tóm tắt kế hoạch bằng ngôn ngữ phi kỹ thuật ngay đầu tab Document — Lead agent giờ phát sinh field mission_context.business trong lúc lập kế hoạch' },
+      { type: 'added', badge: 'PlanReview',
+        text: 'BusinessFlowDiagram — component sơ đồ luồng agent dạng SVG, màu theo từng agent; click vào tag agent trong sơ đồ để nhảy tới đúng section' },
+      { type: 'fixed', badge: 'PlanReview',
+        text: 'Chuẩn hoá tiền tố "Agent:" để tag agent trong business flow nhảy đúng section; sửa nhãn tiếng Việt cho badge Input/Output' },
+      { type: 'improved', badge: 'Core',
+        text: 'Mockup generation tự động thử lại tối đa 3 lần (60s/lần, không delay) trước khi rơi về hành vi bỏ qua cũ — có log tiến trình theo từng lần thử' },
+      { type: 'improved', badge: 'Prompt',
+        text: 'Prompt lập kế hoạch của Lead giờ nhúng sẵn chuẩn QA/testing (thứ tự ưu tiên locator, assertion web-first, Page Object Model, kịch bản Given/When/Then, test pyramid, chống flaky) — mọi plan sinh ra đều có task QA đạt chuẩn ngay từ đầu' },
+    ],
+  },
+  {
     version: '0.9.0',
     date: '2026-07-10',
     title: 'Mission UX + Power Features',
