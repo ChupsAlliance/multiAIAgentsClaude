@@ -1315,7 +1315,7 @@ function applyPlanToState(planJson, planNow, logMsg, sendToWindow) {
 // readProcessStdout_launch — stdout reader for launch_mission
 // (Planning phase: stream-json, plan detection)
 // ─────────────────────────────────────────────────────────────────
-function readProcessStdout_launch(proc, missionId, sendToWindow) {
+function readProcessStdout_launch(proc, missionId, sendToWindow, attemptCtx = {}) {
   const rl = readline.createInterface({ input: proc.stdout, crlfDelay: Infinity });
   const parser = new OutputParser();
   let lineCount   = 0;
@@ -1354,6 +1354,7 @@ function readProcessStdout_launch(proc, missionId, sendToWindow) {
           if (!capturedSessionId && json.session_id) {
             capturedSessionId = json.session_id;
             if (missionState) missionState.session_id = json.session_id;
+            if (attemptCtx) attemptCtx.sessionId = json.session_id;
           }
 
           // "assistant": { "message": { "content": [{ "text": "..." }] } }
@@ -1499,11 +1500,13 @@ function readProcessStdout_launch(proc, missionId, sendToWindow) {
             if (!capturedSessionId && json.session_id) {
               capturedSessionId = json.session_id;
               if (missionState) missionState.session_id = json.session_id;
+              if (attemptCtx) attemptCtx.sessionId = json.session_id;
             }
             // Skip noisy init — just store raw
             if (missionState) missionState.raw_output.push(clean);
           } else {
             let text = (json.error && json.error.message) || json.message || clean;
+            if (attemptCtx) attemptCtx.stdoutText = (attemptCtx.stdoutText || '') + text + '\n';
             const entry = makeLogEntry(ts, 'System', text.toString(), msgType === 'error' ? 'error' : 'info');
             if (missionState) missionState.log.push(entry);
             sendToWindow('mission:log', entry);
@@ -1538,6 +1541,7 @@ function readProcessStdout_launch(proc, missionId, sendToWindow) {
                 : '');
 
             fullTextBuf += resultText;
+            if (attemptCtx) attemptCtx.stdoutText = (attemptCtx.stdoutText || '') + resultText;
 
             if (!planEmitted) {
               const parsed = tryParsePlanFromBuffer(fullTextBuf);
@@ -1614,11 +1618,12 @@ function readProcessStdout_launch(proc, missionId, sendToWindow) {
 // ─────────────────────────────────────────────────────────────────
 // readProcessStderr — shared stderr reader
 // ─────────────────────────────────────────────────────────────────
-function readProcessStderr(proc, sendToWindow) {
+function readProcessStderr(proc, sendToWindow, attemptCtx = {}) {
   const rl = readline.createInterface({ input: proc.stderr, crlfDelay: Infinity });
   rl.on('line', (line) => {
     const clean = stripAnsi(line).trim();
     if (!clean) return;
+    if (attemptCtx) attemptCtx.stderrText = (attemptCtx.stderrText || '') + clean + '\n';
     const ts    = now();
     const entry = makeLogEntry(ts, 'System', clean, 'error');
     if (missionState) {
@@ -1744,7 +1749,7 @@ function handleQuestionBatch(questions, proc, sendToWindow) {
 // readProcessStdout_deploy — stdout reader for deploy_mission /
 //                            continue_mission (execution phase)
 // ─────────────────────────────────────────────────────────────────
-function readProcessStdout_deploy(proc, sendToWindow, isContMode) {
+function readProcessStdout_deploy(proc, sendToWindow, isContMode, attemptCtx = {}) {
   const rl = readline.createInterface({ input: proc.stdout, crlfDelay: Infinity });
   const parser = new OutputParser();
   let lineCount = 0;
@@ -1794,6 +1799,7 @@ function readProcessStdout_deploy(proc, sendToWindow, isContMode) {
                 capturedSessionId = json.session_id;
                 missionState.session_id = json.session_id;
               }
+              if (json.session_id && attemptCtx) attemptCtx.sessionId = json.session_id;
               break; // skip
 
             case 'task_notification': {
@@ -1864,6 +1870,7 @@ function readProcessStdout_deploy(proc, sendToWindow, isContMode) {
 
             default: {
               const text  = (json.message || clean).toString();
+              if (attemptCtx) attemptCtx.stdoutText = (attemptCtx.stdoutText || '') + text + '\n';
               const entry = makeLogEntry(ts, sourceAgent, text, 'info');
               if (missionState) {
                 missionState.log.push(entry);
@@ -1884,6 +1891,7 @@ function readProcessStdout_deploy(proc, sendToWindow, isContMode) {
             capturedSessionId = json.session_id;
             if (missionState) missionState.session_id = json.session_id;
           }
+          if (!attemptCtx.sessionId && json.session_id) attemptCtx.sessionId = json.session_id;
 
           for (const block of content) {
             const blockType = (block.type || '').toString();
@@ -2116,6 +2124,7 @@ function readProcessStdout_deploy(proc, sendToWindow, isContMode) {
             (Array.isArray(json.content)
               ? ((json.content.find(c => c.text) || {}).text || 'Completed')
               : 'Completed');
+          if (attemptCtx) attemptCtx.stdoutText = (attemptCtx.stdoutText || '') + text;
           const display = text.length > 500 ? text.slice(0, 500) + '...' : text;
 
           if (parentId) {
