@@ -997,7 +997,7 @@ async function spawnMockupGenerator(title, spec, missionId, sendToWindow) {
 // restartLeadAfterMockup — resume Lead after mockup approve/feedback/skip.
 // Mirrors the answer_question restart pattern exactly.
 // ─────────────────────────────────────────────────────────────────
-function restartLeadAfterMockup(missionId, injection, sendToWindow) {
+function restartLeadAfterMockup(missionId, injection, sendToWindow, attempt = 1) {
   if (!missionState || !missionState.session_id) return;
 
   killChild();
@@ -1036,9 +1036,16 @@ function restartLeadAfterMockup(missionId, injection, sendToWindow) {
   // Notify frontend that Lead is running again (keeps isRunning in sync)
   sendToWindow('mission:status', { status: 'running', phase: missionState?.phase || 'Planning' });
 
-  readProcessStdout_launch(proc, missionId, sendToWindow);
-  readProcessStderr(proc, sendToWindow);
-  watchProcessExit_launch(proc, missionId, sendToWindow);
+  const attemptCtx = { stdoutText: '', stderrText: '', sessionId: null };
+  readProcessStdout_launch(proc, missionId, sendToWindow, attemptCtx);
+  readProcessStderr(proc, sendToWindow, attemptCtx);
+  watchProcessExit_launch(proc, missionId, sendToWindow, {
+    attemptCtx,
+    attempt,
+    maxAttempts: 3,
+    backoffMs: [30000, 60000, 120000],
+    retrySpawn: (nextAttempt) => restartLeadAfterMockup(missionId, injection, sendToWindow, nextAttempt),
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -1637,7 +1644,7 @@ function readProcessStderr(proc, sendToWindow, attemptCtx = {}) {
 // ─────────────────────────────────────────────────────────────────
 // watchProcessExit_launch — watch for process exit during launch phase
 // ─────────────────────────────────────────────────────────────────
-function watchProcessExit_launch(proc, missionId, sendToWindow) {
+function watchProcessExit_launch(proc, missionId, sendToWindow, retryInfo = null) {
   proc.on('close', (code) => {
     const currentPhase = missionState ? missionState.phase : 'Planning';
 
@@ -1669,6 +1676,26 @@ function watchProcessExit_launch(proc, missionId, sendToWindow) {
 
     const finalStatus = (code === 0 || code === null) ? 'Completed' : 'Failed';
     const ts = now();
+
+    if (finalStatus === 'Failed' && retryInfo) {
+      const { attemptCtx, attempt, maxAttempts, backoffMs, retrySpawn } = retryInfo;
+      const combinedText = (attemptCtx.stdoutText || '') + '\n' + (attemptCtx.stderrText || '');
+      if (attempt < maxAttempts && isTransientApiError(combinedText)) {
+        const delay = backoffMs[attempt - 1] ?? backoffMs[backoffMs.length - 1];
+        const entry = makeLogEntry(ts, 'System',
+          `⚠ Gặp lỗi tạm thời (rate limit/API), đang thử lại lần ${attempt}/${maxAttempts} sau ${delay / 1000}s...`, 'info');
+        if (missionState) missionState.log.push(entry);
+        sendToWindow('mission:log', entry);
+        setTimeout(() => retrySpawn(attempt + 1), delay);
+        return;
+      }
+      if (attempt >= maxAttempts && isTransientApiError(combinedText)) {
+        const entry = makeLogEntry(ts, 'System',
+          `Đã thử lại ${maxAttempts} lần nhưng vẫn gặp lỗi rate limit — dừng mission.`, 'error');
+        if (missionState) missionState.log.push(entry);
+        sendToWindow('mission:log', entry);
+      }
+    }
 
     stopAutosave();
     stopStuckChecker();
@@ -2894,43 +2921,57 @@ module.exports = function registerMission(getMainWindow) {
     const projectPath = missionState.project_path;
     const execMode = missionState.execution_mode || 'standard';
 
-    const proc = spawnClaude(
-      ['-p', '--resume', sessionId, '--dangerously-skip-permissions',
-       '--model', leadModel,
-       '--output-format', 'stream-json', '--verbose', '--max-turns', '200'],
-      projectPath,
-      execMode === 'agent_teams'
-    );
+    const spawnAnswerAttempt = (attempt) => {
+      killChild();
+      const proc = spawnClaude(
+        ['-p', '--resume', sessionId, '--dangerously-skip-permissions',
+         '--model', leadModel,
+         '--output-format', 'stream-json', '--verbose', '--max-turns', '200'],
+        projectPath,
+        execMode === 'agent_teams'
+      );
 
-    try {
-      proc.stdin.write(answerPrompt, 'utf8');
-      proc.stdin.end();
-    } catch (e) {
-      return `Failed to write answer prompt: ${e.message}`;
-    }
-
-    childProcess = proc;
-    missionState.status = 'Running';
-    startAutosave();
-    startStuckChecker(sendToWindow, false);  // resume after Q&A — preserve silence clocks
-
-    // Wire up readers — use launch reader for planning phase, deploy reader for execution
-    const isPlanning = missionState.phase === 'Planning';
-    if (isPlanning) {
-      readProcessStdout_launch(proc, missionState.id, sendToWindow);
-      readProcessStderr(proc, sendToWindow);
-      watchProcessExit_launch(proc, missionState.id, sendToWindow);
-    } else {
-      readProcessStdout_deploy(proc, sendToWindow, false);
-      readProcessStderr(proc, sendToWindow);
-      watchProcessExit_deploy(proc, missionState.id, sendToWindow);
-      // Agent Teams: restart file watcher so inter-agent messages are detected
-      // after resuming from a Q&A pause (previous watcher may have stopped when
-      // the prior process exited after <<<QUESTIONS_END>>>).
-      if (execMode === 'agent_teams' && projectPath) {
-        startFileWatcher(projectPath, sendToWindow);
+      try {
+        proc.stdin.write(answerPrompt, 'utf8');
+        proc.stdin.end();
+      } catch (e) {
+        const entry = makeLogEntry(now(), 'System', `Failed to write answer prompt: ${e.message}`, 'error');
+        if (missionState) missionState.log.push(entry);
+        sendToWindow('mission:log', entry);
+        return;
       }
-    }
+
+      childProcess = proc;
+      if (missionState) missionState.status = 'Running';
+      startAutosave();
+      startStuckChecker(sendToWindow, false);  // resume after Q&A — preserve silence clocks
+
+      const attemptCtx = { stdoutText: '', stderrText: '', sessionId: null };
+      const retryInfo = {
+        attemptCtx, attempt, maxAttempts: 3, backoffMs: [30000, 60000, 120000],
+        retrySpawn: (nextAttempt) => spawnAnswerAttempt(nextAttempt),
+      };
+
+      // Wire up readers — use launch reader for planning phase, deploy reader for execution
+      const isPlanning = missionState.phase === 'Planning';
+      if (isPlanning) {
+        readProcessStdout_launch(proc, missionState.id, sendToWindow, attemptCtx);
+        readProcessStderr(proc, sendToWindow, attemptCtx);
+        watchProcessExit_launch(proc, missionState.id, sendToWindow, retryInfo);
+      } else {
+        readProcessStdout_deploy(proc, sendToWindow, false, attemptCtx);
+        readProcessStderr(proc, sendToWindow, attemptCtx);
+        watchProcessExit_deploy(proc, missionState.id, sendToWindow, retryInfo);
+        // Agent Teams: restart file watcher so inter-agent messages are detected
+        // after resuming from a Q&A pause (previous watcher may have stopped when
+        // the prior process exited after <<<QUESTIONS_END>>>).
+        if (execMode === 'agent_teams' && projectPath) {
+          startFileWatcher(projectPath, sendToWindow);
+        }
+      }
+    };
+
+    spawnAnswerAttempt(1);
 
     // Notify frontend
     sendToWindow('mission:answer-sent', { answers });
