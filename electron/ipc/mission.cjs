@@ -2938,7 +2938,7 @@ module.exports = function registerMission(getMainWindow) {
         const entry = makeLogEntry(now(), 'System', `Failed to write answer prompt: ${e.message}`, 'error');
         if (missionState) missionState.log.push(entry);
         sendToWindow('mission:log', entry);
-        return;
+        return false;
       }
 
       childProcess = proc;
@@ -2969,9 +2969,14 @@ module.exports = function registerMission(getMainWindow) {
           startFileWatcher(projectPath, sendToWindow);
         }
       }
+
+      return true;
     };
 
-    spawnAnswerAttempt(1);
+    const spawnOk = spawnAnswerAttempt(1);
+    if (!spawnOk) {
+      return 'Failed to send answer to Claude process';
+    }
 
     // Notify frontend
     sendToWindow('mission:answer-sent', { answers });
