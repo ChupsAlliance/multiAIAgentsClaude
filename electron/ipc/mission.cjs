@@ -2254,7 +2254,7 @@ function readProcessStdout_deploy(proc, sendToWindow, isContMode, attemptCtx = {
 // ─────────────────────────────────────────────────────────────────
 // watchProcessExit_deploy — watch for exit during deploy/continue
 // ─────────────────────────────────────────────────────────────────
-function watchProcessExit_deploy(proc, missionId, sendToWindow) {
+function watchProcessExit_deploy(proc, missionId, sendToWindow, retryInfo = null) {
   proc.on('close', (code) => {
     const ts = now();
     if (!missionState) return;
@@ -2269,6 +2269,26 @@ function watchProcessExit_deploy(proc, missionId, sendToWindow) {
       sendToWindow('mission:log', entry);
       // Keep phase='Executing', status='WaitingForAnswer', don't emit completed
       return;
+    }
+
+    if (missionState.status === 'Running' && code !== 0 && code !== null && retryInfo) {
+      const { attemptCtx, attempt, maxAttempts, backoffMs, retrySpawn } = retryInfo;
+      const combinedText = (attemptCtx.stdoutText || '') + '\n' + (attemptCtx.stderrText || '');
+      if (attempt < maxAttempts && isTransientApiError(combinedText)) {
+        const delay = backoffMs[attempt - 1] ?? backoffMs[backoffMs.length - 1];
+        const entry = makeLogEntry(ts, 'System',
+          `⚠ Gặp lỗi tạm thời (rate limit/API), đang thử lại lần ${attempt}/${maxAttempts} sau ${delay / 1000}s...`, 'info');
+        missionState.log.push(entry);
+        sendToWindow('mission:log', entry);
+        setTimeout(() => retrySpawn(attempt + 1, attemptCtx.sessionId || null), delay);
+        return;
+      }
+      if (attempt >= maxAttempts && isTransientApiError(combinedText)) {
+        const entry = makeLogEntry(ts, 'System',
+          `Đã thử lại ${maxAttempts} lần nhưng vẫn gặp lỗi rate limit — dừng mission.`, 'error');
+        missionState.log.push(entry);
+        sendToWindow('mission:log', entry);
+      }
     }
 
     stopWatcher();
@@ -2483,33 +2503,48 @@ module.exports = function registerMission(getMainWindow) {
     // Spawn claude -p — planning phase only: do NOT enable AGENT_TEAMS here.
     // If AGENT_TEAMS=1 is set, Lead gains the Agent tool and will spawn sub-agents
     // directly, skipping our plan-review flow entirely.
-    const proc = spawnClaude(
-      ['-p', '--dangerously-skip-permissions', '--model', modelArg,
-       '--output-format', 'stream-json', '--verbose'],
-      projectPath,
-      false
-    );
+    const fullPrompt = (prompt || '') + previousWorkSection;
 
-    try {
-      // Write prompt to stdin then close it
-      // If continuing from history, append previous work context to the prompt
-      const fullPrompt = (prompt || '') + previousWorkSection;
-      proc.stdin.write(fullPrompt, 'utf8');
-      proc.stdin.end();
-    } catch (e) {
-      return `Failed to write prompt to stdin: ${e.message}`;
-    }
+    const attemptSpawnLaunch = (attempt, resumeSessionId) => {
+      const spawnArgs = resumeSessionId
+        ? ['-p', '--resume', resumeSessionId, '--dangerously-skip-permissions', '--model', modelArg,
+           '--output-format', 'stream-json', '--verbose']
+        : ['-p', '--dangerously-skip-permissions', '--model', modelArg,
+           '--output-format', 'stream-json', '--verbose'];
 
-    childProcess = proc;
-    missionState.status = 'Running';
-    startAutosave();
-    startStuckChecker(sendToWindow, true);  // new mission — reset all clocks
-    sendToWindow('mission:status', { mission_id: missionId, status: 'running' });
+      const proc = spawnClaude(spawnArgs, projectPath, false);
 
-    // Wire up readers
-    readProcessStdout_launch(proc, missionId, sendToWindow);
-    readProcessStderr(proc, sendToWindow);
-    watchProcessExit_launch(proc, missionId, sendToWindow);
+      try {
+        // Resumed attempts don't need the prompt again — the aborted session already has it.
+        if (!resumeSessionId) {
+          proc.stdin.write(fullPrompt, 'utf8');
+        }
+        proc.stdin.end();
+      } catch (e) {
+        const entry = makeLogEntry(now(), 'System', `Failed to write prompt to stdin: ${e.message}`, 'error');
+        missionState.log.push(entry);
+        sendToWindow('mission:log', entry);
+        return;
+      }
+
+      childProcess = proc;
+      missionState.status = 'Running';
+      startAutosave();
+      startStuckChecker(sendToWindow, attempt === 1);  // new mission — reset all clocks only on first attempt
+      sendToWindow('mission:status', { mission_id: missionId, status: 'running' });
+
+      const attemptCtx = { stdoutText: '', stderrText: '', sessionId: null };
+      const retryInfo = {
+        attemptCtx, attempt, maxAttempts: 3, backoffMs: [30000, 60000, 120000],
+        retrySpawn: (nextAttempt, nextSessionId) => attemptSpawnLaunch(nextAttempt, nextSessionId),
+      };
+
+      readProcessStdout_launch(proc, missionId, sendToWindow, attemptCtx);
+      readProcessStderr(proc, sendToWindow, attemptCtx);
+      watchProcessExit_launch(proc, missionId, sendToWindow, retryInfo);
+    };
+
+    attemptSpawnLaunch(1, null);
 
     return missionState;
   });
@@ -2673,36 +2708,52 @@ module.exports = function registerMission(getMainWindow) {
     // Always enable AGENT_TEAMS — deploy_standard.md and deploy_agent_teams.md
     // both instruct Lead to use the Agent tool to spawn sub-agents.
     // (Planning phase intentionally does NOT set this, so Lead outputs JSON plan instead.)
-    const proc = spawnClaude(
-      ['-p', '--dangerously-skip-permissions', '--model', leadModel,
-       '--output-format', 'stream-json', '--verbose', '--max-turns', '200'],
-      projectPath,
-      true
-    );
+    const attemptSpawnDeploy = (attempt, resumeSessionId) => {
+      const spawnArgs = resumeSessionId
+        ? ['-p', '--resume', resumeSessionId, '--dangerously-skip-permissions', '--model', leadModel,
+           '--output-format', 'stream-json', '--verbose', '--max-turns', '200']
+        : ['-p', '--dangerously-skip-permissions', '--model', leadModel,
+           '--output-format', 'stream-json', '--verbose', '--max-turns', '200'];
 
-    try {
-      proc.stdin.write(deployPrompt, 'utf8');
-      // Always close stdin — interactive questions use session resume (new process)
-      proc.stdin.end();
-    } catch (e) {
-      return `Failed to write deploy prompt: ${e.message}`;
-    }
+      const proc = spawnClaude(spawnArgs, projectPath, true);
 
-    childProcess = proc;
-    missionState.phase = 'Executing';
-    startAutosave();
-    startStuckChecker(sendToWindow, true);  // new execution phase — reset all clocks
-    saveMissionSnapshot(missionState); // milestone: deploy started
+      try {
+        if (!resumeSessionId) {
+          proc.stdin.write(deployPrompt, 'utf8');
+        }
+        // Always close stdin — interactive questions use session resume (new process)
+        proc.stdin.end();
+      } catch (e) {
+        const entry = makeLogEntry(now(), 'System', `Failed to write deploy prompt: ${e.message}`, 'error');
+        missionState.log.push(entry);
+        sendToWindow('mission:log', entry);
+        return;
+      }
 
-    // Agent_teams mode: start file watcher
-    if (execMode === 'agent_teams') {
-      startFileWatcher(projectPath, sendToWindow);
-    }
+      childProcess = proc;
+      missionState.phase = 'Executing';
+      startAutosave();
+      startStuckChecker(sendToWindow, attempt === 1);  // new execution phase — reset all clocks only on first attempt
+      if (attempt === 1) saveMissionSnapshot(missionState); // milestone: deploy started
 
-    // Wire up readers — pass permission mode for question marker handling
-    readProcessStdout_deploy(proc, sendToWindow, false);
-    readProcessStderr(proc, sendToWindow);
-    watchProcessExit_deploy(proc, missionId, sendToWindow);
+      // Agent_teams mode: start file watcher
+      if (execMode === 'agent_teams') {
+        startFileWatcher(projectPath, sendToWindow);
+      }
+
+      const attemptCtx = { stdoutText: '', stderrText: '', sessionId: null };
+      const retryInfo = {
+        attemptCtx, attempt, maxAttempts: 3, backoffMs: [30000, 60000, 120000],
+        retrySpawn: (nextAttempt, nextSessionId) => attemptSpawnDeploy(nextAttempt, nextSessionId),
+      };
+
+      // Wire up readers — pass permission mode for question marker handling
+      readProcessStdout_deploy(proc, sendToWindow, false, attemptCtx);
+      readProcessStderr(proc, sendToWindow, attemptCtx);
+      watchProcessExit_deploy(proc, missionId, sendToWindow, retryInfo);
+    };
+
+    attemptSpawnDeploy(1, null);
 
     return null; // Ok(())
   });
@@ -2837,37 +2888,52 @@ module.exports = function registerMission(getMainWindow) {
     killChild();
 
     // Both continue_standard.md and continue_agent_teams.md use the Agent tool — always enable it.
-    const proc = spawnClaude(
-      ['-p', '--dangerously-skip-permissions', '--model', leadModel,
-       '--output-format', 'stream-json', '--verbose', '--max-turns', '200'],
-      projectPath,
-      true  // always enable AGENT_TEAMS so Lead can spawn sub-agents
-    );
+    const attemptSpawnContinue = (attempt, resumeSessionId) => {
+      const spawnArgs = resumeSessionId
+        ? ['-p', '--resume', resumeSessionId, '--dangerously-skip-permissions', '--model', leadModel,
+           '--output-format', 'stream-json', '--verbose', '--max-turns', '200']
+        : ['-p', '--dangerously-skip-permissions', '--model', leadModel,
+           '--output-format', 'stream-json', '--verbose', '--max-turns', '200'];
 
-    try {
-      proc.stdin.write(continuePrompt, 'utf8');
-      // Always close stdin — interactive questions use session resume (new process)
-      proc.stdin.end();
-    } catch (e) {
-      return `Failed to write continue prompt: ${e.message}`;
-    }
+      const proc = spawnClaude(spawnArgs, projectPath, true);  // always enable AGENT_TEAMS so Lead can spawn sub-agents
 
-    childProcess = proc;
-    if (missionState) missionState.phase = 'Executing';
-    startAutosave();
-    startStuckChecker(sendToWindow, false);  // resume — preserve silence clocks
+      try {
+        if (!resumeSessionId) {
+          proc.stdin.write(continuePrompt, 'utf8');
+        }
+        // Always close stdin — interactive questions use session resume (new process)
+        proc.stdin.end();
+      } catch (e) {
+        const entry = makeLogEntry(now(), 'System', `Failed to write continue prompt: ${e.message}`, 'error');
+        if (missionState) missionState.log.push(entry);
+        sendToWindow('mission:log', entry);
+        return;
+      }
 
-    // Start file watcher if agent_teams mode (detect file changes from subagents)
-    if (execMode === 'agent_teams') {
-      startFileWatcher(projectPath, sendToWindow);
-    }
+      childProcess = proc;
+      if (missionState) missionState.phase = 'Executing';
+      startAutosave();
+      startStuckChecker(sendToWindow, false);  // resume — preserve silence clocks
 
-    // Wire up readers
-    readProcessStdout_deploy(proc, sendToWindow, true);
-    readProcessStderr(proc, sendToWindow);
+      // Start file watcher if agent_teams mode (detect file changes from subagents)
+      if (execMode === 'agent_teams') {
+        startFileWatcher(projectPath, sendToWindow);
+      }
 
-    const missionId = missionState ? missionState.id : 'unknown';
-    watchProcessExit_deploy(proc, missionId, sendToWindow);
+      const attemptCtx = { stdoutText: '', stderrText: '', sessionId: null };
+      const missionIdForWatch = missionState ? missionState.id : 'unknown';
+      const retryInfo = {
+        attemptCtx, attempt, maxAttempts: 3, backoffMs: [30000, 60000, 120000],
+        retrySpawn: (nextAttempt, nextSessionId) => attemptSpawnContinue(nextAttempt, nextSessionId),
+      };
+
+      // Wire up readers
+      readProcessStdout_deploy(proc, sendToWindow, true, attemptCtx);
+      readProcessStderr(proc, sendToWindow, attemptCtx);
+      watchProcessExit_deploy(proc, missionIdForWatch, sendToWindow, retryInfo);
+    };
+
+    attemptSpawnContinue(1, null);
 
     return null; // Ok(())
   });
