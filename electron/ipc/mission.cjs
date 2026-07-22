@@ -3131,13 +3131,7 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
 
     const projectPath = missionState ? missionState.project_path || '.' : '.';
 
-    sendToWindow('mission:log', {
-      timestamp: now(), agent: 'System',
-      message: 'Re-planning: sending changes to Lead for review...',
-      log_type: 'info',
-    });
-
-    return new Promise((resolve) => {
+    const runReplanAttempt = () => new Promise((resolve, reject) => {
       const proc = spawnClaude(
         ['-p', '--dangerously-skip-permissions', '--model', leadModel,
          '--output-format', 'stream-json', '--verbose', '--max-turns', '50'],
@@ -3146,6 +3140,7 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
       );
 
       let fullText = '';
+      let stderrText = '';
       let resolved = false;
 
       const rl = readline.createInterface({ input: proc.stdout, crlfDelay: Infinity });
@@ -3176,7 +3171,7 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
         }
       });
 
-      proc.stderr.on('data', () => {}); // Drain stderr
+      proc.stderr.on('data', (chunk) => { stderrText += chunk.toString(); });
 
       proc.on('close', () => {
         if (resolved) return;
@@ -3196,19 +3191,14 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
           }
           resolve({ agents: parsed.agents, tasks: parsed.tasks });
         } else {
-          sendToWindow('mission:log', {
-            timestamp: now(), agent: 'System',
-            message: 'Re-plan failed: could not parse updated plan from Lead response',
-            log_type: 'error',
-          });
-          resolve('Failed to parse re-plan output');
+          reject(new Error(`Failed to parse re-plan output: ${fullText}\n${stderrText}`));
         }
       });
 
       proc.on('error', (err) => {
         if (resolved) return;
         resolved = true;
-        resolve(`Re-plan process error: ${err.message}`);
+        reject(new Error(`Re-plan process error: ${err.message}\n${stderrText}`));
       });
 
       // Send prompt
@@ -3218,7 +3208,7 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
       } catch (e) {
         if (!resolved) {
           resolved = true;
-          resolve(`Failed to write re-plan prompt: ${e.message}`);
+          reject(new Error(`Failed to write re-plan prompt: ${e.message}`));
         }
       }
 
@@ -3227,10 +3217,48 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
         if (!resolved) {
           resolved = true;
           try { proc.kill(); } catch (_) {}
-          resolve('Re-plan timed out after 120s');
+          reject(new Error(`Re-plan timed out after 120s\n${stderrText}`));
         }
       }, 120000);
     });
+
+    const onRetry = (attempt, maxAttempts, err, delay) => {
+      const entry = {
+        timestamp: now(), agent: 'System',
+        message: `⚠ Gặp lỗi tạm thời (rate limit/API), đang thử lại lần ${attempt}/${maxAttempts} sau ${delay / 1000}s...`,
+        log_type: 'info',
+      };
+      if (missionState) missionState.log.push(entry);
+      sendToWindow('mission:log', entry);
+    };
+
+    sendToWindow('mission:log', {
+      timestamp: now(), agent: 'System',
+      message: 'Re-planning: sending changes to Lead for review...',
+      log_type: 'info',
+    });
+
+    try {
+      const result = await retryTransientSpawn(runReplanAttempt, onRetry, 3, [30000, 60000, 120000]);
+      return result;
+    } catch (err) {
+      if (isTransientApiError(err.message)) {
+        const entry = {
+          timestamp: now(), agent: 'System',
+          message: 'Đã thử lại 3 lần nhưng vẫn gặp lỗi rate limit — dừng mission.',
+          log_type: 'error',
+        };
+        if (missionState) missionState.log.push(entry);
+        sendToWindow('mission:log', entry);
+      } else {
+        sendToWindow('mission:log', {
+          timestamp: now(), agent: 'System',
+          message: 'Re-plan failed: could not parse updated plan from Lead response',
+          log_type: 'error',
+        });
+      }
+      return err.message;
+    }
   });
 
   // ── stop_mission ───────────────────────────────────────────────
