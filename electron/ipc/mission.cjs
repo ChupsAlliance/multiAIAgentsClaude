@@ -1686,7 +1686,7 @@ function watchProcessExit_launch(proc, missionId, sendToWindow, retryInfo = null
           `⚠ Gặp lỗi tạm thời (rate limit/API), đang thử lại lần ${attempt}/${maxAttempts} sau ${delay / 1000}s...`, 'info');
         if (missionState) missionState.log.push(entry);
         sendToWindow('mission:log', entry);
-        setTimeout(() => retrySpawn(attempt + 1), delay);
+        setTimeout(() => retrySpawn(attempt + 1, attemptCtx.sessionId || null), delay);
         return;
       }
       if (attempt >= maxAttempts && isTransientApiError(combinedText)) {
