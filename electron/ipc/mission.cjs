@@ -873,6 +873,38 @@ async function retryMockupGeneration(runFn, onRetry, maxAttempts = 3) {
   throw lastErr;
 }
 
+// ─────────────────────────────────────────────────────────────────
+// isTransientApiError — classifies accumulated stdout/stderr text from
+// a failed spawn attempt as a transient (retry-worthy) API error.
+// ─────────────────────────────────────────────────────────────────
+function isTransientApiError(text) {
+  return /\b429\b|rate limit|Request rejected|overloaded|\b5\d\d\b|ECONNRESET|ETIMEDOUT|ECONNREFUSED.*api|network error/i.test(text || '');
+}
+
+// ─────────────────────────────────────────────────────────────────
+// retryTransientSpawn — runs runFn(attempt) up to maxAttempts times.
+// Only retries when the rejection's .message matches isTransientApiError;
+// non-transient errors reject immediately on first occurrence. Calls
+// onRetry(attempt, maxAttempts, err, delay) before waiting out the
+// backoff for each retried attempt.
+// ─────────────────────────────────────────────────────────────────
+async function retryTransientSpawn(runFn, onRetry, maxAttempts = 3, backoffMs = [30000, 60000, 120000]) {
+  let lastErr;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await runFn(attempt);
+    } catch (err) {
+      lastErr = err;
+      const transient = isTransientApiError(err && err.message);
+      if (!transient || attempt === maxAttempts) throw err;
+      const delay = backoffMs[attempt - 1] ?? backoffMs[backoffMs.length - 1];
+      onRetry(attempt, maxAttempts, err, delay);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+  throw lastErr;
+}
+
 // spawnMockupGenerator — generate HTML via runClaudeForHtml, serve on localhost,
 // open browser, send mission:mockup IPC. Handles its own errors gracefully.
 async function spawnMockupGenerator(title, spec, missionId, sendToWindow) {
@@ -3357,3 +3389,5 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
 };
 
 module.exports.retryMockupGeneration = retryMockupGeneration;
+module.exports.isTransientApiError = isTransientApiError;
+module.exports.retryTransientSpawn = retryTransientSpawn;
