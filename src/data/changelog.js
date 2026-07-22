@@ -8,6 +8,24 @@
 
 export const changelog = [
   {
+    version: '0.10.1',
+    date: '2026-07-22',
+    title: 'Tự động thử lại khi gặp lỗi API tạm thời (Rate Limit)',
+    highlights: [
+      'Retry xuyên suốt mọi phase: brainstorm, lập kế hoạch, thực thi, trả lời câu hỏi, replan, subagent',
+      'Tối đa 3 lần thử lại, chờ 30s/60s/120s giữa các lần',
+      'Chỉ retry lỗi tạm thời (429/rate limit/5xx/network) — lỗi khác vẫn fail ngay như trước',
+    ],
+    items: [
+      { type: 'added', badge: 'Core',
+        text: 'Tự động thử lại khi gặp lỗi API tạm thời (429/rate limit, lỗi 5xx, overloaded, network reset) tại tất cả 6 điểm gọi Claude CLI — bao gồm brainstorm/lập kế hoạch, thực thi, trả lời câu hỏi giữa chừng, replan, và subagent (Agent Teams)' },
+      { type: 'added', badge: 'Core',
+        text: 'Lịch thử lại cố định: tối đa 3 lần, chờ 30s/60s/120s giữa các lần, log tiến trình thử lại vào mission log' },
+      { type: 'improved', badge: 'Core',
+        text: 'Các phiên resume (sau mockup, trả lời câu hỏi) thử lại đúng session đang dùng; các phiên spawn mới (launch/deploy/continue mission) tự capture session id riêng cho từng lần thử để resume đúng chỗ bị lỗi' },
+    ],
+  },
+  {
     version: '0.10.0',
     date: '2026-07-21',
     title: 'Business Summary & Reliability Improvements',

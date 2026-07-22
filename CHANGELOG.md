@@ -10,6 +10,24 @@ Format dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.10.1] — 2026-07-22
+
+### Cải tiến — Tự động thử lại khi gặp lỗi API tạm thời (rate limit)
+
+- **Retry xuyên suốt mọi phase của mission**: brainstorm/lập kế hoạch, thực thi, trả lời câu hỏi giữa chừng, replan, và các subagent (Agent Teams) — tất cả 6 điểm gọi Claude CLI giờ đều tự động thử lại khi gặp lỗi tạm thời (429/rate limit, lỗi 5xx, overloaded, network reset)
+- **Lịch thử lại cố định**: tối đa 3 lần, chờ 30s/60s/120s giữa các lần, log tiến trình thử lại vào mission log bằng tiếng Việt
+- Lỗi không thuộc loại tạm thời (sai prompt, lỗi auth, parse failure...) vẫn fail ngay lập tức như trước — không lãng phí thời gian chờ vô ích
+- Các phiên resume (`restartLeadAfterMockup`, `answer_question`) thử lại bằng đúng session đang dùng; các phiên spawn mới (`launch_mission`, `deploy_mission`, `continue_mission`) tự capture session id riêng cho từng lần thử để resume đúng lần bị lỗi; `replan_mission` thử lại toàn bộ từ đầu
+- Nếu hết cả 3 lần vẫn lỗi, mission chuyển sang trạng thái `Failed` như cũ, kèm thêm 1 dòng log báo đã thử lại hết số lần cho phép
+
+### Kỹ thuật
+
+- `electron/ipc/mission.cjs`: thêm `isTransientApiError()` (nhận diện lỗi tạm thời qua regex) và `retryTransientSpawn()` (helper retry thuần, dependency-injected, tách biệt hoàn toàn với `retryMockupGeneration` đã có)
+- `attemptCtx` — object theo dõi stdout/stderr/session_id tích luỹ riêng cho từng lần thử, truyền vào các reader dùng chung (`readProcessStderr`, `readProcessStdout_launch`, `readProcessStdout_deploy`)
+- `retryInfo` — truyền vào `watchProcessExit_launch`/`watchProcessExit_deploy` để quyết định thử lại hay chuyển `Failed`
+
+---
+
 ## [0.10.0] — 2026-07-21
 
 ### Thêm mới — Business Summary
