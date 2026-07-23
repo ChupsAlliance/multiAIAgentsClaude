@@ -132,8 +132,7 @@ export function PlaygroundPage() {
   }
 
   const handleLaunch = async () => {
-    if (!generatedPrompt) return
-    if (!projectPath) { alert('Vui lòng chọn project folder trước!'); return }
+    if (!generatedPrompt || !projectPath) return
 
     // 1. Scaffold .md files
     setLaunchStatus('scaffolding')
@@ -200,9 +199,11 @@ export function PlaygroundPage() {
     setView('builder')
   }
 
-  const missingRequired = selectedTpl?.fields
+  const missingRequiredFields = selectedTpl?.fields
     .filter(f => f.required && !fields[f.id])
     .length > 0
+
+  const missingProjectFolder = !projectPath
 
   return (
     <div className="flex h-screen overflow-hidden bg-vs-bg">
@@ -351,9 +352,9 @@ export function PlaygroundPage() {
                 {/* Action buttons */}
                 <div className="space-y-2">
                   <button onClick={handleLaunch}
-                    disabled={!generatedPrompt || !projectPath || missingRequired}
+                    disabled={!generatedPrompt || missingProjectFolder || missingRequiredFields}
                     className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-semibold text-sm transition-colors
-                      ${generatedPrompt && projectPath && !missingRequired
+                      ${generatedPrompt && !missingProjectFolder && !missingRequiredFields
                         ? 'bg-vs-accent hover:bg-vs-accent2 text-white cursor-pointer'
                         : 'bg-vs-border text-vs-muted cursor-not-allowed'}`}>
                     <Terminal size={15} />
@@ -361,9 +362,15 @@ export function PlaygroundPage() {
                     <ArrowRight size={14} />
                   </button>
 
-                  {missingRequired && selectedTpl && (
+                  {selectedTpl && missingRequiredFields && (
                     <p className="text-[10px] text-yellow-400 text-center">
-                      Điền đầy đủ các trường bắt buộc (*) để Launch
+                      Điền đầy đủ các trường bắt buộc (*) để khởi chạy
+                    </p>
+                  )}
+
+                  {selectedTpl && !missingRequiredFields && missingProjectFolder && (
+                    <p className="text-[10px] text-yellow-400 text-center">
+                      Chọn project folder để khởi chạy
                     </p>
                   )}
 
