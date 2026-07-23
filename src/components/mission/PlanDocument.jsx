@@ -677,7 +677,7 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
       </div>
 
       {/* ── Status bar ── */}
-      <div className="flex items-center gap-3 px-3 py-1 bg-[#007acc] text-vs-heading text-[10px] font-mono shrink-0">
+      <div className="flex items-center gap-3 px-3 py-1 bg-[#007acc] text-white text-[10px] font-mono shrink-0">
         {stats && (
           <>
             <span>{stats.agents} agent{stats.agents !== 1 ? 's' : ''}</span>
@@ -685,7 +685,7 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
             <span>
               {stats.tasks} task{stats.tasks !== 1 ? 's' : ''}
               {stats.tasks > 0 && (
-                <span className="ml-1 text-vs-heading/70">
+                <span className="ml-1 text-white/70">
                   ({stats.high > 0 ? `${stats.high}H` : ''}{stats.med > 0 ? ` ${stats.med}M` : ''}{stats.low > 0 ? ` ${stats.low}L` : ''})
                 </span>
               )}
@@ -697,7 +697,7 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
         {hasChanges ? (
           <span className="text-yellow-200">Đã chỉnh sửa</span>
         ) : (
-          <span className="text-vs-heading/70">Không thay đổi</span>
+          <span className="text-white/70">Không thay đổi</span>
         )}
 
         {stats && stats.warnings > 0 ? (
@@ -711,7 +711,7 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
         ) : null}
 
         <div className="flex-1" />
-        <span className="text-vs-heading/50">{'Ctrl+S để áp dụng'}</span>
+        <span className="text-white/50">{'Ctrl+S để áp dụng'}</span>
       </div>
 
       {/* ── Diff Summary Modal ── */}
@@ -727,9 +727,9 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
       {toast && (
         <div className={`fixed bottom-4 right-4 z-50 px-4 py-2 rounded-lg text-xs font-mono shadow-lg
                          animate-fade-in ${
-          toast.type === 'success' ? 'bg-green-600 text-vs-heading' :
-          toast.type === 'error' ? 'bg-red-600 text-vs-heading' :
-          'bg-[#333] text-vs-heading'
+          toast.type === 'success' ? 'bg-green-600 text-white' :
+          toast.type === 'error' ? 'bg-red-600 text-white' :
+          'bg-[#333] text-white'
         }`}>
           {toast.msg}
         </div>

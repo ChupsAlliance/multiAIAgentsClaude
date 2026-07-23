@@ -9,6 +9,13 @@ const ALLOWED_BG_WHITE = new Set([
   path.join(SRC_DIR, 'components', 'mission', 'MissionLauncher.jsx'),
 ])
 
+// PlanDocument.jsx's status bar and toast notifications sit on fixed dark/saturated
+// backgrounds (#007acc, green-600, red-600, #333) that never flip with the theme —
+// their text must stay literally white in both themes, not follow --vs-heading.
+const ALLOWED_TEXT_WHITE = new Set([
+  path.join(SRC_DIR, 'components', 'mission', 'PlanDocument.jsx'),
+])
+
 function walk(dir, files = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name)
@@ -25,7 +32,7 @@ function walk(dir, files = []) {
 function checkFile(file) {
   const content = fs.readFileSync(file, 'utf-8')
   const violations = []
-  if (/\btext-white\b/.test(content)) violations.push('text-white')
+  if (/\btext-white\b/.test(content) && !ALLOWED_TEXT_WHITE.has(file)) violations.push('text-white')
   if (/\bbg-black\/\d+/.test(content)) violations.push('bg-black/N')
   const bgWhiteOverlay = content.match(/\bbg-white\/\d+/)
   if (bgWhiteOverlay) violations.push('bg-white/N')
