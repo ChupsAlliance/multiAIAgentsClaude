@@ -351,6 +351,10 @@ export function PlaygroundPage() {
 
                 {/* Action buttons */}
                 <div className="space-y-2">
+                  <p className="text-[10px] text-vs-muted text-center">
+                    Sẽ tạo tệp .md trong <code className="text-vs-string font-mono">.claude-agent-team/</code> và mở terminal thật tại folder đã chọn.
+                  </p>
+
                   <button onClick={handleLaunch}
                     disabled={!generatedPrompt || missingProjectFolder || missingRequiredFields}
                     className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-semibold text-sm transition-colors

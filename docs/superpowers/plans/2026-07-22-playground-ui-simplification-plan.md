@@ -441,22 +441,29 @@ function renderPage() {
   )
 }
 
+const EXPLANATION_TEXT = 'Sẽ tạo tệp .md trong .claude-agent-team/ và mở terminal thật tại folder đã chọn.'
+
+function findExplanationParagraph(container) {
+  return Array.from(container.querySelectorAll('p')).find(
+    (p) => p.textContent === EXPLANATION_TEXT
+  )
+}
+
 test('shows Launch-behavior explanation line even with no template selected', () => {
-  renderPage()
-  expect(
-    screen.getByText(/Sẽ tạo tệp \.md trong .claude-agent-team\/ và mở terminal thật tại folder đã chọn\./)
-  ).toBeInTheDocument()
+  const { container } = renderPage()
+  expect(findExplanationParagraph(container)).toBeTruthy()
 })
 
 test('explanation line still visible after selecting a template (button enabled or not)', async () => {
   const { container } = renderPage()
   const firstTemplateCard = container.querySelector('button.text-left')
   firstTemplateCard.click()
-  expect(
-    await screen.findByText(/Sẽ tạo tệp \.md trong .claude-agent-team\/ và mở terminal thật tại folder đã chọn\./)
-  ).toBeInTheDocument()
+  await screen.findByText('Chọn folder')
+  expect(findExplanationParagraph(container)).toBeTruthy()
 })
 ```
+
+**Why not `getByText(regex)`:** Step 3's JSX wraps `.claude-agent-team/` in an inline `<code>` element, so the sentence is split across a text node + `<code>` + text node. Testing Library's `getByText`/`findByText` only match a node's *direct* text-node children (`getNodeText`), never recursive `textContent` — so a single-node regex spanning the `<code>` boundary can never match, even though the rendered text is correct. Matching on the `<p>`'s full `textContent` directly sidesteps that limitation without changing the approved JSX/design.
 
 - [ ] **Step 2: Run test to verify it fails**
 
