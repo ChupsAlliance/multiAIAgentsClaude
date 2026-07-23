@@ -225,7 +225,7 @@ export function PlaygroundPage() {
                   onClick={() => setView(v)}
                   className={`px-4 py-1.5 text-xs font-medium transition-colors
                     ${view === v ? 'bg-vs-accent text-white' : 'text-vs-muted hover:text-white hover:bg-white/5'}`}>
-                  {v === 'builder' ? 'Builder' : `History (${history.length})`}
+                  {v === 'builder' ? 'Xây dựng' : `Lịch sử (${history.length})`}
                 </button>
               ))}
             </div>
@@ -300,7 +300,7 @@ export function PlaygroundPage() {
                       <button onClick={pickFolder}
                         className="flex items-center gap-1.5 px-3 py-2 rounded border border-vs-border
                           text-vs-muted hover:text-white hover:border-vs-accent text-xs transition-colors">
-                        <FolderOpen size={13} />Browse
+                        <FolderOpen size={13} />Chọn folder
                       </button>
                     </div>
                     {projectPath && (
@@ -336,7 +336,7 @@ export function PlaygroundPage() {
               {/* Right column: prompt preview + actions */}
               <div className="space-y-4">
                 <div>
-                  <p className="text-[10px] text-vs-muted font-mono uppercase tracking-widest mb-2">Preview prompt</p>
+                  <p className="text-[10px] text-vs-muted font-mono uppercase tracking-widest mb-2">Xem trước prompt</p>
                   {generatedPrompt ? (
                     <div className="max-h-[380px] overflow-y-auto rounded-lg">
                       <CodeBlock code={generatedPrompt} language="text" />
@@ -357,7 +357,7 @@ export function PlaygroundPage() {
                         ? 'bg-vs-accent hover:bg-vs-accent2 text-white cursor-pointer'
                         : 'bg-vs-border text-vs-muted cursor-not-allowed'}`}>
                     <Terminal size={15} />
-                    Launch — Tạo files &amp; Mở terminal
+                    Khởi chạy — Tạo tệp &amp; Mở terminal
                     <ArrowRight size={14} />
                   </button>
 
@@ -371,14 +371,14 @@ export function PlaygroundPage() {
                     <button onClick={handleCopy} disabled={!generatedPrompt}
                       className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs transition-colors
                         ${generatedPrompt ? 'border border-vs-border hover:border-vs-accent text-vs-text' : 'border border-vs-border text-vs-muted cursor-not-allowed opacity-50'}`}>
-                      {copied ? <><Check size={12} />Copied!</> : <><Copy size={12} />Copy prompt</>}
+                      {copied ? <><Check size={12} />Đã sao chép!</> : <><Copy size={12} />Sao chép prompt</>}
                     </button>
                     <button
                       onClick={() => generatedPrompt && exportPrompt(generatedPrompt, selectedTpl?.label || 'prompt')}
                       disabled={!generatedPrompt}
                       className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs transition-colors
                         ${generatedPrompt ? 'border border-vs-border hover:border-vs-accent text-vs-text' : 'border border-vs-border text-vs-muted cursor-not-allowed opacity-50'}`}>
-                      <Download size={12} />Export .txt
+                      <Download size={12} />Xuất .txt
                     </button>
                   </div>
                 </div>
