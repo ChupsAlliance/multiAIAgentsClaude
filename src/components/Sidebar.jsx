@@ -69,7 +69,7 @@ export function Sidebar({ activeSection }) {
 
       {/* Mobile overlay */}
       {mobileOpen && (
-        <div className="fixed inset-0 bg-black/60 z-30 md:hidden" onClick={() => setMobileOpen(false)} />
+        <div className="fixed inset-0 bg-vs-overlay/60 z-30 md:hidden" onClick={() => setMobileOpen(false)} />
       )}
 
       {/* Sidebar */}
@@ -85,7 +85,7 @@ export function Sidebar({ activeSection }) {
               <Bot size={15} className="text-vs-accent" />
             </div>
             <div>
-              <p className="text-xs font-bold text-white font-mono">Claude Code</p>
+              <p className="text-xs font-bold text-vs-heading font-mono">Claude Code</p>
               <p className="text-[10px] text-vs-muted font-mono">Agent Teams Guide</p>
             </div>
           </div>
@@ -107,7 +107,7 @@ export function Sidebar({ activeSection }) {
                 key={path}
                 onClick={() => { navigate(path); setMobileOpen(false) }}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors mb-0.5 no-drag
-                  ${active ? 'bg-vs-accent/15 text-white' : 'text-vs-text hover:bg-white/5 hover:text-white'}`}
+                  ${active ? 'bg-vs-accent/15 text-vs-heading' : 'text-vs-text hover:bg-vs-overlay/5 hover:text-vs-heading'}`}
               >
                 <Icon size={15} className={active ? 'text-vs-accent' : 'text-vs-muted'} />
                 <span className="font-medium">{label}</span>
@@ -130,8 +130,8 @@ export function Sidebar({ activeSection }) {
                   onClick={() => scrollToSection(s.id)}
                   className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-xs transition-colors border-l-2 no-drag
                     ${isActive
-                      ? 'border-vs-accent text-white bg-vs-accent/10'
-                      : 'border-transparent text-vs-muted hover:text-vs-text hover:bg-white/5'}`}
+                      ? 'border-vs-accent text-vs-heading bg-vs-accent/10'
+                      : 'border-transparent text-vs-muted hover:text-vs-text hover:bg-vs-overlay/5'}`}
                 >
                   <span className="font-mono text-[10px] w-4 shrink-0 opacity-50">{String(i+1).padStart(2,'0')}</span>
                   <Icon size={12} className={isActive ? 'text-vs-accent shrink-0' : 'shrink-0'} />
