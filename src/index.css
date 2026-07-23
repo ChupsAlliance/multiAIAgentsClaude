@@ -84,14 +84,18 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
-/* ── Prism.js VS Code Dark Theme ─────────────────── */
+/* ── Prism.js VS Code Dark Theme ───────────────────
+   CodeBlock.jsx renders these on a fixed bg-[#1a1a1a] container that does
+   NOT flip with the theme, so these colors are intentionally hardcoded
+   (not the themed --vs-* tokens) to stay readable in both dark and light
+   mode. ── */
 code[class*="language-"],
 pre[class*="language-"] {
   font-family: 'JetBrains Mono', Cascadia Code, Consolas, monospace;
   font-size: 0.8rem;
   line-height: 1.6;
   background: transparent;
-  color: rgb(var(--vs-text));
+  color: #d4d4d4;
   text-shadow: none;
   white-space: pre;
   word-spacing: normal;
@@ -99,14 +103,14 @@ pre[class*="language-"] {
   tab-size: 2;
 }
 
-.token.comment, .token.prolog, .token.doctype, .token.cdata { color: rgb(var(--vs-comment)); }
-.token.punctuation { color: rgb(var(--vs-text)); }
-.token.property, .token.tag, .token.boolean, .token.number, .token.constant, .token.symbol { color: rgb(var(--vs-number)); }
-.token.selector, .token.attr-name, .token.string, .token.char, .token.builtin { color: rgb(var(--vs-string)); }
-.token.operator, .token.entity, .token.url { color: rgb(var(--vs-text)); }
-.token.atrule, .token.attr-value, .token.keyword { color: rgb(var(--vs-keyword)); }
-.token.function, .token.class-name { color: rgb(var(--vs-fn)); }
-.token.regex, .token.important, .token.variable { color: rgb(var(--vs-type)); }
+.token.comment, .token.prolog, .token.doctype, .token.cdata { color: #6a9955; }
+.token.punctuation { color: #d4d4d4; }
+.token.property, .token.tag, .token.boolean, .token.number, .token.constant, .token.symbol { color: #b5cea8; }
+.token.selector, .token.attr-name, .token.string, .token.char, .token.builtin { color: #ce9178; }
+.token.operator, .token.entity, .token.url { color: #d4d4d4; }
+.token.atrule, .token.attr-value, .token.keyword { color: #569cd6; }
+.token.function, .token.class-name { color: #dcdcaa; }
+.token.regex, .token.important, .token.variable { color: #4ec9b0; }
 .token.important, .token.bold { font-weight: bold; }
 .token.italic { font-style: italic; }
 
