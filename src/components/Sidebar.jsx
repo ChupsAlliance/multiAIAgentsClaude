@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { invoke } from '@tauri-apps/api/core'
-import { Bot, BookOpen, Play, LayoutDashboard, Menu, X, ChevronRight, Settings, Rocket, Sparkles } from 'lucide-react'
+import { Bot, BookOpen, Play, LayoutDashboard, Menu, X, ChevronRight, Settings, Rocket, Sparkles, Sun, Moon } from 'lucide-react'
 import { sections } from '../data/sections'
+import { useTheme } from '../hooks/useTheme'
 
 const navItems = [
   { path: '/',           label: 'Tài liệu',        icon: BookOpen },
@@ -39,6 +40,8 @@ export function Sidebar({ activeSection }) {
     el?.addEventListener('scroll', onScroll)
     return () => el?.removeEventListener('scroll', onScroll)
   }, [])
+
+  const { theme, toggleTheme } = useTheme()
 
   const isDocsPage = location.pathname === '/'
 
@@ -162,6 +165,16 @@ export function Sidebar({ activeSection }) {
               </span>
             </div>
           </div>
+          <button
+            onClick={toggleTheme}
+            aria-label="Chuyển giao diện sáng/tối"
+            className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md
+                       text-[10px] font-mono text-vs-muted
+                       hover:text-vs-accent hover:bg-vs-accent/10 transition-colors no-drag"
+          >
+            {theme === 'dark' ? <Sun size={10} /> : <Moon size={10} />}
+            {theme === 'dark' ? 'Giao diện sáng' : 'Giao diện tối'}
+          </button>
           <button
             onClick={() => window.__openChangelog?.()}
             className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md
