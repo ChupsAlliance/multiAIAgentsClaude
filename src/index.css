@@ -2,6 +2,52 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --vs-bg: 30 30 30;
+  --vs-sidebar: 37 37 38;
+  --vs-panel: 45 45 45;
+  --vs-border: 62 62 66;
+  --vs-text: 212 212 212;
+  --vs-muted: 133 133 133;
+  --vs-comment: 106 153 85;
+  --vs-keyword: 86 156 214;
+  --vs-string: 206 145 120;
+  --vs-number: 181 206 168;
+  --vs-fn: 220 220 170;
+  --vs-type: 78 201 176;
+  --vs-accent: 0 122 204;
+  --vs-accent2: 0 152 255;
+  --vs-green: 78 201 176;
+  --vs-yellow: 220 220 170;
+  --vs-red: 244 71 71;
+  --vs-orange: 206 145 120;
+  --vs-heading: 255 255 255;
+  --vs-overlay: 255 255 255;
+}
+
+.light {
+  --vs-bg: 255 255 255;
+  --vs-sidebar: 243 243 243;
+  --vs-panel: 248 248 248;
+  --vs-border: 224 224 224;
+  --vs-text: 30 30 30;
+  --vs-muted: 110 110 110;
+  --vs-comment: 0 128 0;
+  --vs-keyword: 0 0 255;
+  --vs-string: 163 21 21;
+  --vs-number: 9 134 88;
+  --vs-fn: 121 94 38;
+  --vs-type: 38 127 153;
+  --vs-accent: 0 122 204;
+  --vs-accent2: 0 152 255;
+  --vs-green: 38 127 153;
+  --vs-yellow: 121 94 38;
+  --vs-red: 229 20 0;
+  --vs-orange: 163 21 21;
+  --vs-heading: 30 30 30;
+  --vs-overlay: 0 0 0;
+}
+
 /* ── Base ─────────────────────────────────────────── */
 * { box-sizing: border-box; }
 
@@ -12,8 +58,8 @@ html, body, #root {
 }
 
 body {
-  background-color: #1e1e1e;
-  color: #d4d4d4;
+  background-color: rgb(var(--vs-bg));
+  color: rgb(var(--vs-text));
   font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   /* Reduce paint area — tell browser each layer is independent */
@@ -27,9 +73,9 @@ body {
 
 /* ── Scrollbar ────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #1e1e1e; }
-::-webkit-scrollbar-thumb { background: #3e3e42; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #007acc; }
+::-webkit-scrollbar-track { background: rgb(var(--vs-bg)); }
+::-webkit-scrollbar-thumb { background: rgb(var(--vs-border)); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--vs-accent)); }
 
 /* ── GPU acceleration for scroll containers ──────── */
 .scrollbar-thin {
@@ -45,7 +91,7 @@ pre[class*="language-"] {
   font-size: 0.8rem;
   line-height: 1.6;
   background: transparent;
-  color: #d4d4d4;
+  color: rgb(var(--vs-text));
   text-shadow: none;
   white-space: pre;
   word-spacing: normal;
@@ -53,14 +99,14 @@ pre[class*="language-"] {
   tab-size: 2;
 }
 
-.token.comment, .token.prolog, .token.doctype, .token.cdata { color: #6a9955; }
-.token.punctuation { color: #d4d4d4; }
-.token.property, .token.tag, .token.boolean, .token.number, .token.constant, .token.symbol { color: #b5cea8; }
-.token.selector, .token.attr-name, .token.string, .token.char, .token.builtin { color: #ce9178; }
-.token.operator, .token.entity, .token.url { color: #d4d4d4; }
-.token.atrule, .token.attr-value, .token.keyword { color: #569cd6; }
-.token.function, .token.class-name { color: #dcdcaa; }
-.token.regex, .token.important, .token.variable { color: #9cdcfe; }
+.token.comment, .token.prolog, .token.doctype, .token.cdata { color: rgb(var(--vs-comment)); }
+.token.punctuation { color: rgb(var(--vs-text)); }
+.token.property, .token.tag, .token.boolean, .token.number, .token.constant, .token.symbol { color: rgb(var(--vs-number)); }
+.token.selector, .token.attr-name, .token.string, .token.char, .token.builtin { color: rgb(var(--vs-string)); }
+.token.operator, .token.entity, .token.url { color: rgb(var(--vs-text)); }
+.token.atrule, .token.attr-value, .token.keyword { color: rgb(var(--vs-keyword)); }
+.token.function, .token.class-name { color: rgb(var(--vs-fn)); }
+.token.regex, .token.important, .token.variable { color: rgb(var(--vs-type)); }
 .token.important, .token.bold { font-weight: bold; }
 .token.italic { font-style: italic; }
 
@@ -73,12 +119,12 @@ html { scroll-behavior: auto; }
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.8rem;
   line-height: 1.5;
-  color: #d4d4d4;
+  color: rgb(var(--vs-text));
 }
-.terminal-output .stdout { color: #d4d4d4; }
-.terminal-output .stderr { color: #f44747; }
-.terminal-output .info   { color: #007acc; }
-.terminal-output .success{ color: #4ec9b0; }
+.terminal-output .stdout { color: rgb(var(--vs-text)); }
+.terminal-output .stderr { color: rgb(var(--vs-red)); }
+.terminal-output .info   { color: rgb(var(--vs-accent)); }
+.terminal-output .success{ color: rgb(var(--vs-green)); }
 
 /* ── Drag region for frameless window ────────────── */
 .drag-region { -webkit-app-region: drag; }
