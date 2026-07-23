@@ -76,7 +76,7 @@ export function StandardMode() {
       <div className="space-y-6 text-sm leading-relaxed">
         {/* Architecture */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-green rounded-full inline-block"></span>
             Kiến trúc Standard Mode
           </h3>
@@ -85,7 +85,7 @@ export function StandardMode() {
 
         {/* 4 Phases */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-green rounded-full inline-block"></span>
             Lead orchestration — 4 Phases
           </h3>
@@ -119,7 +119,7 @@ export function StandardMode() {
               <div key={phase} className={`rounded-lg border ${color} p-4`}>
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-xs font-mono font-bold">{phase}</span>
-                  <span className="text-white font-semibold">{title}</span>
+                  <span className="text-vs-heading font-semibold">{title}</span>
                 </div>
                 <p className="text-vs-text text-xs">{detail}</p>
               </div>
@@ -129,7 +129,7 @@ export function StandardMode() {
 
         {/* Agent Execution Protocol */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-green rounded-full inline-block"></span>
             Agent Execution Protocol (bên trong mỗi agent)
           </h3>
@@ -138,7 +138,7 @@ export function StandardMode() {
 
         {/* Evidence-based verification */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-green rounded-full inline-block"></span>
             Evidence-Based Verification
           </h3>
@@ -162,7 +162,7 @@ export function StandardMode() {
                   ['[name] Completed: <task>', 'Task cụ thể đã hoàn tất'],
                   ['[Lead] INTEGRATION_VERIFIED: PASS', 'Lead đã verify build toàn project'],
                 ].map(([line, desc]) => (
-                  <tr key={line} className="hover:bg-white/5">
+                  <tr key={line} className="hover:bg-vs-overlay/5">
                     <td className="px-4 py-2 text-vs-string">{line}</td>
                     <td className="px-4 py-2 text-vs-text">{desc}</td>
                   </tr>
@@ -174,13 +174,13 @@ export function StandardMode() {
 
         {/* Quality Gates */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-green rounded-full inline-block"></span>
             Quality Gates
           </h3>
           <div className="rounded-lg border border-vs-border overflow-hidden">
             <div className="bg-vs-panel px-4 py-2.5 border-b border-vs-border">
-              <span className="text-white font-medium text-sm">Mission FAIL nếu bất kỳ gate nào không met</span>
+              <span className="text-vs-heading font-medium text-sm">Mission FAIL nếu bất kỳ gate nào không met</span>
             </div>
             <div className="p-4 space-y-2">
               {[
@@ -201,7 +201,7 @@ export function StandardMode() {
 
         {/* Project Type Detection */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-green rounded-full inline-block"></span>
             Tự động nhận diện project type
           </h3>
@@ -227,7 +227,7 @@ export function StandardMode() {
                   ['go.mod', 'Go', 'go build ./...'],
                   ['pom.xml / build.gradle', 'Java/JVM', 'mvn compile / gradle build'],
                 ].map(([file, type, cmd]) => (
-                  <tr key={file} className="hover:bg-white/5">
+                  <tr key={file} className="hover:bg-vs-overlay/5">
                     <td className="px-4 py-2 text-vs-keyword">{file}</td>
                     <td className="px-4 py-2 text-vs-text">{type}</td>
                     <td className="px-4 py-2 text-vs-string">{cmd}</td>
@@ -240,7 +240,7 @@ export function StandardMode() {
 
         {/* Example log */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-green rounded-full inline-block"></span>
             Ví dụ log output
           </h3>
@@ -249,7 +249,7 @@ export function StandardMode() {
 
         {/* When to use */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-green rounded-full inline-block"></span>
             Khi nào dùng Standard Mode?
           </h3>
@@ -263,7 +263,7 @@ export function StandardMode() {
             ].map(([title, desc]) => (
               <li key={title} className="flex items-start gap-2">
                 <span className="text-vs-green mt-0.5 shrink-0">▸</span>
-                <span><span className="text-white font-medium">{title}:</span> {desc}</span>
+                <span><span className="text-vs-heading font-medium">{title}:</span> {desc}</span>
               </li>
             ))}
           </ul>

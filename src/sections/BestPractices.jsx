@@ -48,7 +48,7 @@ export function BestPractices() {
         {/* Team size */}
         <div className="rounded-lg border border-vs-border overflow-hidden">
           <div className="bg-vs-panel px-4 py-2.5 border-b border-vs-border">
-            <span className="text-white font-semibold">1. Team size tối ưu</span>
+            <span className="text-vs-heading font-semibold">1. Team size tối ưu</span>
           </div>
           <div className="p-4 grid grid-cols-3 gap-3">
             {[
@@ -60,7 +60,7 @@ export function BestPractices() {
                 ${status === 'good'    ? 'border-vs-green bg-vs-green/10' :
                   status === 'warning' ? 'border-yellow-500 bg-yellow-500/10' :
                                          'border-vs-red bg-vs-red/10'}`}>
-                <div className="text-2xl font-bold font-mono text-white">{size}</div>
+                <div className="text-2xl font-bold font-mono text-vs-heading">{size}</div>
                 <div className={`text-xs font-semibold mt-1
                   ${status === 'good' ? 'text-vs-green' : status === 'warning' ? 'text-yellow-400' : 'text-vs-red'}`}>
                   {label}
@@ -74,7 +74,7 @@ export function BestPractices() {
         {/* Task sizing */}
         <div className="rounded-lg border border-vs-border overflow-hidden">
           <div className="bg-vs-panel px-4 py-2.5 border-b border-vs-border">
-            <span className="text-white font-semibold">2. Task sizing</span>
+            <span className="text-vs-heading font-semibold">2. Task sizing</span>
           </div>
           <div className="p-4 space-y-2">
             {[
@@ -85,7 +85,7 @@ export function BestPractices() {
               <div key={label} className="flex items-start gap-3">
                 <span className="text-lg shrink-0">{icon}</span>
                 <div>
-                  <span className="font-medium text-white">{label}:</span>
+                  <span className="font-medium text-vs-heading">{label}:</span>
                   <span className="text-vs-muted ml-2 font-mono text-xs">{example}</span>
                 </div>
               </div>
@@ -98,7 +98,7 @@ export function BestPractices() {
 
         {/* File ownership */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             3. Tránh file conflicts — mỗi teammate sở hữu directory riêng
           </h3>
@@ -111,7 +111,7 @@ export function BestPractices() {
         {/* Cost */}
         <div className="rounded-lg border border-vs-border overflow-hidden">
           <div className="bg-vs-panel px-4 py-2.5 border-b border-vs-border">
-            <span className="text-white font-semibold">4. Chi phí token</span>
+            <span className="text-vs-heading font-semibold">4. Chi phí token</span>
           </div>
           <div className="p-4 space-y-2 text-vs-text">
             <p>Token usage <strong>tăng tuyến tính</strong> theo số teammates:</p>
@@ -126,7 +126,7 @@ export function BestPractices() {
 
         {/* When NOT to use */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-red rounded-full inline-block"></span>
             5. Khi nào KHÔNG nên dùng Agent Teams
           </h3>

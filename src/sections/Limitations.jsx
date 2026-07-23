@@ -70,7 +70,7 @@ export function Limitations() {
           return (
             <div key={item.title} className={`rounded-lg border ${cfg.bg} p-4`}>
               <div className="flex items-start justify-between gap-3">
-                <h4 className="text-white font-semibold">{item.title}</h4>
+                <h4 className="text-vs-heading font-semibold">{item.title}</h4>
                 <span className={`text-[10px] font-mono font-bold uppercase shrink-0 px-2 py-0.5 rounded ${cfg.color}`}>
                   {cfg.label}
                 </span>
@@ -83,7 +83,7 @@ export function Limitations() {
 
       <div className="rounded-lg border border-vs-border overflow-hidden mt-6">
         <div className="bg-vs-panel px-4 py-2.5 border-b border-vs-border">
-          <span className="text-white font-semibold text-sm">Roadmap & Tương lai</span>
+          <span className="text-vs-heading font-semibold text-sm">Roadmap & Tương lai</span>
         </div>
         <div className="p-4 space-y-2 text-xs text-vs-muted">
           <p>Theo documentation của Anthropic, các cải tiến đang được phát triển:</p>

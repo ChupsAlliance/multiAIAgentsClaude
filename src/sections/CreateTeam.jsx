@@ -48,7 +48,7 @@ export function CreateTeam() {
         </InfoBox>
 
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Prompt cơ bản
           </h3>
@@ -56,7 +56,7 @@ export function CreateTeam() {
         </div>
 
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Chỉ định role cụ thể
           </h3>
@@ -64,7 +64,7 @@ export function CreateTeam() {
         </div>
 
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Yêu cầu plan approval trước khi thực thi
           </h3>
@@ -72,7 +72,7 @@ export function CreateTeam() {
         </div>
 
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Chỉ định model cho teammates
           </h3>
@@ -81,7 +81,7 @@ export function CreateTeam() {
 
         <div className="rounded-lg border border-vs-border overflow-hidden">
           <div className="bg-vs-panel px-4 py-2.5 border-b border-vs-border">
-            <span className="text-white font-medium text-sm">Workflow sau khi tạo team</span>
+            <span className="text-vs-heading font-medium text-sm">Workflow sau khi tạo team</span>
           </div>
           <div className="p-4">
             <ol className="space-y-2.5 text-vs-text">

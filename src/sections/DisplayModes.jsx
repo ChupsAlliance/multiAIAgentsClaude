@@ -81,7 +81,7 @@ export function DisplayModes() {
                 ['Resume session', '❌ Không hỗ trợ', '❌ Không hỗ trợ'],
                 ['Phù hợp với', 'Windows, mọi terminal', 'macOS/Linux với tmux'],
               ].map(([k, v1, v2]) => (
-                <tr key={k} className="hover:bg-white/5">
+                <tr key={k} className="hover:bg-vs-overlay/5">
                   <td className="px-4 py-2 text-vs-text">{k}</td>
                   <td className="px-4 py-2 text-vs-green">{v1}</td>
                   <td className="px-4 py-2 text-vs-yellow">{v2}</td>
@@ -92,7 +92,7 @@ export function DisplayModes() {
         </div>
 
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-green rounded-full inline-block"></span>
             In-Process Mode
           </h3>
@@ -100,7 +100,7 @@ export function DisplayModes() {
         </div>
 
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-yellow rounded-full inline-block"></span>
             Split-Pane Mode
           </h3>
@@ -108,7 +108,7 @@ export function DisplayModes() {
         </div>
 
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Setup tmux (macOS/Linux)
           </h3>
@@ -116,7 +116,7 @@ export function DisplayModes() {
         </div>
 
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Cấu hình mode trong settings
           </h3>
@@ -124,7 +124,7 @@ export function DisplayModes() {
         </div>
 
         <InfoBox type="warning">
-          <strong>Windows:</strong> Chỉ dùng được <code className="font-mono bg-black/20 px-1 rounded">in-process</code> mode.
+          <strong>Windows:</strong> Chỉ dùng được <code className="font-mono bg-vs-overlay/20 px-1 rounded">in-process</code> mode.
           Split-pane <strong>không hoạt động</strong> trên: VS Code integrated terminal, Windows Terminal, PowerShell, CMD, Ghostty.
         </InfoBox>
       </div>

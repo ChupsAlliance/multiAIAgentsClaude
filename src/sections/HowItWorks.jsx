@@ -74,13 +74,13 @@ claude -p --model opus --output-format stream-json --verbose
       <div className="space-y-8 text-sm leading-relaxed">
         {/* Architecture */}
         <div>
-          <h3 className="text-white font-semibold mb-3">Kiến trúc tổng thể</h3>
+          <h3 className="text-vs-heading font-semibold mb-3">Kiến trúc tổng thể</h3>
           <CodeBlock language="text" code={architectureDiagram} />
         </div>
 
         {/* Step-by-step flow */}
         <div>
-          <h3 className="text-white font-semibold mb-3">Flow từng bước</h3>
+          <h3 className="text-vs-heading font-semibold mb-3">Flow từng bước</h3>
           <div className="space-y-3">
             {SYSTEM_INFO.flowSteps.map(s => (
               <div key={s.step} className="flex items-start gap-3">
@@ -88,7 +88,7 @@ claude -p --model opus --output-format stream-json --verbose
                   <span className="text-vs-accent text-xs font-mono font-bold">{s.step}</span>
                 </div>
                 <div className="pt-0.5">
-                  <p className="text-white font-medium">{s.title}</p>
+                  <p className="text-vs-heading font-medium">{s.title}</p>
                   <p className="text-vs-muted text-xs mt-0.5">{s.detail}</p>
                 </div>
               </div>
@@ -98,13 +98,13 @@ claude -p --model opus --output-format stream-json --verbose
 
         {/* Prompt example */}
         <div>
-          <h3 className="text-white font-semibold mb-3">Ví dụ prompt flow</h3>
+          <h3 className="text-vs-heading font-semibold mb-3">Ví dụ prompt flow</h3>
           <CodeBlock language="bash" code={promptFlow} />
         </div>
 
         {/* What each agent can do */}
         <div>
-          <h3 className="text-white font-semibold mb-3">Mỗi subagent có gì?</h3>
+          <h3 className="text-vs-heading font-semibold mb-3">Mỗi subagent có gì?</h3>
           <div className="grid grid-cols-2 gap-2">
             {SYSTEM_INFO.agentTools.map((tool, i) => (
               <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-md bg-vs-panel/50 border border-vs-border text-xs">
@@ -121,7 +121,7 @@ claude -p --model opus --output-format stream-json --verbose
 
         {/* Where prompts come from */}
         <div>
-          <h3 className="text-white font-semibold mb-3">Prompt đến từ đâu?</h3>
+          <h3 className="text-vs-heading font-semibold mb-3">Prompt đến từ đâu?</h3>
           <div className="space-y-3">
             <div className="bg-vs-panel/50 border border-vs-border rounded-lg p-4">
               <p className="text-vs-keyword text-xs font-mono mb-1">System Prompt (Mission Prompt)</p>
@@ -149,7 +149,7 @@ claude -p --model opus --output-format stream-json --verbose
 
         {/* Model comparison */}
         <div>
-          <h3 className="text-white font-semibold mb-3">So sánh Models</h3>
+          <h3 className="text-vs-heading font-semibold mb-3">So sánh Models</h3>
           <div className="border border-vs-border rounded-lg overflow-hidden">
             <table className="w-full text-xs font-mono">
               <thead>

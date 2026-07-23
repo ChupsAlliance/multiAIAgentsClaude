@@ -38,8 +38,8 @@ export function Setup() {
         {/* Step 1 */}
         <div className="rounded-lg border border-vs-border overflow-hidden">
           <div className="bg-vs-panel px-4 py-2.5 border-b border-vs-border flex items-center gap-2">
-            <span className="w-5 h-5 rounded-full bg-vs-accent text-white text-xs font-bold flex items-center justify-center">1</span>
-            <span className="text-white font-medium text-sm">Tìm file settings.json</span>
+            <span className="w-5 h-5 rounded-full bg-vs-accent text-vs-heading text-xs font-bold flex items-center justify-center">1</span>
+            <span className="text-vs-heading font-medium text-sm">Tìm file settings.json</span>
           </div>
           <div className="p-4">
             <CodeBlock code={settingsPath} language="bash" />
@@ -50,8 +50,8 @@ export function Setup() {
         {/* Step 2 */}
         <div className="rounded-lg border border-vs-border overflow-hidden">
           <div className="bg-vs-panel px-4 py-2.5 border-b border-vs-border flex items-center gap-2">
-            <span className="w-5 h-5 rounded-full bg-vs-accent text-white text-xs font-bold flex items-center justify-center">2</span>
-            <span className="text-white font-medium text-sm">Thêm config vào settings.json</span>
+            <span className="w-5 h-5 rounded-full bg-vs-accent text-vs-heading text-xs font-bold flex items-center justify-center">2</span>
+            <span className="text-vs-heading font-medium text-sm">Thêm config vào settings.json</span>
           </div>
           <div className="p-4">
             <CodeBlock code={settingsJson} language="json" filename="~/.claude/settings.json" />
@@ -61,8 +61,8 @@ export function Setup() {
         {/* Step 3 */}
         <div className="rounded-lg border border-vs-border overflow-hidden">
           <div className="bg-vs-panel px-4 py-2.5 border-b border-vs-border flex items-center gap-2">
-            <span className="w-5 h-5 rounded-full bg-vs-accent text-white text-xs font-bold flex items-center justify-center">3</span>
-            <span className="text-white font-medium text-sm">Restart Claude Code</span>
+            <span className="w-5 h-5 rounded-full bg-vs-accent text-vs-heading text-xs font-bold flex items-center justify-center">3</span>
+            <span className="text-vs-heading font-medium text-sm">Restart Claude Code</span>
           </div>
           <div className="p-4">
             <p className="text-vs-text leading-relaxed">Đóng và mở lại Claude Code để config có hiệu lực. Settings được đọc khi khởi động.</p>
@@ -71,7 +71,7 @@ export function Setup() {
 
         {/* Optional: teammateMode */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-keyword rounded-full inline-block"></span>
             Tùy chọn: Cấu hình chế độ hiển thị
           </h3>
@@ -79,13 +79,13 @@ export function Setup() {
         </div>
 
         <InfoBox type="warning">
-          <strong>Windows users:</strong> Chỉ hỗ trợ <code className="font-mono bg-black/20 px-1 rounded">in-process</code> mode.
+          <strong>Windows users:</strong> Chỉ hỗ trợ <code className="font-mono bg-vs-overlay/20 px-1 rounded">in-process</code> mode.
           Split-pane (tmux) không hoạt động trên Windows Terminal, VS Code integrated terminal, hoặc Ghostty.
         </InfoBox>
 
         <InfoBox type="tip">
           Có thể dùng <strong>project-level settings</strong> thay vì global: tạo file{' '}
-          <code className="font-mono bg-black/20 px-1 rounded">.claude/settings.json</code> trong thư mục project.
+          <code className="font-mono bg-vs-overlay/20 px-1 rounded">.claude/settings.json</code> trong thư mục project.
           Project settings sẽ override global settings.
         </InfoBox>
       </div>

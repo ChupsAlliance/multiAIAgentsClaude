@@ -34,28 +34,14 @@ function checkFile(file) {
   return violations
 }
 
-describe('light-theme class migration (mission components, pages, top-level components)', () => {
-  const targetDirs = [
-    path.join(SRC_DIR, 'components', 'mission'),
-    path.join(SRC_DIR, 'pages'),
-    path.join(SRC_DIR, 'components', 'office'),
-  ]
-  const topLevelComponentFiles = fs.readdirSync(path.join(SRC_DIR, 'components'), { withFileTypes: true })
-    .filter(e => e.isFile() && (e.name.endsWith('.jsx') || e.name.endsWith('.js')) && !e.name.includes('.test.'))
-    .map(e => path.join(SRC_DIR, 'components', e.name))
-  const commonFiles = walk(path.join(SRC_DIR, 'components', 'common'))
-
-  const files = [
-    ...targetDirs.flatMap(d => fs.existsSync(d) ? walk(d) : []),
-    ...topLevelComponentFiles,
-    ...commonFiles,
-  ]
+describe('light-theme class migration (whole src tree)', () => {
+  const files = walk(SRC_DIR)
 
   it('found a non-trivial number of files to check', () => {
-    expect(files.length).toBeGreaterThan(20)
+    expect(files.length).toBeGreaterThan(40)
   })
 
-  it('has no text-white, bg-white/N, or bg-black/N outside the documented exception', () => {
+  it('has no text-white, bg-white/N, or bg-black/N outside the documented exception, anywhere in src', () => {
     const allViolations = files
       .map(f => ({ file: path.relative(SRC_DIR, f), violations: checkFile(f) }))
       .filter(r => r.violations.length > 0)

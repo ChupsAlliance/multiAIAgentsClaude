@@ -14,7 +14,7 @@ export function LauncherGuide() {
       <div className="space-y-6 text-sm leading-relaxed">
         {/* Requirement textarea */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Nhập yêu cầu (Requirement)
           </h3>
@@ -24,7 +24,7 @@ export function LauncherGuide() {
           </p>
           <div className="rounded-lg border border-vs-border overflow-hidden">
             <div className="bg-vs-panel px-4 py-2.5 border-b border-vs-border">
-              <span className="text-white font-medium text-sm">Ví dụ yêu cầu tốt</span>
+              <span className="text-vs-heading font-medium text-sm">Ví dụ yêu cầu tốt</span>
             </div>
             <div className="p-4 space-y-2 text-xs text-vs-text font-mono">
               <p className="text-vs-string">"Tạo ứng dụng React quản lý bài kiểm tra. Hỗ trợ single choice A,B,C,D.
@@ -36,7 +36,7 @@ export function LauncherGuide() {
 
         {/* @mention */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             @mention — Đính kèm file từ project
           </h3>
@@ -59,7 +59,7 @@ export function LauncherGuide() {
                   ['↑↓ để chọn, Enter để xác nhận', 'File được thêm vào Reference Materials'],
                   ['Esc', 'Đóng dropdown, không chọn gì'],
                 ].map(([action, result]) => (
-                  <tr key={action} className="hover:bg-white/5">
+                  <tr key={action} className="hover:bg-vs-overlay/5">
                     <td className="px-4 py-2 text-vs-keyword">{action}</td>
                     <td className="px-4 py-2 text-vs-text">{result}</td>
                   </tr>
@@ -75,7 +75,7 @@ export function LauncherGuide() {
 
         {/* Drag & Drop */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Drag & Drop — Kéo file/folder vào
           </h3>
@@ -90,7 +90,7 @@ export function LauncherGuide() {
             ].map(({ type, icon, desc }) => (
               <div key={type} className="rounded-lg border border-vs-border p-3 text-center">
                 <div className="text-2xl mb-1">{icon}</div>
-                <div className="text-white text-xs font-semibold">{type}</div>
+                <div className="text-vs-heading text-xs font-semibold">{type}</div>
                 <div className="text-vs-muted text-[10px] mt-1">{desc}</div>
               </div>
             ))}
@@ -99,7 +99,7 @@ export function LauncherGuide() {
 
         {/* Clipboard paste */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Ctrl+V — Paste ảnh từ clipboard
           </h3>
@@ -113,7 +113,7 @@ export function LauncherGuide() {
 
         {/* Model selection */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Chọn Model
           </h3>
@@ -132,7 +132,7 @@ export function LauncherGuide() {
                   ['Opus 4.6', 'Mạnh nhất, chậm hơn', 'Kiến trúc phức tạp, multi-agent điều phối lớn'],
                   ['Haiku 4.5', 'Siêu nhanh, rẻ', 'Prototype, draft, tasks đơn giản'],
                 ].map(([model, trait, use]) => (
-                  <tr key={model} className="hover:bg-white/5">
+                  <tr key={model} className="hover:bg-vs-overlay/5">
                     <td className="px-4 py-2 text-vs-keyword font-semibold">{model}</td>
                     <td className="px-4 py-2 text-vs-text">{trait}</td>
                     <td className="px-4 py-2 text-vs-string">{use}</td>
@@ -149,7 +149,7 @@ export function LauncherGuide() {
 
         {/* Execution mode */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Chọn Execution Mode
           </h3>
@@ -172,7 +172,7 @@ export function LauncherGuide() {
             ].map(({ mode, badge, badgeColor, borderColor, desc }) => (
               <div key={mode} className={`rounded-lg border ${borderColor} p-4`}>
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-white font-semibold text-sm">{mode}</span>
+                  <span className="text-vs-heading font-semibold text-sm">{mode}</span>
                   <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${badgeColor}`}>{badge}</span>
                 </div>
                 <p className="text-vs-text text-xs">{desc}</p>
@@ -183,7 +183,7 @@ export function LauncherGuide() {
 
         {/* Team size hint + Project path */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Cấu hình khác
           </h3>
@@ -191,7 +191,7 @@ export function LauncherGuide() {
             <div className="flex items-start gap-3 bg-vs-panel/50 border border-vs-border rounded-lg p-3">
               <span className="text-vs-accent shrink-0 mt-0.5">▸</span>
               <div>
-                <span className="text-white font-medium">Team Size Hint</span>
+                <span className="text-vs-heading font-medium">Team Size Hint</span>
                 <p className="text-vs-muted text-xs mt-0.5">
                   Slider chọn 2–8 agents. Đây là <em>gợi ý</em> — Lead có thể dùng ít/nhiều hơn tùy task.
                   Mặc định: 3 agents.
@@ -201,7 +201,7 @@ export function LauncherGuide() {
             <div className="flex items-start gap-3 bg-vs-panel/50 border border-vs-border rounded-lg p-3">
               <span className="text-vs-accent shrink-0 mt-0.5">▸</span>
               <div>
-                <span className="text-white font-medium">Project Path</span>
+                <span className="text-vs-heading font-medium">Project Path</span>
                 <p className="text-vs-muted text-xs mt-0.5">
                   Chọn thư mục project. Agents sẽ cd vào đây để đọc/viết code.
                   Nút "Browse" mở folder picker. Bỏ trống = agents tự tạo project mới.
@@ -211,7 +211,7 @@ export function LauncherGuide() {
             <div className="flex items-start gap-3 bg-vs-panel/50 border border-vs-border rounded-lg p-3">
               <span className="text-vs-accent shrink-0 mt-0.5">▸</span>
               <div>
-                <span className="text-white font-medium">Mission History</span>
+                <span className="text-vs-heading font-medium">Mission History</span>
                 <p className="text-vs-muted text-xs mt-0.5">
                   Phía dưới Launcher hiện 50 missions gần nhất. Click vào để xem lại
                   (read-only). Nút 🗑 xóa mission khỏi history.
@@ -223,7 +223,7 @@ export function LauncherGuide() {
 
         {/* Prompt Preview */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Xem System Prompt trước khi launch
           </h3>

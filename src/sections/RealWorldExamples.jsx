@@ -114,7 +114,7 @@ export function RealWorldExamples() {
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-vs-muted font-mono text-xs">{String(i+1).padStart(2,'0')}.</span>
-                    <h3 className="text-white font-bold">{ex.title}</h3>
+                    <h3 className="text-vs-heading font-bold">{ex.title}</h3>
                   </div>
                   <p className="text-vs-muted text-xs font-mono">{ex.subtitle}</p>
                 </div>

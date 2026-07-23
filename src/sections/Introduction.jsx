@@ -38,7 +38,7 @@ export function Introduction() {
       <div className="space-y-5 text-sm leading-relaxed">
         {/* What is this app */}
         <div>
-          <h3 className="text-white font-semibold mb-2 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-2 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Ứng dụng này làm gì?
           </h3>
@@ -52,7 +52,7 @@ export function Introduction() {
 
         {/* Architecture */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Kiến trúc tổng quan
           </h3>
@@ -61,7 +61,7 @@ export function Introduction() {
 
         {/* Two Execution Modes */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Hai chế độ thực thi
           </h3>
@@ -89,7 +89,7 @@ export function Introduction() {
                   ['Phù hợp', 'Mọi task thông thường', 'Tasks cần agents phối hợp chặt'],
                   ['UI tab Messages', 'Không', 'Có — hiện DM/broadcast'],
                 ].map(([k, v1, v2]) => (
-                  <tr key={k} className="hover:bg-white/5">
+                  <tr key={k} className="hover:bg-vs-overlay/5">
                     <td className="px-4 py-2 text-vs-text font-medium">{k}</td>
                     <td className="px-4 py-2 text-vs-green">{v1}</td>
                     <td className="px-4 py-2 text-yellow-400">{v2}</td>
@@ -102,7 +102,7 @@ export function Introduction() {
 
         {/* Mission workflow */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Mission Workflow (cả 2 modes)
           </h3>
@@ -116,7 +116,7 @@ export function Introduction() {
               <div key={step} className="flex items-center gap-2 shrink-0">
                 <div className={`rounded-lg border ${color} px-4 py-3 text-center min-w-[120px]`}>
                   <div className="text-vs-accent text-xs font-mono font-bold">{step}</div>
-                  <div className="text-white text-sm font-semibold">{label}</div>
+                  <div className="text-vs-heading text-sm font-semibold">{label}</div>
                   <div className="text-vs-muted text-[10px]">{desc}</div>
                 </div>
                 {i < 3 && <span className="text-vs-muted text-lg">{'→'}</span>}
@@ -127,7 +127,7 @@ export function Introduction() {
 
         {/* Key features */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Tính năng chính
           </h3>
@@ -142,7 +142,7 @@ export function Introduction() {
             ].map(([title, desc]) => (
               <li key={title} className="flex items-start gap-2">
                 <span className="text-vs-accent mt-0.5 shrink-0">{'▸'}</span>
-                <span><span className="text-white font-medium">{title}:</span> {desc}</span>
+                <span><span className="text-vs-heading font-medium">{title}:</span> {desc}</span>
               </li>
             ))}
           </ul>

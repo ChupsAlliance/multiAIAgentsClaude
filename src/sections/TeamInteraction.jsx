@@ -46,7 +46,7 @@ export function TeamInteraction() {
       <div className="space-y-5 text-sm">
         {/* Keyboard shortcuts */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Phím tắt
           </h3>
@@ -61,7 +61,7 @@ export function TeamInteraction() {
               </thead>
               <tbody className="divide-y divide-vs-border">
                 {shortcuts.map(({ keys, action, note }) => (
-                  <tr key={keys} className="hover:bg-white/5">
+                  <tr key={keys} className="hover:bg-vs-overlay/5">
                     <td className="px-4 py-2.5">
                       <kbd className="bg-vs-panel border border-vs-border text-vs-keyword px-2 py-0.5 rounded text-xs">{keys}</kbd>
                     </td>
@@ -76,7 +76,7 @@ export function TeamInteraction() {
 
         {/* Commands */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Commands (nói với lead bằng ngôn ngữ tự nhiên)
           </h3>
@@ -85,7 +85,7 @@ export function TeamInteraction() {
 
         {/* Direct message */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Message trực tiếp teammate
           </h3>
@@ -95,7 +95,7 @@ export function TeamInteraction() {
         {/* Task list */}
         <div className="rounded-lg border border-vs-border overflow-hidden">
           <div className="bg-vs-panel px-4 py-2.5 border-b border-vs-border">
-            <span className="text-white font-medium text-sm">Shared Task List (Ctrl+T)</span>
+            <span className="text-vs-heading font-medium text-sm">Shared Task List (Ctrl+T)</span>
           </div>
           <div className="p-4 space-y-2">
             <p className="text-vs-text">Task list hiển thị:</p>
@@ -111,7 +111,7 @@ export function TeamInteraction() {
         </div>
 
         <InfoBox type="warning">
-          Task status đôi khi <strong>lag</strong> vài giây — đây là known limitation của experimental feature. Nếu cần update chính xác, hỏi lead: <code className="font-mono bg-black/20 px-1 rounded">"What is the status of all tasks?"</code>
+          Task status đôi khi <strong>lag</strong> vài giây — đây là known limitation của experimental feature. Nếu cần update chính xác, hỏi lead: <code className="font-mono bg-vs-overlay/20 px-1 rounded">"What is the status of all tasks?"</code>
         </InfoBox>
       </div>
     </div>

@@ -14,7 +14,7 @@ export function PlanReviewGuide() {
       <div className="space-y-6 text-sm leading-relaxed">
         {/* Overview */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Giao diện Plan Review
           </h3>
@@ -23,7 +23,7 @@ export function PlanReviewGuide() {
           </p>
           <div className="rounded-lg border border-vs-border overflow-hidden">
             <div className="bg-vs-panel px-4 py-2.5 border-b border-vs-border">
-              <span className="text-white font-medium text-sm">Thành phần trong mỗi Agent Card</span>
+              <span className="text-vs-heading font-medium text-sm">Thành phần trong mỗi Agent Card</span>
             </div>
             <div className="p-4 space-y-2">
               {[
@@ -36,7 +36,7 @@ export function PlanReviewGuide() {
               ].map(([label, desc]) => (
                 <div key={label} className="flex items-start gap-2 text-vs-text">
                   <span className="text-vs-accent mt-0.5 shrink-0">▸</span>
-                  <span><span className="text-white font-medium">{label}:</span> <span className="text-xs">{desc}</span></span>
+                  <span><span className="text-vs-heading font-medium">{label}:</span> <span className="text-xs">{desc}</span></span>
                 </div>
               ))}
             </div>
@@ -45,7 +45,7 @@ export function PlanReviewGuide() {
 
         {/* Task management */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Quản lý Tasks
           </h3>
@@ -67,7 +67,7 @@ export function PlanReviewGuide() {
                   ['Xem/sửa detail', 'Click icon bên phải task (xanh = có detail, vàng = thiếu) → mở Task Detail Panel'],
                   ['Chuyển task giữa agents', 'Kéo task từ agent này → thả vào agent khác'],
                 ].map(([action, how]) => (
-                  <tr key={action} className="hover:bg-white/5">
+                  <tr key={action} className="hover:bg-vs-overlay/5">
                     <td className="px-4 py-2 text-vs-keyword">{action}</td>
                     <td className="px-4 py-2 text-vs-text">{how}</td>
                   </tr>
@@ -79,7 +79,7 @@ export function PlanReviewGuide() {
 
         {/* NEW: Task Detail Panel */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-yellow-400 rounded-full inline-block"></span>
             Task Detail Panel — Chi tiết implementation
           </h3>
@@ -92,7 +92,7 @@ export function PlanReviewGuide() {
           {/* Toggle button */}
           <div className="rounded-lg border border-vs-border overflow-hidden mb-4">
             <div className="bg-vs-panel px-4 py-2.5 border-b border-vs-border">
-              <span className="text-white font-medium text-sm">Cách mở Task Detail Panel</span>
+              <span className="text-vs-heading font-medium text-sm">Cách mở Task Detail Panel</span>
             </div>
             <div className="p-4 space-y-2">
               {[
@@ -102,7 +102,7 @@ export function PlanReviewGuide() {
               ].map(([label, desc]) => (
                 <div key={label} className="flex items-start gap-2 text-vs-text">
                   <span className="text-yellow-400 mt-0.5 shrink-0">▸</span>
-                  <span><span className="text-white font-medium">{label}:</span> <span className="text-xs">{desc}</span></span>
+                  <span><span className="text-vs-heading font-medium">{label}:</span> <span className="text-xs">{desc}</span></span>
                 </div>
               ))}
             </div>
@@ -131,7 +131,7 @@ export function PlanReviewGuide() {
           {/* Examples */}
           <div className="rounded-lg border border-vs-border overflow-hidden mb-4">
             <div className="bg-vs-panel px-4 py-2.5 border-b border-vs-border">
-              <span className="text-white font-medium text-sm">Ví dụ detail tốt vs kém</span>
+              <span className="text-vs-heading font-medium text-sm">Ví dụ detail tốt vs kém</span>
             </div>
             <div className="p-4 space-y-3 text-xs font-mono">
               <div>
@@ -153,7 +153,7 @@ export function PlanReviewGuide() {
 
         {/* NEW: Re-plan */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-orange-400 rounded-full inline-block"></span>
             Re-plan — Yêu cầu AI cập nhật plan
           </h3>
@@ -186,7 +186,7 @@ export function PlanReviewGuide() {
 
           <div className="rounded-lg border border-vs-border overflow-hidden mb-4">
             <div className="bg-vs-panel px-4 py-2.5 border-b border-vs-border">
-              <span className="text-white font-medium text-sm">Re-plan làm gì chính xác?</span>
+              <span className="text-vs-heading font-medium text-sm">Re-plan làm gì chính xác?</span>
             </div>
             <div className="p-4 space-y-2 text-xs text-vs-text">
               {[
@@ -211,7 +211,7 @@ export function PlanReviewGuide() {
 
         {/* Priority levels */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Mức priority
           </h3>
@@ -224,7 +224,7 @@ export function PlanReviewGuide() {
               <div key={level} className={`rounded-lg border ${border}/40 p-3 flex items-center gap-3`}>
                 <span className={`w-3 h-3 rounded-full ${color} shrink-0`} />
                 <div>
-                  <div className="text-white text-xs font-semibold">{level}</div>
+                  <div className="text-vs-heading text-xs font-semibold">{level}</div>
                   <div className="text-vs-muted text-[10px]">{desc}</div>
                 </div>
               </div>
@@ -234,7 +234,7 @@ export function PlanReviewGuide() {
 
         {/* Model per agent */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Chọn model riêng cho từng agent
           </h3>
@@ -250,7 +250,7 @@ export function PlanReviewGuide() {
 
         {/* Custom instructions */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Custom Instructions
           </h3>
@@ -260,7 +260,7 @@ export function PlanReviewGuide() {
           </p>
           <div className="rounded-lg border border-vs-border overflow-hidden">
             <div className="bg-vs-panel px-4 py-2.5 border-b border-vs-border">
-              <span className="text-white font-medium text-sm">Ví dụ custom instructions</span>
+              <span className="text-vs-heading font-medium text-sm">Ví dụ custom instructions</span>
             </div>
             <div className="p-4 space-y-2 text-xs text-vs-text font-mono">
               <p className="text-vs-string">"Dùng Tailwind CSS thay vì CSS modules. Import từ @/components/."</p>
@@ -272,7 +272,7 @@ export function PlanReviewGuide() {
 
         {/* Skill Files */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-purple-400 rounded-full inline-block"></span>
             Skill Files — Thêm "kỹ năng" cho agent
           </h3>
@@ -330,7 +330,7 @@ export function PlanReviewGuide() {
           {/* How it works internally */}
           <div className="rounded-lg border border-vs-border overflow-hidden mb-4">
             <div className="bg-vs-panel px-4 py-2.5 border-b border-vs-border">
-              <span className="text-white font-medium text-sm">Skill file được dùng thế nào?</span>
+              <span className="text-vs-heading font-medium text-sm">Skill file được dùng thế nào?</span>
             </div>
             <div className="p-4 space-y-2 text-xs text-vs-text">
               <p>
@@ -347,7 +347,7 @@ export function PlanReviewGuide() {
           {/* Example skill files */}
           <div className="rounded-lg border border-vs-border overflow-hidden">
             <div className="bg-vs-panel px-4 py-2.5 border-b border-vs-border">
-              <span className="text-white font-medium text-sm">Ví dụ skill files hữu ích</span>
+              <span className="text-vs-heading font-medium text-sm">Ví dụ skill files hữu ích</span>
             </div>
             <div className="p-4 space-y-2 text-xs text-vs-text font-mono">
               {[
@@ -377,7 +377,7 @@ export function PlanReviewGuide() {
 
         {/* Prompt Preview */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Prompt Preview — Xem prompt trước khi deploy
           </h3>
@@ -408,7 +408,7 @@ export function PlanReviewGuide() {
 
         {/* Action buttons */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Nút hành động
           </h3>

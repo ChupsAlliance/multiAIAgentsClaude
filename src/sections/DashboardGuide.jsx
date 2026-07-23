@@ -14,13 +14,13 @@ export function DashboardGuide() {
       <div className="space-y-6 text-sm leading-relaxed">
         {/* Layout */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Layout tổng quan
           </h3>
           <div className="rounded-lg border border-vs-border overflow-hidden">
             <div className="bg-vs-panel px-4 py-2.5 border-b border-vs-border">
-              <span className="text-white font-medium text-sm">Dashboard = 4 vùng chính</span>
+              <span className="text-vs-heading font-medium text-sm">Dashboard = 4 vùng chính</span>
             </div>
             <div className="p-4 space-y-2">
               {[
@@ -32,7 +32,7 @@ export function DashboardGuide() {
               ].map(([zone, desc]) => (
                 <div key={zone} className="flex items-start gap-2 text-vs-text">
                   <span className="text-vs-accent mt-0.5 shrink-0">▸</span>
-                  <span><span className="text-white font-medium">{zone}:</span> <span className="text-xs">{desc}</span></span>
+                  <span><span className="text-vs-heading font-medium">{zone}:</span> <span className="text-xs">{desc}</span></span>
                 </div>
               ))}
             </div>
@@ -41,7 +41,7 @@ export function DashboardGuide() {
 
         {/* Agent Grid */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Agent Grid — Theo dõi agents
           </h3>
@@ -56,7 +56,7 @@ export function DashboardGuide() {
               { field: 'Task đang làm', desc: 'Task hiện tại hoặc "Completed: X tasks"' },
             ].map(({ field, desc }) => (
               <div key={field} className="rounded-lg border border-vs-border/50 p-3">
-                <div className="text-white text-xs font-semibold">{field}</div>
+                <div className="text-vs-heading text-xs font-semibold">{field}</div>
                 <div className="text-vs-muted text-[10px] mt-1">{desc}</div>
               </div>
             ))}
@@ -69,7 +69,7 @@ export function DashboardGuide() {
 
         {/* Tabs */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Các tab trong Dashboard
           </h3>
@@ -109,7 +109,7 @@ export function DashboardGuide() {
               <div key={tab} className="rounded-lg border border-vs-border overflow-hidden">
                 <div className="bg-vs-panel px-4 py-2.5 border-b border-vs-border flex items-center gap-2">
                   <span>{icon}</span>
-                  <span className="text-white font-medium text-sm">{tab}</span>
+                  <span className="text-vs-heading font-medium text-sm">{tab}</span>
                   {badge && (
                     <span className="ml-auto text-[9px] font-mono bg-vs-accent/20 text-vs-accent px-1.5 py-0.5 rounded">{badge}</span>
                   )}
@@ -124,7 +124,7 @@ export function DashboardGuide() {
 
         {/* Intervention Panel */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Intervention Panel — Can thiệp mid-run
           </h3>
@@ -147,7 +147,7 @@ export function DashboardGuide() {
                   ['Dừng agent api-dev', 'Lead gửi shutdown request cho agent cụ thể'],
                   ['Run tests sau khi build xong', 'Lead thêm bước verification cuối'],
                 ].map(([cmd, effect]) => (
-                  <tr key={cmd} className="hover:bg-white/5">
+                  <tr key={cmd} className="hover:bg-vs-overlay/5">
                     <td className="px-4 py-2 text-vs-string">"{cmd}"</td>
                     <td className="px-4 py-2 text-vs-text">{effect}</td>
                   </tr>
@@ -163,7 +163,7 @@ export function DashboardGuide() {
 
         {/* Custom agent config */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Custom Agent Config (nâng cao)
           </h3>
@@ -189,7 +189,7 @@ export function DashboardGuide() {
 
         {/* Stop / New Mission / History View */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Điều khiển Mission
           </h3>
@@ -209,7 +209,7 @@ export function DashboardGuide() {
 
         {/* Raw Output */}
         <div>
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+          <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-vs-accent rounded-full inline-block"></span>
             Raw Output — Debug view
           </h3>
