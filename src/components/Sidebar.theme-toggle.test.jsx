@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { vi } from 'vitest'
 import { Sidebar } from './Sidebar'
@@ -20,13 +20,13 @@ test('renders a theme toggle button in the sidebar footer', () => {
   expect(screen.getByRole('button', { name: /chuyển giao diện|toggle theme/i })).toBeInTheDocument()
 })
 
-test('clicking the theme toggle adds the light class to html and persists it', () => {
+test('clicking the theme toggle adds the light class to html and persists it', async () => {
   localStorage.clear()
   document.documentElement.classList.remove('light')
   renderSidebar()
   const toggleButton = screen.getByRole('button', { name: /chuyển giao diện|toggle theme/i })
   toggleButton.click()
-  expect(document.documentElement.classList.contains('light')).toBe(true)
+  await waitFor(() => expect(document.documentElement.classList.contains('light')).toBe(true))
   expect(localStorage.getItem('theme')).toBe('light')
   document.documentElement.classList.remove('light')
 })

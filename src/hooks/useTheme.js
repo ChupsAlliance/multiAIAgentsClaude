@@ -20,7 +20,6 @@ export function useTheme() {
     setTheme((prev) => {
       const next = prev === 'dark' ? 'light' : 'dark'
       localStorage.setItem(THEME_KEY, next)
-      applyThemeClass(next)
       return next
     })
   }, [])
