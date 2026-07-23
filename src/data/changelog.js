@@ -8,6 +8,26 @@
 
 export const changelog = [
   {
+    version: '0.11.0',
+    date: '2026-07-23',
+    title: 'Light Theme & Cải tiến Playground',
+    highlights: [
+      'Light Theme — chuyển đổi Dark/Light ngay từ Sidebar, lưu lựa chọn, không chớp giao diện khi mở lại app',
+      'Toàn bộ giao diện đổi màu đồng bộ theo theme, khối code và status bar vẫn giữ đúng độ tương phản',
+      'Playground: dịch nốt nhãn tiếng Anh, thay alert() bằng cảnh báo inline, thêm giải thích hành vi nút Launch',
+    ],
+    items: [
+      { type: 'added', badge: 'Giao diện',
+        text: 'Thêm Light Theme: nút chuyển đổi Dark/Light ở footer Sidebar, lưu lựa chọn vào localStorage, áp dụng ngay khi mở app không bị chớp giao diện tối' },
+      { type: 'added', badge: 'Giao diện',
+        text: 'Toàn bộ Sidebar, Docs, Playground, Dashboard, Mission Control và các trang mission đã chuyển sang hệ màu theo biến CSS, tự động đổi màu đúng theo theme đang chọn' },
+      { type: 'fixed', badge: 'Giao diện',
+        text: 'Khối code (syntax highlighting) và các phần tử nền tối cố định (status bar, toast) giữ đúng độ tương phản ở cả hai theme, không bị chữ chìm vào nền' },
+      { type: 'improved', badge: 'Playground',
+        text: 'Dịch nốt các nhãn giao diện còn sót tiếng Anh sang tiếng Việt; thay hộp thoại alert() báo thiếu thư mục dự án bằng cảnh báo hiển thị inline; thêm dòng giải thích luôn hiển thị về hành vi nút Launch' },
+    ],
+  },
+  {
     version: '0.10.1',
     date: '2026-07-22',
     title: 'Tự động thử lại khi gặp lỗi API tạm thời (Rate Limit)',

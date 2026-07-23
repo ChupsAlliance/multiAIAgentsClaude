@@ -10,6 +10,28 @@ Format dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.11.0] — 2026-07-23
+
+### Thêm mới — Light Theme (giao diện sáng)
+
+- **Chuyển đổi Dark/Light**: nút chuyển giao diện ở footer Sidebar, lưu lựa chọn vào `localStorage`, áp dụng lại ngay khi mở app (không bị chớp giao diện tối trước khi chuyển sáng)
+- Toàn bộ giao diện (Sidebar, Docs, Playground, Dashboard, Mission Control, các trang mission) đã được chuyển sang hệ màu theo biến CSS (`--vs-*`), tự động đổi màu đúng theo theme đang chọn
+- Khối code (syntax highlighting) và các phần tử có nền tối cố định (status bar, toast thông báo) vẫn giữ đúng độ tương phản ở cả hai theme, không bị chữ chìm vào nền
+
+### Cải tiến — Playground
+
+- Toàn bộ nhãn giao diện còn sót tiếng Anh đã được dịch sang tiếng Việt
+- Thay hộp thoại `alert()` báo thiếu thư mục dự án bằng dòng cảnh báo hiển thị ngay trong trang, dễ đọc hơn
+- Thêm dòng giải thích luôn hiển thị về hành vi nút Launch, giúp người dùng hiểu rõ trước khi bấm
+
+### Kỹ thuật
+
+- `src/index.css`, `tailwind.config.js`: 20 biến màu `--vs-*` định nghĩa dưới `:root` (dark) và `.light`, Tailwind resolve qua `rgb(var(--vs-*) / <alpha-value>)`
+- `useTheme.js`: hook áp dụng class `.light` lên `documentElement`, đọc/ghi `localStorage`
+- Migrate toàn bộ `text-white`/`bg-white`/`bg-black` sang token theme trong tất cả components, sections và pages (trừ các ngoại lệ nền cố định đã kiểm tra kỹ: toggle-knob trắng, status bar/toast, khối Prism)
+
+---
+
 ## [0.10.1] — 2026-07-22
 
 ### Cải tiến — Tự động thử lại khi gặp lỗi API tạm thời (rate limit)
