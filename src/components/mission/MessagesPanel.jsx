@@ -35,7 +35,7 @@ export function MessagesPanel({ messages = [] }) {
       {messages.map((msg, i) => {
         const style = typeStyle[msg.msg_type] || typeStyle.message
         return (
-          <div key={i} className="flex gap-2 px-2 py-1.5 rounded hover:bg-white/5 font-mono text-xs">
+          <div key={i} className="flex gap-2 px-2 py-1.5 rounded hover:bg-vs-overlay/5 font-mono text-xs">
             <span className="text-vs-muted shrink-0 w-16">{formatTime(msg.timestamp)}</span>
             <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold ${style.badge}`}>
               {style.label}

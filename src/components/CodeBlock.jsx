@@ -42,7 +42,7 @@ export function CodeBlock({ code, language = 'bash', filename, className = '' })
           <button
             onClick={handleCopy}
             className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono transition-colors no-drag
-              ${copied ? 'text-vs-comment bg-vs-comment/20' : 'text-vs-muted hover:text-vs-text hover:bg-white/10'}`}
+              ${copied ? 'text-vs-comment bg-vs-comment/20' : 'text-vs-muted hover:text-vs-text hover:bg-vs-overlay/10'}`}
           >
             {copied ? <Check size={11} /> : <Copy size={11} />}
             {copied ? 'Copied!' : 'Copy'}

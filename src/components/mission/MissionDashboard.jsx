@@ -159,7 +159,7 @@ export const MissionDashboard = memo(function MissionDashboard({ state, isRunnin
           </div>
           <button
             onClick={onNewMission}
-            className="text-[10px] font-mono text-vs-muted hover:text-white transition-colors px-2 py-0.5 rounded border border-vs-border hover:border-vs-accent shrink-0"
+            className="text-[10px] font-mono text-vs-muted hover:text-vs-heading transition-colors px-2 py-0.5 rounded border border-vs-border hover:border-vs-accent shrink-0"
           >
             ← Quay lại
           </button>
@@ -207,8 +207,8 @@ export const MissionDashboard = memo(function MissionDashboard({ state, isRunnin
                       onClick={() => setActiveTab(id)}
                       className={`flex items-center gap-1.5 px-4 py-2 text-xs font-mono transition-colors border-b-2 shrink-0 ${
                         activeTab === id
-                          ? 'border-vs-accent text-white bg-vs-accent/5'
-                          : 'border-transparent text-vs-muted hover:text-vs-text hover:bg-white/5'
+                          ? 'border-vs-accent text-vs-heading bg-vs-accent/5'
+                          : 'border-transparent text-vs-muted hover:text-vs-text hover:bg-vs-overlay/5'
                       }`}
                     >
                       <Icon size={12} />
@@ -226,7 +226,7 @@ export const MissionDashboard = memo(function MissionDashboard({ state, isRunnin
                       {id === 'agent' && (
                         <button
                           onClick={(e) => { e.stopPropagation(); setSelectedAgent(null); setActiveTab('tasks'); }}
-                          className="ml-1 text-vs-muted hover:text-white text-[10px]"
+                          className="ml-1 text-vs-muted hover:text-vs-heading text-[10px]"
                           title="Close agent view"
                         >
                           ×

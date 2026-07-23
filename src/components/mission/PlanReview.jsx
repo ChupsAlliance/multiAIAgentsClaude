@@ -64,7 +64,7 @@ function DraggableTask({ task, onEdit, onDelete, onPriorityChange, onViewDetail 
       ref={setNodeRef}
       style={style}
       className={`flex items-center gap-1.5 group px-2 py-1.5 rounded-md transition-colors ${
-        isDragging ? 'bg-vs-accent/20 ring-1 ring-vs-accent' : 'hover:bg-white/5'
+        isDragging ? 'bg-vs-accent/20 ring-1 ring-vs-accent' : 'hover:bg-vs-overlay/5'
       }`}
     >
       {/* Drag handle */}
@@ -100,7 +100,7 @@ function DraggableTask({ task, onEdit, onDelete, onPriorityChange, onViewDetail 
       ) : (
         <span
           onClick={() => setEditing(true)}
-          className="flex-1 text-xs text-vs-text truncate cursor-text hover:text-white transition-colors"
+          className="flex-1 text-xs text-vs-text truncate cursor-text hover:text-vs-heading transition-colors"
           title="Click to edit"
         >
           {task.title}
@@ -214,7 +214,7 @@ function AgentSection({ agent, tasks, onModelChange, onCustomPromptChange, onRem
           {agent.name.slice(0, 2).toUpperCase()}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-white truncate">{agent.name}</p>
+          <p className="text-sm font-semibold text-vs-heading truncate">{agent.name}</p>
           <p className="text-[10px] text-vs-muted font-mono truncate">{agent.role}</p>
         </div>
 
@@ -229,7 +229,7 @@ function AgentSection({ agent, tasks, onModelChange, onCustomPromptChange, onRem
                 onClick={() => onModelChange(agent.name, m.id)}
                 className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-mono transition-colors ${
                   selected
-                    ? 'bg-vs-accent/20 border border-vs-accent text-white'
+                    ? 'bg-vs-accent/20 border border-vs-accent text-vs-heading'
                     : 'bg-vs-bg border border-vs-border text-vs-muted hover:border-vs-text/30 hover:text-vs-text'
                 }`}
               >
@@ -460,7 +460,7 @@ function AddAgentForm({ onAdd, onCancel }) {
               onClick={() => setModel(m.id)}
               className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono transition-colors ${
                 model === m.id
-                  ? 'bg-vs-accent/20 border border-vs-accent text-white'
+                  ? 'bg-vs-accent/20 border border-vs-accent text-vs-heading'
                   : 'bg-vs-bg border border-vs-border text-vs-muted hover:text-vs-text'
               }`}
             >
@@ -552,7 +552,7 @@ function BulkSkillModal({ agents, onApply, onClose }) {
   const targetCount = Object.values(selected).filter(Boolean).length
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-vs-overlay/60 backdrop-blur-sm"
          onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="bg-vs-panel border border-vs-border rounded-xl shadow-2xl w-[420px] max-w-[90vw]
                       flex flex-col overflow-hidden animate-fade-in">
@@ -560,9 +560,9 @@ function BulkSkillModal({ agents, onApply, onClose }) {
         <div className="flex items-center justify-between px-4 py-3 border-b border-vs-border">
           <div className="flex items-center gap-2">
             <Layers size={14} className="text-purple-400" />
-            <span className="text-sm font-semibold text-white">Apply Skill to Agents</span>
+            <span className="text-sm font-semibold text-vs-heading">Apply Skill to Agents</span>
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-white/10 rounded transition-colors">
+          <button onClick={onClose} className="p-1 hover:bg-vs-overlay/10 rounded transition-colors">
             <X size={14} className="text-vs-muted" />
           </button>
         </div>
@@ -636,7 +636,7 @@ function BulkSkillModal({ agents, onApply, onClose }) {
                        className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
                          selected[agent.name]
                            ? 'bg-vs-accent/10 border border-vs-accent/30'
-                           : 'bg-vs-bg border border-vs-border hover:bg-white/5'
+                           : 'bg-vs-bg border border-vs-border hover:bg-vs-overlay/5'
                        }`}>
                   {/* Custom checkbox */}
                   <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 transition-colors ${
@@ -646,7 +646,7 @@ function BulkSkillModal({ agents, onApply, onClose }) {
                     {selected[agent.name] && <Check size={10} className="text-black" />}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-white truncate">{agent.name}</p>
+                    <p className="text-xs font-semibold text-vs-heading truncate">{agent.name}</p>
                     <p className="text-[9px] text-vs-muted font-mono truncate">{agent.role}</p>
                   </div>
                   {agent.skillFile && (
@@ -666,7 +666,7 @@ function BulkSkillModal({ agents, onApply, onClose }) {
           <div className="flex gap-2">
             <button onClick={onClose}
                     className="px-3 py-1.5 rounded text-xs font-mono text-vs-muted
-                               hover:bg-white/10 transition-colors">
+                               hover:bg-vs-overlay/10 transition-colors">
               Huỷ
             </button>
             <button
@@ -964,7 +964,7 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
       <div className="px-5 py-4 border-b border-vs-border bg-vs-panel/30">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-base font-semibold text-white flex items-center gap-2">
+            <h2 className="text-base font-semibold text-vs-heading flex items-center gap-2">
               <Cpu size={16} className="text-vs-accent" />
               Review Mission Plan
             </h2>
@@ -979,7 +979,7 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
               className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono transition-colors ${
                 showTaskPanel
                   ? 'bg-vs-accent/20 border border-vs-accent text-vs-accent'
-                  : 'bg-vs-bg border border-vs-border text-vs-muted hover:border-vs-accent hover:text-white'
+                  : 'bg-vs-bg border border-vs-border text-vs-muted hover:border-vs-accent hover:text-vs-heading'
               }`}
             >
               <ListTodo size={9} /> Tasks
@@ -995,7 +995,7 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
               className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono transition-colors ${
                 showFlow
                   ? 'bg-vs-accent/20 border border-vs-accent text-vs-accent'
-                  : 'bg-vs-bg border border-vs-border text-vs-muted hover:border-vs-accent hover:text-white'
+                  : 'bg-vs-bg border border-vs-border text-vs-muted hover:border-vs-accent hover:text-vs-heading'
               }`}
             >
               <Info size={9} /> Flow
@@ -1005,7 +1005,7 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
               className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono transition-colors ${
                 showGraph
                   ? 'bg-vs-accent/20 border border-vs-accent text-vs-accent'
-                  : 'bg-vs-bg border border-vs-border text-vs-muted hover:border-vs-accent hover:text-white'
+                  : 'bg-vs-bg border border-vs-border text-vs-muted hover:border-vs-accent hover:text-vs-heading'
               }`}
             >
               <GitFork size={9} /> Graph
@@ -1021,8 +1021,8 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
                     onClick={() => handleSetAllModels(m.id)}
                     className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono transition-colors ${
                       allMatch
-                        ? 'bg-vs-accent/20 border border-vs-accent text-white'
-                        : 'bg-vs-bg border border-vs-border text-vs-muted hover:border-vs-accent hover:text-white'
+                        ? 'bg-vs-accent/20 border border-vs-accent text-vs-heading'
+                        : 'bg-vs-bg border border-vs-border text-vs-muted hover:border-vs-accent hover:text-vs-heading'
                     }`}
                   >
                     <Icon size={9} /> {m.label}
@@ -1055,7 +1055,7 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
                     {s.step}
                   </span>
                   <div>
-                    <span className="text-white font-medium">{s.title}</span>
+                    <span className="text-vs-heading font-medium">{s.title}</span>
                     <span className="text-vs-muted ml-1">— {s.detail}</span>
                   </div>
                 </div>
@@ -1070,7 +1070,7 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
         <div className="border-b border-vs-border bg-vs-bg/60 flex flex-col">
           <div className="px-5 py-3">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-xs font-semibold text-white flex items-center gap-1.5">
+              <h3 className="text-xs font-semibold text-vs-heading flex items-center gap-1.5">
                 <ListTodo size={13} className="text-vs-accent" />
                 Task Detail List
                 <span className="text-vs-muted font-normal ml-1">({localTasks.length} tasks)</span>
@@ -1111,7 +1111,7 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
                 {/* Collapse button */}
                 <button
                   onClick={() => setTaskPanelCollapsed(prev => !prev)}
-                  className="p-1 rounded text-vs-muted hover:text-white hover:bg-white/5 transition-colors"
+                  className="p-1 rounded text-vs-muted hover:text-vs-heading hover:bg-vs-overlay/5 transition-colors"
                   title={taskPanelCollapsed ? 'Mở rộng' : 'Thu gọn'}
                 >
                   {taskPanelCollapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
@@ -1388,7 +1388,7 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
                 <span className={`w-2 h-2 rounded-full ${
                   PRIORITIES.find(p => p.id === draggedTask.priority)?.color || 'bg-yellow-400'
                 }`} />
-                <span className="text-xs text-white font-mono truncate">{draggedTask.title}</span>
+                <span className="text-xs text-vs-heading font-mono truncate">{draggedTask.title}</span>
               </div>
             )}
           </DragOverlay>
@@ -1423,7 +1423,7 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
           <button
             onClick={onCancel}
             className="px-4 py-2 rounded-lg text-xs font-mono text-vs-muted
-                       border border-vs-border hover:bg-white/5 transition-colors"
+                       border border-vs-border hover:bg-vs-overlay/5 transition-colors"
           >
             Cancel
           </button>
@@ -1457,7 +1457,7 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
             disabled={!canDeploy || isReplanning}
             className={`flex items-center gap-2 px-5 py-2 rounded-lg text-xs font-semibold transition-colors ${
               canDeploy && !isReplanning
-                ? 'bg-vs-accent hover:bg-vs-accent/80 text-white'
+                ? 'bg-vs-accent hover:bg-vs-accent/80 text-vs-heading'
                 : 'bg-vs-panel text-vs-muted cursor-not-allowed'
             }`}
             title={!canDeploy ? 'Cần ít nhất 1 agent và 1 task đã phân công' : ''}

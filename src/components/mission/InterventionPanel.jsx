@@ -34,8 +34,8 @@ function AgentRow({ agent, onChange, onRemove }) {
               title={m.label}
               className={`p-1 rounded transition-colors ${
                 agent.model === m.id
-                  ? `${m.cls} bg-white/10`
-                  : 'text-vs-muted hover:text-vs-text hover:bg-white/5'
+                  ? `${m.cls} bg-vs-overlay/10`
+                  : 'text-vs-muted hover:text-vs-text hover:bg-vs-overlay/5'
               }`}
             >
               <Icon size={11} />
@@ -126,7 +126,7 @@ export function InterventionPanel({ onSend, isRunning, disabled }) {
       {/* Header */}
       <button
         onClick={() => setCollapsed(!collapsed)}
-        className="w-full flex items-center justify-between px-4 py-1.5 hover:bg-white/5 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-1.5 hover:bg-vs-overlay/5 transition-colors"
       >
         <span className="flex items-center gap-1.5 text-[10px] font-mono text-vs-muted uppercase tracking-wider">
           <MessageSquare size={10} />
@@ -244,7 +244,7 @@ export function InterventionPanel({ onSend, isRunning, disabled }) {
               disabled={!message.trim() || disabled}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-semibold transition-colors ${
                 message.trim() && !disabled
-                  ? 'bg-vs-accent hover:bg-vs-accent/80 text-white'
+                  ? 'bg-vs-accent hover:bg-vs-accent/80 text-vs-heading'
                   : 'bg-vs-panel text-vs-muted cursor-not-allowed'
               }`}
             >

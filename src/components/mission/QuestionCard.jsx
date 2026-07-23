@@ -20,7 +20,7 @@ function QuestionTab({ index, question, answer, isActive, onClick }) {
       onClick={onClick}
       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-mono transition-colors ${
         isActive
-          ? 'bg-vs-accent/20 border border-vs-accent text-white'
+          ? 'bg-vs-accent/20 border border-vs-accent text-vs-heading'
           : answered
             ? 'bg-green-500/10 border border-green-500/30 text-green-400'
             : 'bg-vs-bg border border-vs-border text-vs-muted hover:border-vs-text/30 hover:text-vs-text'
@@ -178,7 +178,7 @@ export function QuestionCard({ questions, onSubmit }) {
               <span className="text-[10px] text-vs-muted font-mono">from {current.from}</span>
             )}
           </div>
-          <p className="text-sm text-white font-medium leading-relaxed">{current.question}</p>
+          <p className="text-sm text-vs-heading font-medium leading-relaxed">{current.question}</p>
         </div>
 
         {/* Context */}
@@ -198,7 +198,7 @@ export function QuestionCard({ questions, onSubmit }) {
                 onClick={() => handleSelectOption(opt)}
                 className={`px-3 py-1.5 rounded-md text-xs font-mono transition-colors ${
                   currentAnswer.selectedOption === opt
-                    ? 'bg-vs-accent/20 border border-vs-accent text-white'
+                    ? 'bg-vs-accent/20 border border-vs-accent text-vs-heading'
                     : 'bg-vs-bg border border-vs-border text-vs-muted hover:border-vs-text/30 hover:text-vs-text'
                 }`}
               >
@@ -241,7 +241,7 @@ export function QuestionCard({ questions, onSubmit }) {
             disabled={!allAnswered}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-semibold transition-colors ${
               allAnswered
-                ? 'bg-vs-accent text-white hover:bg-vs-accent/80'
+                ? 'bg-vs-accent text-vs-heading hover:bg-vs-accent/80'
                 : 'bg-vs-border/50 text-vs-muted/50 cursor-not-allowed'
             }`}
           >

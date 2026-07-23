@@ -382,7 +382,7 @@ export function MissionLauncher({ onLaunch }) {
         <div className="w-14 h-14 mx-auto rounded-xl bg-vs-accent/20 border border-vs-accent/40 flex items-center justify-center">
           <Rocket size={24} className="text-vs-accent" />
         </div>
-        <h1 className="text-xl font-bold text-white">Mission Control</h1>
+        <h1 className="text-xl font-bold text-vs-heading">Mission Control</h1>
         <p className="text-sm text-vs-muted max-w-md mx-auto">
           Mô tả yêu cầu bằng ngôn ngữ tự nhiên, chọn thư mục project, nhấn Launch.
           Agent Team sẽ tự động phân tích và thực thi.
@@ -410,7 +410,7 @@ export function MissionLauncher({ onLaunch }) {
             <button
               onClick={handlePickFolder}
               className="px-3 py-2 bg-vs-panel border border-vs-border rounded-lg text-xs font-mono
-                         text-vs-text hover:bg-white/10 transition-colors"
+                         text-vs-text hover:bg-vs-overlay/10 transition-colors"
             >
               Browse
             </button>
@@ -581,8 +581,8 @@ export function MissionLauncher({ onLaunch }) {
                 onClick={() => setModel(m.id)}
                 className={`relative text-left px-3 py-2.5 rounded-lg border text-xs transition-colors ${
                   model === m.id
-                    ? 'border-vs-accent bg-vs-accent/10 text-white'
-                    : 'border-vs-border bg-vs-bg text-vs-muted hover:border-vs-text/30 hover:bg-white/5'
+                    ? 'border-vs-accent bg-vs-accent/10 text-vs-heading'
+                    : 'border-vs-border bg-vs-bg text-vs-muted hover:border-vs-text/30 hover:bg-vs-overlay/5'
                 }`}
               >
                 <span className="font-semibold block">{m.label}</span>
@@ -611,9 +611,9 @@ export function MissionLauncher({ onLaunch }) {
                   className={`relative text-left px-3 py-2.5 rounded-lg border text-xs transition-colors ${
                     executionMode === mode.id
                       ? mode.experimental
-                        ? 'border-yellow-500/60 bg-yellow-500/10 text-white'
-                        : 'border-vs-accent bg-vs-accent/10 text-white'
-                      : 'border-vs-border bg-vs-bg text-vs-muted hover:border-vs-text/30 hover:bg-white/5'
+                        ? 'border-yellow-500/60 bg-yellow-500/10 text-vs-heading'
+                        : 'border-vs-accent bg-vs-accent/10 text-vs-heading'
+                      : 'border-vs-border bg-vs-bg text-vs-muted hover:border-vs-text/30 hover:bg-vs-overlay/5'
                   }`}
                 >
                   <span className="font-semibold flex items-center gap-1.5">
@@ -660,11 +660,11 @@ export function MissionLauncher({ onLaunch }) {
                   className={`text-left px-3 py-2.5 rounded-lg border text-xs transition-colors ${
                     permissionMode === mode.id
                       ? mode.id === 'interactive'
-                        ? 'border-amber-500/60 bg-amber-500/10 text-white'
+                        ? 'border-amber-500/60 bg-amber-500/10 text-vs-heading'
                         : mode.id === 'deep_plan'
-                        ? 'border-purple-500/60 bg-purple-500/10 text-white'
-                        : 'border-vs-accent bg-vs-accent/10 text-white'
-                      : 'border-vs-border bg-vs-bg text-vs-muted hover:border-vs-text/30 hover:bg-white/5'
+                        ? 'border-purple-500/60 bg-purple-500/10 text-vs-heading'
+                        : 'border-vs-accent bg-vs-accent/10 text-vs-heading'
+                      : 'border-vs-border bg-vs-bg text-vs-muted hover:border-vs-text/30 hover:bg-vs-overlay/5'
                   }`}
                 >
                   <span className="font-semibold flex items-center gap-1.5">
@@ -760,7 +760,7 @@ export function MissionLauncher({ onLaunch }) {
             </button>
             {showPrompt && (
               <div className="relative">
-                <pre className="bg-black/40 border border-vs-border rounded-lg p-3 text-[10px] font-mono text-vs-muted leading-relaxed max-h-64 overflow-auto scrollbar-thin whitespace-pre-wrap break-words">
+                <pre className="bg-vs-overlay/40 border border-vs-border rounded-lg p-3 text-[10px] font-mono text-vs-muted leading-relaxed max-h-64 overflow-auto scrollbar-thin whitespace-pre-wrap break-words">
                   {previewPrompt}
                 </pre>
                 <div className="absolute top-2 right-2 flex gap-1">
@@ -780,7 +780,7 @@ export function MissionLauncher({ onLaunch }) {
           className={`w-full flex items-center justify-center gap-2 py-3 rounded-lg font-semibold text-sm transition-colors ${
             !requirement.trim() || !projectPath.trim() || launching
               ? 'bg-vs-panel text-vs-muted cursor-not-allowed'
-              : 'bg-vs-accent text-white hover:bg-vs-accent/80 shadow-lg shadow-vs-accent/20'
+              : 'bg-vs-accent text-vs-heading hover:bg-vs-accent/80 shadow-lg shadow-vs-accent/20'
           }`}
         >
           {launching ? (
@@ -846,7 +846,7 @@ export function MissionLauncher({ onLaunch }) {
               <div
                 key={i}
                 className="flex items-center gap-2 px-3 py-2 rounded-md border border-vs-border bg-vs-panel
-                           hover:bg-white/5 transition-colors group"
+                           hover:bg-vs-overlay/5 transition-colors group"
               >
                 <button
                   onClick={() => handleReuse(entry)}
@@ -868,7 +868,7 @@ export function MissionLauncher({ onLaunch }) {
             {filteredHistory.length > 5 && (
               <button
                 onClick={() => setShowAllHistory(!showAllHistory)}
-                className="w-full text-center text-[10px] font-mono text-vs-accent hover:text-white transition-colors py-1.5"
+                className="w-full text-center text-[10px] font-mono text-vs-accent hover:text-vs-heading transition-colors py-1.5"
               >
                 {showAllHistory ? 'Thu gọn' : `Xem tất cả (${filteredHistory.length})`}
               </button>

@@ -67,7 +67,7 @@ export function OnboardingPage() {
         {/* Header */}
         <div className="text-center mb-10">
           <div className="text-4xl mb-4">🤖</div>
-          <h1 className="text-2xl font-bold text-white mb-2">Claude Code Agent Teams</h1>
+          <h1 className="text-2xl font-bold text-vs-heading mb-2">Claude Code Agent Teams</h1>
           <p className="text-vs-muted text-sm">Hướng dẫn nội bộ · Thiết lập lần đầu</p>
         </div>
 
@@ -95,7 +95,7 @@ export function OnboardingPage() {
                       : <Icon size={16} />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-medium ${isDone ? 'text-vs-green' : isActive ? 'text-white' : 'text-vs-muted'}`}>
+                  <p className={`text-sm font-medium ${isDone ? 'text-vs-green' : isActive ? 'text-vs-heading' : 'text-vs-muted'}`}>
                     {s.label}
                   </p>
                   {isActive && detail && (
@@ -138,7 +138,7 @@ export function OnboardingPage() {
         {step === 2 && (
           <div className="rounded-lg border border-vs-green/40 bg-vs-green/5 p-5 mb-6 text-center">
             <CheckCircle2 size={32} className="text-vs-green mx-auto mb-3" />
-            <p className="text-white font-semibold">Tất cả đã sẵn sàng!</p>
+            <p className="text-vs-heading font-semibold">Tất cả đã sẵn sàng!</p>
             <p className="text-vs-muted text-xs mt-1">
               Claude CLI ✓ · Agent Teams enabled ✓ · Vào app để bắt đầu.
             </p>
@@ -162,7 +162,7 @@ export function OnboardingPage() {
               ? 'bg-vs-border text-vs-muted cursor-not-allowed'
               : step === 2
                 ? 'bg-vs-green hover:bg-vs-green/90 text-black'
-                : 'bg-vs-accent hover:bg-vs-accent2 text-white'}`}
+                : 'bg-vs-accent hover:bg-vs-accent2 text-vs-heading'}`}
         >
           {status === 'loading' ? (
             <><Loader2 size={16} className="animate-spin" />{stepLabels[step].loading}</>

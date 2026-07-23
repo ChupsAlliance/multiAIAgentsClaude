@@ -16,7 +16,7 @@ function PromptCard({ agent, prompt, onEdit, onSave }) {
     <div className="border border-vs-border rounded-lg overflow-hidden bg-vs-panel">
       {/* Header */}
       <button
-        className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-white/5"
+        className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-vs-overlay/5"
         onClick={() => setExpanded(!expanded)}
       >
         <div className="flex items-center gap-2 min-w-0">
@@ -24,7 +24,7 @@ function PromptCard({ agent, prompt, onEdit, onSave }) {
             ? <ChevronDown size={12} className="text-vs-muted shrink-0" />
             : <ChevronRight size={12} className="text-vs-muted shrink-0" />
           }
-          <span className="text-xs font-bold text-white truncate">{agent.name}</span>
+          <span className="text-xs font-bold text-vs-heading truncate">{agent.name}</span>
           <span className="text-[10px] text-vs-muted font-mono truncate">({agent.role})</span>
           <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${
             agent.model === 'opus' ? 'bg-purple-400/10 text-purple-400' :
@@ -38,7 +38,7 @@ function PromptCard({ agent, prompt, onEdit, onSave }) {
           {!editing && (
             <button
               onClick={(e) => { e.stopPropagation(); setExpanded(true); setEditing(true); }}
-              className="p-1 hover:bg-white/10 rounded text-vs-muted hover:text-white"
+              className="p-1 hover:bg-vs-overlay/10 rounded text-vs-muted hover:text-vs-heading"
               title="Chỉnh sửa prompt"
             >
               <Edit3 size={11} />
@@ -62,13 +62,13 @@ function PromptCard({ agent, prompt, onEdit, onSave }) {
               <div className="flex gap-2 mt-2">
                 <button
                   onClick={handleSave}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-vs-accent text-white rounded text-xs hover:bg-vs-accent2"
+                  className="flex items-center gap-1 px-3 py-1.5 bg-vs-accent text-vs-heading rounded text-xs hover:bg-vs-accent2"
                 >
                   <Save size={10} /> Lưu
                 </button>
                 <button
                   onClick={() => { setEditing(false); setEditValue(prompt); }}
-                  className="flex items-center gap-1 px-3 py-1.5 border border-vs-border text-vs-text rounded text-xs hover:bg-white/5"
+                  className="flex items-center gap-1 px-3 py-1.5 border border-vs-border text-vs-text rounded text-xs hover:bg-vs-overlay/5"
                 >
                   Hủy
                 </button>
@@ -113,7 +113,7 @@ export function PromptPreview({ agents, tasks, projectPath, onConfirm, onBack })
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-bold text-white flex items-center gap-2">
+          <h2 className="text-sm font-bold text-vs-heading flex items-center gap-2">
             <Eye size={14} className="text-vs-accent" />
             Xem trước Prompts
           </h2>
@@ -123,7 +123,7 @@ export function PromptPreview({ agents, tasks, projectPath, onConfirm, onBack })
         </div>
         <button
           onClick={onBack}
-          className="flex items-center gap-1 px-3 py-1.5 border border-vs-border text-vs-text rounded text-xs hover:bg-white/5"
+          className="flex items-center gap-1 px-3 py-1.5 border border-vs-border text-vs-text rounded text-xs hover:bg-vs-overlay/5"
         >
           <ArrowLeft size={10} /> Quay lại
         </button>

@@ -44,7 +44,7 @@ export function BusinessFlowDiagram({ nodes = [], edges = [], onJumpToAgent }) {
                 type="button"
                 onClick={() => onJumpToAgent?.(node.agentName)}
                 className="mt-1 flex items-center gap-1 self-start rounded px-1 py-0.5
-                           text-[8px] font-mono text-vs-muted hover:text-white hover:bg-white/10 transition-colors"
+                           text-[8px] font-mono text-vs-muted hover:text-vs-heading hover:bg-vs-overlay/10 transition-colors"
                 title={`Xem agent: ${node.agentName}`}
                 style={{ borderLeft: `2px solid ${node.color}` }}
               >

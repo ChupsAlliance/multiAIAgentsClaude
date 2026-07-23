@@ -135,7 +135,7 @@ const TaskItem = memo(function TaskItem({ task, agentLogs }) {
         task.status === 'completed'
           ? 'bg-vs-green/5 text-vs-muted'
           : task.status === 'in_progress'
-            ? 'bg-vs-accent/5 border border-vs-accent/20 text-white'
+            ? 'bg-vs-accent/5 border border-vs-accent/20 text-vs-heading'
             : task.status === 'error'
               ? 'bg-vs-red/5 border border-vs-red/20 text-vs-red'
               : 'text-vs-text'

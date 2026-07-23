@@ -139,8 +139,8 @@ export function MissionControlPage() {
                 onClick={() => setPlanViewTab('visual')}
                 className={`px-3 py-1.5 rounded-t-md text-xs font-mono transition-colors ${
                   planViewTab === 'visual'
-                    ? 'bg-vs-panel text-white border-t border-x border-vs-border'
-                    : 'text-vs-muted hover:text-white hover:bg-white/5'
+                    ? 'bg-vs-panel text-vs-heading border-t border-x border-vs-border'
+                    : 'text-vs-muted hover:text-vs-heading hover:bg-vs-overlay/5'
                 }`}
               >
                 <span className="mr-1.5">&#x1F3AF;</span>Trực quan
@@ -149,8 +149,8 @@ export function MissionControlPage() {
                 onClick={() => setPlanViewTab('document')}
                 className={`px-3 py-1.5 rounded-t-md text-xs font-mono transition-colors ${
                   planViewTab === 'document'
-                    ? 'bg-vs-panel text-white border-t border-x border-vs-border'
-                    : 'text-vs-muted hover:text-white hover:bg-white/5'
+                    ? 'bg-vs-panel text-vs-heading border-t border-x border-vs-border'
+                    : 'text-vs-muted hover:text-vs-heading hover:bg-vs-overlay/5'
                 }`}
               >
                 <span className="mr-1.5">&#x1F4C4;</span>Tài liệu
@@ -200,7 +200,7 @@ export function MissionControlPage() {
                 </span>
                 <button
                   onClick={() => { setHistoryView(null); setHistoryViewMode('view') }}
-                  className="text-[10px] font-mono text-vs-muted hover:text-white transition-colors px-2 py-0.5 rounded border border-vs-border hover:border-vs-accent shrink-0"
+                  className="text-[10px] font-mono text-vs-muted hover:text-vs-heading transition-colors px-2 py-0.5 rounded border border-vs-border hover:border-vs-accent shrink-0"
                 >
                   ← Hủy
                 </button>

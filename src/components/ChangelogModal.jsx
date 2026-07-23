@@ -96,7 +96,7 @@ export function ChangelogModal({ open, onClose, currentVersion, updateInfo }) {
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-vs-overlay/70 backdrop-blur-sm" onClick={onClose} />
 
       {/* Modal */}
       <div className="relative w-full max-w-2xl max-h-[85vh] mx-4 bg-vs-sidebar border border-vs-border rounded-xl shadow-2xl flex flex-col overflow-hidden">
@@ -107,7 +107,7 @@ export function ChangelogModal({ open, onClose, currentVersion, updateInfo }) {
               <Sparkles size={18} className="text-vs-accent" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-white">What's New</h2>
+              <h2 className="text-sm font-bold text-vs-heading">What's New</h2>
               <p className="text-[10px] text-vs-muted font-mono">
                 Agent Teams Guide v{currentVersion}
               </p>
@@ -115,7 +115,7 @@ export function ChangelogModal({ open, onClose, currentVersion, updateInfo }) {
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-md text-vs-muted hover:text-white hover:bg-white/10 transition-colors"
+            className="p-1.5 rounded-md text-vs-muted hover:text-vs-heading hover:bg-vs-overlay/10 transition-colors"
           >
             <X size={16} />
           </button>
@@ -127,7 +127,7 @@ export function ChangelogModal({ open, onClose, currentVersion, updateInfo }) {
             <div className="rounded-lg border border-vs-accent/40 bg-vs-accent/10 px-4 py-3 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <Sparkles size={16} className="text-vs-accent shrink-0" />
-                <p className="text-[12px] text-white">
+                <p className="text-[12px] text-vs-heading">
                   <span className="font-bold">Bản mới v{updateInfo.latestVersion}</span> đã có sẵn!
                 </p>
               </div>
@@ -156,7 +156,7 @@ export function ChangelogModal({ open, onClose, currentVersion, updateInfo }) {
                 {/* Version header — clickable */}
                 <button
                   onClick={() => toggleVersion(release.version)}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/5 transition-colors"
+                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-vs-overlay/5 transition-colors"
                 >
                   {isExpanded
                     ? <ChevronDown size={14} className="text-vs-muted shrink-0" />
@@ -164,7 +164,7 @@ export function ChangelogModal({ open, onClose, currentVersion, updateInfo }) {
                   }
                   <Tag size={14} className={isCurrent ? 'text-vs-accent shrink-0' : 'text-vs-muted shrink-0'} />
                   <div className="flex-1 min-w-0">
-                    <span className="text-sm font-bold text-white font-mono">v{release.version}</span>
+                    <span className="text-sm font-bold text-vs-heading font-mono">v{release.version}</span>
                     {isCurrent && (
                       <span className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-mono bg-vs-accent/20 text-vs-accent border border-vs-accent/30">
                         current

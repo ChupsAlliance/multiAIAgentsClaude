@@ -35,8 +35,8 @@ function TemplateCard({ tpl, selected, onClick }) {
       onClick={onClick}
       className={`text-left p-3 rounded-lg border transition-colors text-xs
         ${selected
-          ? 'border-vs-accent bg-vs-accent/10 text-white'
-          : 'border-vs-border hover:border-vs-accent/40 text-vs-text hover:bg-white/5'}`}
+          ? 'border-vs-accent bg-vs-accent/10 text-vs-heading'
+          : 'border-vs-border hover:border-vs-accent/40 text-vs-text hover:bg-vs-overlay/5'}`}
     >
       <span className="text-xl block mb-1">{tpl.icon}</span>
       <span className="font-semibold block text-[13px]">{tpl.label}</span>
@@ -216,7 +216,7 @@ export function PlaygroundPage() {
             <div>
               <div className="flex items-center gap-2 mb-0.5">
                 <Sparkles size={16} className="text-vs-accent" />
-                <h1 className="text-lg font-bold text-white">Playground</h1>
+                <h1 className="text-lg font-bold text-vs-heading">Playground</h1>
               </div>
               <p className="text-vs-muted text-xs">Chọn template, điền thông tin → app tự tạo file .MD + mở terminal</p>
             </div>
@@ -225,7 +225,7 @@ export function PlaygroundPage() {
                 <button key={v}
                   onClick={() => setView(v)}
                   className={`px-4 py-1.5 text-xs font-medium transition-colors
-                    ${view === v ? 'bg-vs-accent text-white' : 'text-vs-muted hover:text-white hover:bg-white/5'}`}>
+                    ${view === v ? 'bg-vs-accent text-vs-heading' : 'text-vs-muted hover:text-vs-heading hover:bg-vs-overlay/5'}`}>
                   {v === 'builder' ? 'Xây dựng' : `Lịch sử (${history.length})`}
                 </button>
               ))}
@@ -300,7 +300,7 @@ export function PlaygroundPage() {
                       />
                       <button onClick={pickFolder}
                         className="flex items-center gap-1.5 px-3 py-2 rounded border border-vs-border
-                          text-vs-muted hover:text-white hover:border-vs-accent text-xs transition-colors">
+                          text-vs-muted hover:text-vs-heading hover:border-vs-accent text-xs transition-colors">
                         <FolderOpen size={13} />Chọn folder
                       </button>
                     </div>
@@ -359,7 +359,7 @@ export function PlaygroundPage() {
                     disabled={!generatedPrompt || missingProjectFolder || missingRequiredFields}
                     className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-semibold text-sm transition-colors
                       ${generatedPrompt && !missingProjectFolder && !missingRequiredFields
-                        ? 'bg-vs-accent hover:bg-vs-accent2 text-white cursor-pointer'
+                        ? 'bg-vs-accent hover:bg-vs-accent2 text-vs-heading cursor-pointer'
                         : 'bg-vs-border text-vs-muted cursor-not-allowed'}`}>
                     <Terminal size={15} />
                     Khởi chạy — Tạo tệp &amp; Mở terminal
@@ -429,7 +429,7 @@ export function PlaygroundPage() {
                     <div className="flex items-start justify-between gap-3 mb-2">
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-white text-sm font-semibold">{item.template}</span>
+                          <span className="text-vs-heading text-sm font-semibold">{item.template}</span>
                           <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-vs-accent/20 text-vs-accent">
                             {item.team_size || '?'} agents
                           </span>
@@ -441,7 +441,7 @@ export function PlaygroundPage() {
                       <div className="flex items-center gap-2 shrink-0">
                         <span className="text-[10px] text-vs-muted">{timeAgo(item.ts)}</span>
                         <button onClick={() => reloadFromHistory(item)}
-                          className="text-vs-accent hover:text-white text-xs flex items-center gap-1 transition-colors">
+                          className="text-vs-accent hover:text-vs-heading text-xs flex items-center gap-1 transition-colors">
                           <ChevronRight size={12} />Dùng lại
                         </button>
                         <button onClick={() => deleteHistoryItem(i)}

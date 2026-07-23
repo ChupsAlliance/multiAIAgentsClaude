@@ -126,7 +126,7 @@ function OutlineSidebar({ outline, onJumpTo }) {
           <div key={i}>
             {/* Section/Agent header */}
             <button
-              className="w-full flex items-center gap-1 px-2 py-1 text-left hover:bg-white/5 text-[10px]"
+              className="w-full flex items-center gap-1 px-2 py-1 text-left hover:bg-vs-overlay/5 text-[10px]"
               onClick={() => {
                 if (node.children?.length > 0) toggle(i)
                 onJumpTo(node.line)
@@ -152,7 +152,7 @@ function OutlineSidebar({ outline, onJumpTo }) {
             {!collapsed[i] && node.children?.map((child, j) => (
               <button
                 key={j}
-                className="w-full flex items-center gap-1 pl-6 pr-2 py-0.5 text-left hover:bg-white/5 text-[9px]"
+                className="w-full flex items-center gap-1 pl-6 pr-2 py-0.5 text-left hover:bg-vs-overlay/5 text-[9px]"
                 onClick={() => onJumpTo(child.line)}
               >
                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
@@ -173,15 +173,15 @@ function OutlineSidebar({ outline, onJumpTo }) {
 
 function DiffSummary({ diff, onConfirm, onCancel }) {
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 animate-fade-in">
+    <div className="fixed inset-0 z-50 bg-vs-overlay/60 flex items-center justify-center p-4 animate-fade-in">
       <div className="bg-vs-panel border border-vs-border rounded-lg shadow-xl w-full max-w-md">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-vs-border">
-          <h3 className="text-xs font-bold text-white flex items-center gap-2">
+          <h3 className="text-xs font-bold text-vs-heading flex items-center gap-2">
             <FileText size={13} className="text-vs-accent" />
             Xác nhận thay đổi
           </h3>
-          <button onClick={onCancel} className="text-vs-muted hover:text-white">
+          <button onClick={onCancel} className="text-vs-muted hover:text-vs-heading">
             <X size={14} />
           </button>
         </div>
@@ -232,14 +232,14 @@ function DiffSummary({ diff, onConfirm, onCancel }) {
         <div className="flex gap-2 px-4 py-3 border-t border-vs-border">
           <button
             onClick={onConfirm}
-            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-vs-accent text-white
+            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-vs-accent text-vs-heading
                        rounded text-xs font-mono hover:bg-vs-accent2 transition-colors"
           >
             <Check size={11} /> Áp dụng
           </button>
           <button
             onClick={onCancel}
-            className="px-3 py-2 border border-vs-border text-vs-text rounded text-xs font-mono hover:bg-white/5"
+            className="px-3 py-2 border border-vs-border text-vs-text rounded text-xs font-mono hover:bg-vs-overlay/5"
           >
             Hủy
           </button>
@@ -505,7 +505,7 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
           onClick={handleReset}
           disabled={!hasChanges}
           className="flex items-center gap-1 px-2 py-1 text-[10px] font-mono rounded
-                     border border-vs-border text-vs-muted hover:text-white hover:bg-white/5
+                     border border-vs-border text-vs-muted hover:text-vs-heading hover:bg-vs-overlay/5
                      disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           title="Hoàn tác về bản gốc"
         >
@@ -517,7 +517,7 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
         <button
           onClick={() => insertAtCursor(agentTemplate())}
           className="flex items-center gap-1 px-2 py-1 text-[10px] font-mono rounded
-                     border border-vs-border text-vs-muted hover:text-white hover:bg-white/5 transition-colors"
+                     border border-vs-border text-vs-muted hover:text-vs-heading hover:bg-vs-overlay/5 transition-colors"
           title="Thêm agent mới"
         >
           <UserPlus size={10} /> Thêm Agent
@@ -526,7 +526,7 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
         <button
           onClick={() => insertAtCursor(taskTemplate())}
           className="flex items-center gap-1 px-2 py-1 text-[10px] font-mono rounded
-                     border border-vs-border text-vs-muted hover:text-white hover:bg-white/5 transition-colors"
+                     border border-vs-border text-vs-muted hover:text-vs-heading hover:bg-vs-overlay/5 transition-colors"
           title="Thêm task mới"
         >
           <Plus size={10} /> Thêm Task
@@ -571,7 +571,7 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
             className={`flex items-center gap-1 px-2 py-1 text-[10px] font-mono transition-colors ${
               viewMode === 'raw'
                 ? 'bg-vs-accent/20 text-vs-accent'
-                : 'text-vs-muted hover:text-white hover:bg-white/5'
+                : 'text-vs-muted hover:text-vs-heading hover:bg-vs-overlay/5'
             }`}
             title="Chế độ chỉnh sửa"
           >
@@ -582,7 +582,7 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
             className={`flex items-center gap-1 px-2 py-1 text-[10px] font-mono border-l border-vs-border transition-colors ${
               viewMode === 'preview'
                 ? 'bg-vs-accent/20 text-vs-accent'
-                : 'text-vs-muted hover:text-white hover:bg-white/5'
+                : 'text-vs-muted hover:text-vs-heading hover:bg-vs-overlay/5'
             }`}
             title="Xem trước có render"
           >
@@ -594,7 +594,7 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
           <button
             onClick={handleApply}
             className="flex items-center gap-1 px-3 py-1 text-[10px] font-mono font-bold rounded
-                       bg-vs-accent text-white hover:bg-vs-accent2 transition-colors
+                       bg-vs-accent text-vs-heading hover:bg-vs-accent2 transition-colors
                        animate-pulse-subtle"
           >
             <Check size={10} /> Áp dụng thay đổi
@@ -636,10 +636,10 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
           <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-[#444] scrollbar-track-transparent bg-[#1e1e1e]">
             <div
               className="px-8 py-5 text-[12px] leading-relaxed
-                [&_h1]:text-xl [&_h1]:font-bold [&_h1]:text-white [&_h1]:mb-4 [&_h1]:mt-1
+                [&_h1]:text-xl [&_h1]:font-bold [&_h1]:text-vs-heading [&_h1]:mb-4 [&_h1]:mt-1
                 [&_h2]:text-sm [&_h2]:font-bold [&_h2]:text-vs-accent [&_h2]:mb-3 [&_h2]:mt-7
                 [&_h2]:border-b [&_h2]:border-vs-border/50 [&_h2]:pb-1
-                [&_h3]:text-xs [&_h3]:font-bold [&_h3]:text-white [&_h3]:mb-2 [&_h3]:mt-5
+                [&_h3]:text-xs [&_h3]:font-bold [&_h3]:text-vs-heading [&_h3]:mb-2 [&_h3]:mt-5
                 [&_h4]:text-xs [&_h4]:font-semibold [&_h4]:text-yellow-400/90 [&_h4]:mb-2 [&_h4]:mt-4
                 [&_blockquote]:border-l-2 [&_blockquote]:border-vs-accent/60 [&_blockquote]:pl-3
                 [&_blockquote]:my-2.5 [&_blockquote]:text-vs-text/75 [&_blockquote]:italic
@@ -647,7 +647,7 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
                 [&_p]:text-vs-text/80 [&_p]:leading-relaxed [&_p]:mb-3 [&_p]:break-words
                 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-2.5 [&_ul]:mb-3
                 [&_li]:text-vs-text/80 [&_li]:leading-relaxed [&_li]:pb-0.5
-                [&_strong]:text-white [&_strong]:font-semibold
+                [&_strong]:text-vs-heading [&_strong]:font-semibold
                 [&_em]:text-vs-text/70
                 [&_table]:w-full [&_table]:border-collapse [&_table]:text-[11px] [&_table]:mb-3
                 [&_th]:bg-vs-panel [&_th]:px-3 [&_th]:py-1.5 [&_th]:text-left
@@ -677,7 +677,7 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
       </div>
 
       {/* ── Status bar ── */}
-      <div className="flex items-center gap-3 px-3 py-1 bg-[#007acc] text-white text-[10px] font-mono shrink-0">
+      <div className="flex items-center gap-3 px-3 py-1 bg-[#007acc] text-vs-heading text-[10px] font-mono shrink-0">
         {stats && (
           <>
             <span>{stats.agents} agent{stats.agents !== 1 ? 's' : ''}</span>
@@ -685,7 +685,7 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
             <span>
               {stats.tasks} task{stats.tasks !== 1 ? 's' : ''}
               {stats.tasks > 0 && (
-                <span className="ml-1 text-white/70">
+                <span className="ml-1 text-vs-heading/70">
                   ({stats.high > 0 ? `${stats.high}H` : ''}{stats.med > 0 ? ` ${stats.med}M` : ''}{stats.low > 0 ? ` ${stats.low}L` : ''})
                 </span>
               )}
@@ -697,7 +697,7 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
         {hasChanges ? (
           <span className="text-yellow-200">Đã chỉnh sửa</span>
         ) : (
-          <span className="text-white/70">Không thay đổi</span>
+          <span className="text-vs-heading/70">Không thay đổi</span>
         )}
 
         {stats && stats.warnings > 0 ? (
@@ -711,7 +711,7 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
         ) : null}
 
         <div className="flex-1" />
-        <span className="text-white/50">{'Ctrl+S để áp dụng'}</span>
+        <span className="text-vs-heading/50">{'Ctrl+S để áp dụng'}</span>
       </div>
 
       {/* ── Diff Summary Modal ── */}
@@ -727,9 +727,9 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
       {toast && (
         <div className={`fixed bottom-4 right-4 z-50 px-4 py-2 rounded-lg text-xs font-mono shadow-lg
                          animate-fade-in ${
-          toast.type === 'success' ? 'bg-green-600 text-white' :
-          toast.type === 'error' ? 'bg-red-600 text-white' :
-          'bg-[#333] text-white'
+          toast.type === 'success' ? 'bg-green-600 text-vs-heading' :
+          toast.type === 'error' ? 'bg-red-600 text-vs-heading' :
+          'bg-[#333] text-vs-heading'
         }`}>
           {toast.msg}
         </div>

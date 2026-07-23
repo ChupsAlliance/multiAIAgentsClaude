@@ -122,7 +122,7 @@ export function DashboardPage() {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <LayoutDashboard size={18} className="text-vs-accent" />
-              <h1 className="text-xl font-bold text-white">Dashboard</h1>
+              <h1 className="text-xl font-bold text-vs-heading">Dashboard</h1>
             </div>
             <p className="text-vs-muted text-sm">Trạng thái hệ thống và quản lý Claude Agent Teams sessions.</p>
           </div>
@@ -143,7 +143,7 @@ export function DashboardPage() {
                     <Icon size={14} className={colors[status].split(' ')[1]} />
                     <span className="text-xs text-vs-muted font-mono">{label}</span>
                   </div>
-                  <p className="text-sm font-medium text-white font-mono truncate">{value}</p>
+                  <p className="text-sm font-medium text-vs-heading font-mono truncate">{value}</p>
                 </div>
               )
             })}
@@ -178,7 +178,7 @@ export function DashboardPage() {
 
           {/* How to launch */}
           <div>
-            <h2 className="text-white font-semibold mb-3 flex items-center gap-2">
+            <h2 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
               <Terminal size={16} className="text-vs-accent" />
               Cách launch Agent Teams
             </h2>
@@ -200,7 +200,7 @@ export function DashboardPage() {
 
           {/* Quick launch */}
           <div>
-            <h2 className="text-white font-semibold mb-3 flex items-center gap-2">
+            <h2 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
               <Play size={16} className="text-vs-accent" />
               Quick Launch — Mở terminal với Agent Teams
             </h2>
@@ -210,7 +210,7 @@ export function DashboardPage() {
             <div className="flex gap-3">
               <button
                 onClick={() => launchAgentTeam('Hello, I need an agent team. What can you help with?')}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-vs-accent text-white
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-vs-accent text-vs-heading
                   hover:bg-vs-accent2 text-sm transition-colors font-medium"
               >
                 <Terminal size={14} />

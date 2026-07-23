@@ -42,7 +42,7 @@ const LogMessage = memo(function LogMessage({ message }) {
 
       {expanded && (
         <div className="mt-1 ml-3 w-full">
-          <div className="relative rounded border border-vs-border bg-black/30 overflow-hidden">
+          <div className="relative rounded border border-vs-border bg-vs-overlay/30 overflow-hidden">
             <div className="overflow-y-auto overflow-x-auto max-h-72 p-2">
               <pre className="text-[11px] font-mono whitespace-pre-wrap break-all leading-relaxed">
                 {message}
@@ -54,14 +54,14 @@ const LogMessage = memo(function LogMessage({ message }) {
                 <button
                   onClick={handleCopy}
                   className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono
-                             text-vs-muted hover:text-white hover:bg-white/10"
+                             text-vs-muted hover:text-vs-heading hover:bg-vs-overlay/10"
                 >
                   {copied ? <Check size={8} /> : <Copy size={8} />}
                   {copied ? 'Copied!' : 'Copy'}
                 </button>
                 <button
                   onClick={() => setExpanded(false)}
-                  className="px-1.5 py-0.5 rounded text-[9px] font-mono text-vs-muted hover:text-white hover:bg-white/10"
+                  className="px-1.5 py-0.5 rounded text-[9px] font-mono text-vs-muted hover:text-vs-heading hover:bg-vs-overlay/10"
                 >
                   Thu gọn
                 </button>
@@ -96,7 +96,7 @@ const typeIcon = {
 
 const LogEntry = memo(function LogEntry({ entry }) {
   return (
-    <div className="flex gap-2 px-2 py-1 text-[11px] font-mono hover:bg-white/5 rounded overflow-hidden">
+    <div className="flex gap-2 px-2 py-1 text-[11px] font-mono hover:bg-vs-overlay/5 rounded overflow-hidden">
       <span className="text-vs-muted shrink-0 w-[52px] text-[10px]">
         {new Date(entry.timestamp).toLocaleTimeString('vi-VN', { hour12: false })}
       </span>

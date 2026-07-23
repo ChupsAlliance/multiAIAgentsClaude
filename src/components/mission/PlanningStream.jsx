@@ -179,7 +179,7 @@ export const PlanningStream = memo(function PlanningStream({ state, isRunning, o
         <div className="flex items-center justify-between px-4 py-2.5 border-b border-vs-border shrink-0 bg-vs-panel">
           <div className="flex items-center gap-2 min-w-0">
             <Brain size={14} className="text-vs-accent shrink-0 animate-pulse" />
-            <span className="text-xs font-mono text-white font-medium">Lead đang phân tích & lên plan</span>
+            <span className="text-xs font-mono text-vs-heading font-medium">Lead đang phân tích & lên plan</span>
             <span className="text-xs font-mono text-vs-muted truncate hidden sm:inline">
               — {currentPhase}
             </span>

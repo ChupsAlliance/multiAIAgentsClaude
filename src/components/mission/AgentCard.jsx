@@ -70,7 +70,7 @@ export const AgentCard = memo(function AgentCard({ agent, logs = [], isSelected,
               {name.slice(0, 2).toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold text-white break-words">{name}</p>
+              <p className="text-xs font-semibold text-vs-heading break-words">{name}</p>
               <p className="text-[9px] text-vs-muted font-mono break-words">{role}</p>
             </div>
           </div>
@@ -94,7 +94,7 @@ export const AgentCard = memo(function AgentCard({ agent, logs = [], isSelected,
               className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-mono transition-colors ${
                 isSelected
                   ? 'bg-vs-accent/30 text-vs-accent'
-                  : 'bg-white/5 text-vs-muted hover:bg-vs-accent/20 hover:text-vs-accent'
+                  : 'bg-vs-overlay/5 text-vs-muted hover:bg-vs-accent/20 hover:text-vs-accent'
               }`}
             >
               <Eye size={9} />
@@ -103,7 +103,7 @@ export const AgentCard = memo(function AgentCard({ agent, logs = [], isSelected,
             {agentLogs.length > 0 && (
               <button
                 onClick={() => setExpanded(!expanded)}
-                className="p-0.5 hover:bg-white/10 rounded"
+                className="p-0.5 hover:bg-vs-overlay/10 rounded"
                 title={expanded ? 'Thu gọn' : 'Xem nhanh'}
               >
                 {expanded
@@ -125,7 +125,7 @@ export const AgentCard = memo(function AgentCard({ agent, logs = [], isSelected,
 
         {/* Current task */}
         {current_task && (
-          <div className="mt-1 px-2 py-1 bg-black/20 rounded text-[10px] text-vs-text font-mono leading-relaxed truncate overflow-hidden">
+          <div className="mt-1 px-2 py-1 bg-vs-overlay/20 rounded text-[10px] text-vs-text font-mono leading-relaxed truncate overflow-hidden">
             {current_task}
           </div>
         )}

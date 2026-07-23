@@ -5,7 +5,7 @@ export function SectionHeader({ number, titleVi, titleEn, description }) {
         <span className="text-vs-muted font-mono text-sm shrink-0">
           {String(number).padStart(2, '0')}.
         </span>
-        <h2 className="text-2xl font-bold text-white leading-tight">{titleVi}</h2>
+        <h2 className="text-2xl font-bold text-vs-heading leading-tight">{titleVi}</h2>
       </div>
       {titleEn && (
         <p className="text-vs-keyword font-mono text-sm ml-8">{titleEn}</p>

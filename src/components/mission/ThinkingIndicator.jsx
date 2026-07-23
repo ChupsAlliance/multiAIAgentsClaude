@@ -53,7 +53,7 @@ export function ThinkingIndicator({ log = [], isRunning }) {
 
       {/* Phase text */}
       <div className="text-center space-y-1">
-        <p className="text-sm text-white font-medium">
+        <p className="text-sm text-vs-heading font-medium">
           {THINKING_PHASES[phaseIndex]}{dots}
         </p>
         <p className="text-[10px] text-vs-muted font-mono">

@@ -32,11 +32,11 @@ export function BusinessSummary({ business, agents = [], onJumpToAgent }) {
       <button
         type="button"
         onClick={() => setCollapsed(c => !c)}
-        className="w-full flex items-center gap-1.5 px-3 py-1.5 text-left hover:bg-white/5 transition-colors"
+        className="w-full flex items-center gap-1.5 px-3 py-1.5 text-left hover:bg-vs-overlay/5 transition-colors"
       >
         {collapsed ? <ChevronRight size={12} className="text-vs-accent" /> : <ChevronDown size={12} className="text-vs-accent" />}
         <BookOpen size={12} className="text-vs-accent" />
-        <span className="text-[11px] font-bold text-white">Nghiệp vụ</span>
+        <span className="text-[11px] font-bold text-vs-heading">Nghiệp vụ</span>
         <span className="ml-2 text-[9px] text-vs-muted font-mono">(cho người review — không kỹ thuật)</span>
       </button>
 

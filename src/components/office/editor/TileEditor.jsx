@@ -379,7 +379,7 @@ export function TileEditor({ layout, isRunning, onSave, onClose }) {
             <button
               onClick={handleSave}
               disabled={isRunning}
-              className="px-3 py-1.5 text-xs rounded bg-indigo-600 hover:bg-indigo-500 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="px-3 py-1.5 text-xs rounded bg-indigo-600 hover:bg-indigo-500 text-vs-heading transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Save Layout
             </button>

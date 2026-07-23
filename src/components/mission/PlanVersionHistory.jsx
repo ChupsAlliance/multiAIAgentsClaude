@@ -129,7 +129,7 @@ export function PlanVersionHistory({ missionId, currentAgents, currentTasks, onR
             <button
               onClick={handleRollbackConfirm}
               disabled={loading}
-              className="px-3 py-1.5 text-xs font-mono bg-vs-accent text-white rounded hover:bg-vs-accent/80 disabled:opacity-50"
+              className="px-3 py-1.5 text-xs font-mono bg-vs-accent text-vs-heading rounded hover:bg-vs-accent/80 disabled:opacity-50"
             >
               {loading ? 'Đang khôi phục...' : 'Khôi phục'}
             </button>

@@ -53,7 +53,7 @@ function DiffViewer({ fc, compact = false }) {
             </div>
             <button
               onClick={() => handleCopy(fc.diff_new || '')}
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono text-vs-muted hover:text-white hover:bg-white/10 transition-colors"
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono text-vs-muted hover:text-vs-heading hover:bg-vs-overlay/10 transition-colors"
             >
               {copied ? <Check size={8} /> : <Copy size={8} />}
               {copied ? 'Copied!' : 'Copy new'}
@@ -105,7 +105,7 @@ function DiffViewer({ fc, compact = false }) {
             </div>
             <button
               onClick={() => handleCopy(fc.content_preview)}
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono text-vs-muted hover:text-white hover:bg-white/10 transition-colors"
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono text-vs-muted hover:text-vs-heading hover:bg-vs-overlay/10 transition-colors"
             >
               {copied ? <Check size={8} /> : <Copy size={8} />}
               {copied ? 'Copied!' : 'Copy'}
@@ -180,7 +180,7 @@ function FileExpandedView({ fc, onClose }) {
               className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono transition-colors ${
                 selectedIdx === -1
                   ? 'bg-vs-accent/20 border border-vs-accent text-vs-accent'
-                  : 'bg-vs-panel/50 border border-vs-border text-vs-muted hover:border-vs-accent/40 hover:text-white'
+                  : 'bg-vs-panel/50 border border-vs-border text-vs-muted hover:border-vs-accent/40 hover:text-vs-heading'
               }`}
             >
               <Hash size={7} />
@@ -198,7 +198,7 @@ function FileExpandedView({ fc, onClose }) {
                     selectedIdx === idx
                       ? 'bg-vs-accent/20 border border-vs-accent text-vs-accent'
                       : hasDiff
-                        ? 'bg-vs-panel/50 border border-vs-border text-vs-muted hover:border-vs-accent/40 hover:text-white'
+                        ? 'bg-vs-panel/50 border border-vs-border text-vs-muted hover:border-vs-accent/40 hover:text-vs-heading'
                         : 'bg-vs-panel/20 border border-vs-border/30 text-vs-muted/30 cursor-not-allowed'
                   }`}
                   title={`${h.action} by ${h.agent} at ${formatTime(h.timestamp)}${!hasDiff ? ' (no diff data)' : ''}`}
@@ -220,7 +220,7 @@ function FileExpandedView({ fc, onClose }) {
       <div className="flex justify-end mt-1 px-1">
         <button
           onClick={onClose}
-          className="flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-mono text-vs-muted hover:text-white hover:bg-white/10 transition-colors"
+          className="flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-mono text-vs-muted hover:text-vs-heading hover:bg-vs-overlay/10 transition-colors"
         >
           <X size={8} /> Close
         </button>
@@ -266,8 +266,8 @@ export const FileChangesPanel = memo(function FileChangesPanel({ changes = [] })
                     if (clickable) setExpandedPath(isExpanded ? null : fc.path)
                   }}
                   className={`flex items-center gap-2 px-2 py-1.5 text-[11px] font-mono rounded transition-colors
-                    ${clickable ? 'cursor-pointer hover:bg-white/5' : ''}
-                    ${isExpanded ? 'bg-white/5 border-l-2 border-vs-accent' : ''}`}
+                    ${clickable ? 'cursor-pointer hover:bg-vs-overlay/5' : ''}
+                    ${isExpanded ? 'bg-vs-overlay/5 border-l-2 border-vs-accent' : ''}`}
                 >
                   {/* Expand indicator */}
                   <span className="w-3 shrink-0 text-vs-muted">
@@ -278,7 +278,7 @@ export const FileChangesPanel = memo(function FileChangesPanel({ changes = [] })
                     )}
                   </span>
                   {actionIcon[fc.action] || actionIcon.modified}
-                  <span className={`flex-1 min-w-0 truncate ${isExpanded ? 'text-white' : 'text-vs-text'}`}>
+                  <span className={`flex-1 min-w-0 truncate ${isExpanded ? 'text-vs-heading' : 'text-vs-text'}`}>
                     {fileName(fc.path)}
                   </span>
                   {editCount > 1 && (

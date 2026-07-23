@@ -86,7 +86,7 @@ export function DocsPage() {
         {showTop && (
           <button
             onClick={() => document.getElementById('main-scroll')?.scrollTo({ top: 0, behavior: 'smooth' })}
-            className="fixed bottom-6 right-6 z-50 p-3 rounded-full bg-vs-accent hover:bg-vs-accent2 text-white shadow-lg transition-colors hover:scale-110 no-drag"
+            className="fixed bottom-6 right-6 z-50 p-3 rounded-full bg-vs-accent hover:bg-vs-accent2 text-vs-heading shadow-lg transition-colors hover:scale-110 no-drag"
           >
             <ArrowUp size={16} />
           </button>

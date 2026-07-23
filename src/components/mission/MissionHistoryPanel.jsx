@@ -34,7 +34,7 @@ function HistoryItem({ item, onViewDetail, onReplay }) {
     <div className="border border-vs-border rounded-md overflow-hidden">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/5 transition-colors text-left"
+        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-vs-overlay/5 transition-colors text-left"
       >
         <StatusIcon status={item.status} />
         <div className="flex-1 min-w-0">
@@ -69,7 +69,7 @@ function HistoryItem({ item, onViewDetail, onReplay }) {
       </button>
 
       {expanded && (
-        <div className="px-3 pb-3 border-t border-vs-border bg-black/20 space-y-2">
+        <div className="px-3 pb-3 border-t border-vs-border bg-vs-overlay/20 space-y-2">
           {/* Project path */}
           {item.project_path && (
             <div className="flex items-center gap-1.5 pt-2">
@@ -133,7 +133,7 @@ function HistoryItem({ item, onViewDetail, onReplay }) {
               {onViewDetail && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onViewDetail(item) }}
-                  className="flex items-center gap-1.5 text-[10px] font-mono text-vs-accent hover:text-white transition-colors"
+                  className="flex items-center gap-1.5 text-[10px] font-mono text-vs-accent hover:text-vs-heading transition-colors"
                 >
                   <Eye size={9} />
                   Xem chi tiết
@@ -186,7 +186,7 @@ export function MissionHistoryPanel({ onViewHistory, onContinueFromHistory }) {
     <div className="border-t border-vs-border">
       <button
         onClick={() => setCollapsed(!collapsed)}
-        className="w-full flex items-center justify-between px-4 py-1.5 hover:bg-white/5 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-1.5 hover:bg-vs-overlay/5 transition-colors"
       >
         <span className="flex items-center gap-1.5 text-[10px] font-mono text-vs-muted uppercase tracking-wider">
           <Clock size={10} />
@@ -212,7 +212,7 @@ export function MissionHistoryPanel({ onViewHistory, onContinueFromHistory }) {
               {missionHistory.length > 5 && (
                 <button
                   onClick={() => setShowAll(!showAll)}
-                  className="w-full text-center text-[10px] font-mono text-vs-accent hover:text-white transition-colors py-1.5"
+                  className="w-full text-center text-[10px] font-mono text-vs-accent hover:text-vs-heading transition-colors py-1.5"
                 >
                   {showAll ? 'Thu gọn' : `Xem tất cả (${missionHistory.length})`}
                 </button>
