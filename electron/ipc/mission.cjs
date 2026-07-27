@@ -835,8 +835,8 @@ async function runClaudeForHtml(prompt) {
 
     const timer = setTimeout(() => {
       proc.kill();
-      reject(new Error('Mockup generation timed out after 120s'));
-    }, 120000);
+      reject(new Error('Mockup generation timed out after 180s'));
+    }, 180000);
 
     proc.on('close', () => {
       clearTimeout(timer);
@@ -924,17 +924,17 @@ async function spawnMockupGenerator(title, spec, missionId, sendToWindow) {
 
   const armWarningTimers = () => {
     warn30 = setTimeout(() => {
-      const entry = makeLogEntry(now(), 'System', 'Mockup đang generate (60s)...', 'info');
+      const entry = makeLogEntry(now(), 'System', 'Mockup đang generate (90s)...', 'info');
       if (missionState) missionState.log.push(entry);
       sendToWindow('mission:log', entry);
-    }, 60000);
+    }, 90000);
 
     warn50 = setTimeout(() => {
       const entry = makeLogEntry(now(), 'System',
         'Mockup sắp timeout — nếu thất bại sẽ tiếp tục planning tự động', 'info');
       if (missionState) missionState.log.push(entry);
       sendToWindow('mission:log', entry);
-    }, 100000);
+    }, 150000);
   };
 
   const cleanup = () => { clearTimeout(warn30); clearTimeout(warn50); };

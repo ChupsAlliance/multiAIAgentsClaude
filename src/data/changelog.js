@@ -8,6 +8,19 @@
 
 export const changelog = [
   {
+    version: '0.11.2',
+    date: '2026-07-27',
+    title: 'Fix Bug: Mockup Timeout 180s',
+    highlights: [
+      'Timeout mockup 120s (bản 0.11.1) vẫn chưa đủ cho mockup nhiều màn hình — đo thực tế lên tới 141s',
+      'Tăng lên 180s để có đủ margin an toàn cho các mockup phức tạp',
+    ],
+    items: [
+      { type: 'fixed', badge: 'Mockup',
+        text: 'Tăng timeout tạo mockup từ 120s lên 180s sau khi đo thực tế cho thấy mockup nhiều màn hình/chi tiết có thể mất tới 141s, sát mốc cũ' },
+    ],
+  },
+  {
     version: '0.11.1',
     date: '2026-07-27',
     title: 'Fix Bug: Business Summary & Mockup Retry',

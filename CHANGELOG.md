@@ -10,6 +10,14 @@ Format dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.11.2] — 2026-07-27
+
+### Sửa lỗi
+
+- **Mockup vẫn timeout sau khi tăng lên 120s ở bản 0.11.1**: đo thực tế cho thấy mockup nhiều màn hình/chi tiết (vd. 3 màn hình UI) có thể mất tới 141 giây, sát hoặc vượt mốc 120s. Tăng tiếp timeout lên **180 giây** để có đủ margin an toàn, chỉnh lại mốc cảnh báo tiến độ (90s/150s).
+
+---
+
 ## [0.11.1] — 2026-07-27
 
 ### Sửa lỗi
