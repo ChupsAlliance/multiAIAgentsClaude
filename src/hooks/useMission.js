@@ -575,7 +575,7 @@ export function useMission() {
         setIsRunning(['running', 'launching', 'deploying'].includes(statusLower))
         if (fixedState.phase === 'ReviewPlan') {
           const planAgents = fixedState.agents.filter(a => a.name !== 'Lead')
-          setPlanReady({ agents: planAgents, tasks: fixedState.tasks })
+          setPlanReady({ agents: planAgents, tasks: fixedState.tasks, mission_context: fixedState.mission_context || null })
         }
         // Hydrate pending questions (interactive mode session resume)
         if (fixedState.pendingQuestions && fixedState.pendingQuestions.length > 0) {

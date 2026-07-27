@@ -835,8 +835,8 @@ async function runClaudeForHtml(prompt) {
 
     const timer = setTimeout(() => {
       proc.kill();
-      reject(new Error('Mockup generation timed out after 60s'));
-    }, 60000);
+      reject(new Error('Mockup generation timed out after 120s'));
+    }, 120000);
 
     proc.on('close', () => {
       clearTimeout(timer);
@@ -924,17 +924,17 @@ async function spawnMockupGenerator(title, spec, missionId, sendToWindow) {
 
   const armWarningTimers = () => {
     warn30 = setTimeout(() => {
-      const entry = makeLogEntry(now(), 'System', 'Mockup đang generate (30s)...', 'info');
+      const entry = makeLogEntry(now(), 'System', 'Mockup đang generate (60s)...', 'info');
       if (missionState) missionState.log.push(entry);
       sendToWindow('mission:log', entry);
-    }, 30000);
+    }, 60000);
 
     warn50 = setTimeout(() => {
       const entry = makeLogEntry(now(), 'System',
         'Mockup sắp timeout — nếu thất bại sẽ tiếp tục planning tự động', 'info');
       if (missionState) missionState.log.push(entry);
       sendToWindow('mission:log', entry);
-    }, 50000);
+    }, 100000);
   };
 
   const cleanup = () => { clearTimeout(warn30); clearTimeout(warn50); };
@@ -3189,7 +3189,11 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
             savePlanVersionInternal(missionState.id, 'replan', parsed.agents, parsed.tasks)
               .catch(e => console.error('[replan_mission] savePlanVersionInternal error:', e));
           }
-          resolve({ agents: parsed.agents, tasks: parsed.tasks });
+          resolve({
+            agents: parsed.agents,
+            tasks: parsed.tasks,
+            mission_context: parsed.mission_context || (missionState ? missionState.mission_context : null) || null,
+          });
         } else {
           reject(new Error(`Failed to parse re-plan output: ${fullText}\n${stderrText}`));
         }

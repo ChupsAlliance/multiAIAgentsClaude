@@ -444,7 +444,7 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
       assigned_agent: t.assigned_agent,
     }))
 
-    onApply(newAgents, newTasks)
+    onApply(newAgents, newTasks, missionContext)
     setOriginalMd(markdown)
     setHasChanges(false)
     showToast('Đã áp dụng thay đổi', 'success')
@@ -458,7 +458,7 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
         tasks: newTasks,
       }).catch(err => console.error('Failed to save plan version:', err))
     }
-  }, [markdown, agents, onApply, missionId])
+  }, [markdown, agents, onApply, missionId, missionContext])
 
   // Reset to original
   const handleReset = useCallback(() => {
@@ -467,7 +467,7 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
 
   // Apply rollback from version history
   const handleApplyRollback = useCallback((rolledBackAgents, rolledBackTasks) => {
-    onApply(rolledBackAgents, rolledBackTasks)
+    onApply(rolledBackAgents, rolledBackTasks, missionContext)
     const newMd = planToMarkdown(rolledBackAgents, rolledBackTasks, { projectPath, requirement, mission_context: missionContext })
     setMarkdown(newMd)
     setOriginalMd(newMd)

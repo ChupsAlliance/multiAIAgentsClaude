@@ -72,8 +72,12 @@ export function MissionControlPage() {
   }, [])
 
   // PlanDocument → Apply changes → update planReady state
-  const handleDocumentApply = useCallback((updatedAgents, updatedTasks) => {
-    setPlanReady({ agents: updatedAgents, tasks: updatedTasks })
+  const handleDocumentApply = useCallback((updatedAgents, updatedTasks, updatedMissionContext) => {
+    setPlanReady(prev => ({
+      agents: updatedAgents,
+      tasks: updatedTasks,
+      mission_context: updatedMissionContext !== undefined ? updatedMissionContext : prev?.mission_context || null,
+    }))
     setPlanViewTab('visual') // Switch to visual tab to verify
   }, [setPlanReady])
 

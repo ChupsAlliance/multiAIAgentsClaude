@@ -8,6 +8,21 @@
 
 export const changelog = [
   {
+    version: '0.11.1',
+    date: '2026-07-27',
+    title: 'Fix Bug: Business Summary & Mockup Retry',
+    highlights: [
+      'Fix Business Summary panel bị mất khỏi Mission Plan sau khi Apply/rollback/reload/replan',
+      'Fix mockup generation retry luôn fail 100% do timeout 60s quá ngắn — tăng lên 120s',
+    ],
+    items: [
+      { type: 'fixed', badge: 'Mission Plan',
+        text: 'Business Summary panel ("Nghiệp vụ") không còn biến mất khi bấm Apply changes, rollback version, reload app giữa lúc review plan, hoặc replan — mission_context được giữ nguyên xuyên suốt các thao tác này' },
+      { type: 'fixed', badge: 'Mockup',
+        text: 'Tăng timeout tạo mockup từ 60s lên 120s để phù hợp với thời gian model haiku cần hoàn thành, khắc phục tình trạng cả 3 lần retry đều fail giống hệt nhau' },
+    ],
+  },
+  {
     version: '0.11.0',
     date: '2026-07-23',
     title: 'Light Theme & Cải tiến Playground',

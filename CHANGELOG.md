@@ -10,6 +10,15 @@ Format dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.11.1] — 2026-07-27
+
+### Sửa lỗi
+
+- **Business Summary panel biến mất khỏi Mission Plan**: 4 điểm trong code từng vô tình xóa `mission_context` (thông tin nghiệp vụ) khỏi state mỗi khi: bấm "Apply changes" trong tab Tài liệu, rollback về version cũ, mở lại app trong lúc đang review plan, hoặc replan — khiến panel "Nghiệp vụ" biến mất kể cả với mission mới tạo. Giờ `mission_context` được giữ nguyên xuyên suốt các thao tác này.
+- **Mockup generation retry luôn thất bại**: timeout cứng 60 giây quá ngắn so với thời gian model `haiku` cần để tạo xong 1 mockup HTML hoàn chỉnh, khiến cả 3 lần retry đều fail giống hệt nhau. Tăng timeout lên 120 giây, đồng thời chỉnh lại mốc cảnh báo tiến độ trong log (60s/100s thay vì 30s/50s).
+
+---
+
 ## [0.11.0] — 2026-07-23
 
 ### Thêm mới — Light Theme (giao diện sáng)
