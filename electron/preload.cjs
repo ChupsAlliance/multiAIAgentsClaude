@@ -20,6 +20,12 @@ const ALLOWED_COMMANDS = [
   'stop_mission', 'reset_mission', 'get_mission_state', 'get_incomplete_missions',
   'update_agent_model',
   'read_planning_template', 'answer_question', 'read_superpowers_skill', 'mockup_respond', 'retry_agent',
+  'save_plan_version', 'get_plan_versions', 'export_plan_markdown', 'export_plan_pdf',
+  // recording (ghi lại business events)
+  'recording_start', 'recording_stop_and_save', 'recording_discard', 'recording_status',
+  'list_recordings', 'get_recording', 'delete_recording', 'rename_recording',
+  // replay (phát lại recording)
+  'replay_start', 'replay_pause', 'replay_resume', 'replay_seek', 'replay_stop',
   // office
   'load_office_layout', 'save_office_layout',
   // pixel-agents persistence
@@ -33,6 +39,8 @@ const ALLOWED_EVENTS = [
   'mission:plan-ready', 'mission:agent-message', 'mission:team-event',
   'mission:task-reassigned', 'mission:question', 'mission:answer-sent',
   'mission:mockup',
+  // replay playback progress (thanh tua thời gian thực)
+  'replay:progress',
   'claude-output',
 ];
 

@@ -29,3 +29,8 @@ release/
 *.zip
 data/
 .superpowers/
+
+# Playwright
+/playwright-report/
+/test-results/
+/blob-report/

@@ -13,6 +13,11 @@ const path        = require('path');
 const os          = require('os');
 const http        = require('http');
 
+// ── Recording / Replay modules ─────────────────────────────────
+const recordingSchema = require('../lib/recordingSchema.cjs');
+const recordingStore  = require('../lib/recordingStore.cjs');
+const replayEngine    = require('../lib/replayEngine.cjs');
+
 // ── Prompt templates (loaded once at startup) ──────────────────
 // Dev: electron/prompts/   Prod (packaged): resources/prompts/
 function promptPath(filename) {
@@ -36,6 +41,11 @@ let watcherInterval = null; // setInterval for file watcher
 let autosaveInterval = null; // setInterval for periodic snapshot saves
 let agentTeamsCompletionTimer = null; // safety auto-complete timer for agent_teams mode
 const mockupServers = {};  // missionId → http.Server (cleanup on stop/reset)
+
+// ── Recording capture state ──
+// activeRecording = null khi không ghi; ngược lại:
+//   { startedAt, missionId, events: [] }
+let activeRecording = null;
 
 // ── Agent stuck detection ──
 let stuckCheckerInterval = null;
@@ -1253,6 +1263,34 @@ function tryParsePlanFromBuffer(buffer) {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// tryRecoverDanglingQuestion — Lead sometimes ends its turn right after
+// writing <<<QUESTION>>>{...} without the <<<END_QUESTION>>> /
+// <<<QUESTIONS_END>>> terminator markers the prompt asks for. When that
+// happens the normal marker-based detection never fires and the mission
+// falls through to "no plan found" even though Lead asked a legitimate
+// question. Recover it here as a last resort once the process has
+// already exited (no more output is coming, so the JSON we have is final).
+// Returns an array of question objects, or null if nothing recoverable.
+// ─────────────────────────────────────────────────────────────────
+function tryRecoverDanglingQuestion(buffer) {
+  const startIdx = buffer.lastIndexOf('<<<QUESTION>>>');
+  if (startIdx < 0) return null;
+
+  let jsonText = buffer.slice(startIdx + '<<<QUESTION>>>'.length);
+  const endMarkerIdx = jsonText.indexOf('<<<END_QUESTION>>>');
+  if (endMarkerIdx >= 0) jsonText = jsonText.slice(0, endMarkerIdx);
+
+  const js = jsonText.indexOf('{');
+  const je = jsonText.lastIndexOf('}');
+  if (js < 0 || je <= js) return null;
+
+  const parsed = tryJsonParse(jsonText.slice(js, je + 1));
+  if (!parsed || !parsed.question) return null;
+
+  return [parsed];
+}
+
+// ─────────────────────────────────────────────────────────────────
 // applyPlanToState — update missionState from plan JSON + emit
 // ─────────────────────────────────────────────────────────────────
 function applyPlanToState(planJson, planNow, logMsg, sendToWindow) {
@@ -1560,6 +1598,42 @@ function readProcessStdout_launch(proc, missionId, sendToWindow, attemptCtx = {}
               }
             }
 
+            // Recover a question Lead asked but never closed with
+            // <<<END_QUESTION>>>/<<<QUESTIONS_END>>> before ending its turn.
+            let dangledUnrecovered = false;
+            if (!planEmitted && questionBatch.length === 0) {
+              const danglingBuf = questionTextBuf || fullTextBuf;
+              const recovered = tryRecoverDanglingQuestion(danglingBuf);
+              if (recovered) {
+                handleQuestionBatch(recovered, proc, sendToWindow);
+                if (missionState && missionState.status === 'WaitingForAnswer') break;
+              } else if (danglingBuf.includes('<<<QUESTION>>>')) {
+                // Lead was clearly mid-question (marker present) but the JSON
+                // after it is malformed/truncated — not recoverable by the
+                // lenient parser. Safety net: retry the spawn instead of
+                // reporting "no plan found", since re-running usually lets
+                // Lead complete the marker cleanly.
+                dangledUnrecovered = true;
+              }
+            }
+
+            if (dangledUnrecovered && attemptCtx && attemptCtx.retryInfo) {
+              const { attempt, maxAttempts, backoffMs, retrySpawn } = attemptCtx.retryInfo;
+              if (attempt < maxAttempts) {
+                const delay = backoffMs[attempt - 1] ?? backoffMs[backoffMs.length - 1];
+                const entry = makeLogEntry(ts, 'System',
+                  `⚠ Lead bị cắt giữa câu hỏi (thiếu marker đóng), đang thử lại lần ${attempt}/${maxAttempts} sau ${delay / 1000}s...`, 'info');
+                if (missionState) {
+                  missionState.log.push(entry);
+                  missionState.status = 'RetryingDanglingQuestion';
+                }
+                sendToWindow('mission:log', entry);
+                try { proc.kill(); } catch (_) {}
+                setTimeout(() => retrySpawn(attempt + 1, attemptCtx.sessionId || null), delay);
+                break;
+              }
+            }
+
             if (!planEmitted) {
               // No plan found — classify the error
               const isConnErr  = /ConnectionRefused|Unable to connect to API|ECONNREFUSED|connection refused|Network error|401|authentication/i.test(resultText);
@@ -1646,6 +1720,14 @@ function readProcessStderr(proc, sendToWindow, attemptCtx = {}) {
 // ─────────────────────────────────────────────────────────────────
 function watchProcessExit_launch(proc, missionId, sendToWindow, retryInfo = null) {
   proc.on('close', (code) => {
+    // This proc was superseded by a newer spawn (e.g. answer_question's
+    // killChild() + resume) before its own close event had a chance to
+    // fire. The kill signal is async, so the old process can still close
+    // after childProcess has already moved on to the new one — acting on
+    // it here would incorrectly mark the mission Completed/Failed while
+    // the new process is still actively running.
+    if (proc !== childProcess) return;
+
     const currentPhase = missionState ? missionState.phase : 'Planning';
 
     if (currentPhase === 'ReviewPlan') {
@@ -1671,6 +1753,12 @@ function watchProcessExit_launch(proc, missionId, sendToWindow, retryInfo = null
         'Planning paused — review the UI mockup in your browser, then approve or send feedback', 'info');
       missionState.log.push(entry);
       sendToWindow('mission:log', entry);
+      return;
+    }
+
+    // Dangling-question safety-net retry already scheduled its own respawn
+    // (readProcessStdout_launch's result-case handler) — don't mark Completed/Failed here.
+    if (missionState && missionState.status === 'RetryingDanglingQuestion') {
       return;
     }
 
@@ -2246,6 +2334,32 @@ function readProcessStdout_deploy(proc, sendToWindow, isContMode, attemptCtx = {
       }
     } catch (_) {}
 
+    // Recover a question Lead asked but never closed with
+    // <<<END_QUESTION>>>/<<<QUESTIONS_END>>> before ending its turn — same
+    // fragility as the Planning-phase reader, but here it would otherwise
+    // let watchProcessExit_deploy mark the mission Completed/Failed while
+    // Lead was actually waiting on an answer.
+    if (missionState.status === 'Running' && questionBatch.length === 0) {
+      const recovered = tryRecoverDanglingQuestion(questionTextBuf);
+      if (recovered) {
+        handleQuestionBatch(recovered, proc, sendToWindow);
+      } else if (questionTextBuf.includes('<<<QUESTION>>>') && attemptCtx && attemptCtx.retryInfo) {
+        // Marker present but JSON malformed/truncated — not recoverable by the
+        // lenient parser. Safety net: retry the spawn instead of letting
+        // watchProcessExit_deploy mark the mission Completed/Failed.
+        const { attempt, maxAttempts, backoffMs, retrySpawn } = attemptCtx.retryInfo;
+        if (attempt < maxAttempts) {
+          const delay = backoffMs[attempt - 1] ?? backoffMs[backoffMs.length - 1];
+          const entry = makeLogEntry(ts, 'System',
+            `⚠ Lead bị cắt giữa câu hỏi (thiếu marker đóng), đang thử lại lần ${attempt}/${maxAttempts} sau ${delay / 1000}s...`, 'info');
+          missionState.log.push(entry);
+          sendToWindow('mission:log', entry);
+          missionState.status = 'RetryingDanglingQuestion'; // watchProcessExit_deploy's close handler must not mark Completed/Failed for this status
+          setTimeout(() => retrySpawn(attempt + 1, attemptCtx.sessionId || null), delay);
+        }
+      }
+    }
+
     // Don't mark completed here — let watchProcessExit_deploy handle it
     // when the process actually exits. This prevents premature "Done" state.
   });
@@ -2256,6 +2370,14 @@ function readProcessStdout_deploy(proc, sendToWindow, isContMode, attemptCtx = {
 // ─────────────────────────────────────────────────────────────────
 function watchProcessExit_deploy(proc, missionId, sendToWindow, retryInfo = null) {
   proc.on('close', (code) => {
+    // This proc was superseded by a newer spawn (e.g. answer_question's
+    // killChild() + resume) before its own close event had a chance to
+    // fire. The kill signal is async, so the old process can still close
+    // after childProcess has already moved on to the new one — acting on
+    // it here would incorrectly mark the mission Completed/Failed while
+    // the new process is still actively running.
+    if (proc !== childProcess) return;
+
     const ts = now();
     if (!missionState) return;
 
@@ -2268,6 +2390,12 @@ function watchProcessExit_deploy(proc, missionId, sendToWindow, retryInfo = null
       missionState.log.push(entry);
       sendToWindow('mission:log', entry);
       // Keep phase='Executing', status='WaitingForAnswer', don't emit completed
+      return;
+    }
+
+    // Dangling-question safety-net retry already scheduled its own respawn
+    // (readProcessStdout_deploy's rl close handler) — don't mark Completed/Failed here.
+    if (missionState.status === 'RetryingDanglingQuestion') {
       return;
     }
 
@@ -2405,14 +2533,37 @@ async function savePlanVersionInternal(missionId, trigger, agents, tasks) {
 // ═════════════════════════════════════════════════════════════════
 module.exports = function registerMission(getMainWindow) {
 
-  // Helper: safely send events to renderer
+  // Helper: safely send events to renderer.
+  // Nếu đang ghi (activeRecording != null) thì append event vào buffer
+  // kèm relativeTimestamp — KHÔNG thay đổi hành vi gửi tới renderer.
+  // Bỏ qua kênh phụ 'replay:*' để không tự ghi lại tiến trình replay.
   function sendToWindow(channel, data) {
+    if (activeRecording && typeof channel === 'string' && !channel.startsWith('replay:')) {
+      try {
+        activeRecording.events.push(
+          recordingSchema.createEvent(Date.now() - activeRecording.startedAt, channel, data)
+        );
+      } catch (_) {}
+    }
     try {
       const win = getMainWindow();
       if (win && !win.isDestroyed()) {
         win.webContents.send(channel, data);
       }
     } catch (_) {}
+  }
+
+  // Khởi tạo replay engine với sendToWindow (đúng channel gốc) và
+  // 1 hàm kiểm tra mission thật có đang chạy hay không.
+  replayEngine.init({
+    sendToWindow,
+    isMissionRunning: () =>
+      !!(missionState && (missionState.status === 'Running' || missionState.status === 'Launching')),
+  });
+
+  // Helper nội bộ: huỷ recording đang ghi mà không lưu.
+  function discardActiveRecording() {
+    activeRecording = null;
   }
 
   // ── launch_mission ─────────────────────────────────────────────
@@ -2494,6 +2645,30 @@ module.exports = function registerMission(getMainWindow) {
       forked_from_desc: historyState ? (historyState.description || null) : undefined,
     };
 
+    // Full prompt gửi tới claude (dùng cả cho recording:init snapshot).
+    const fullPrompt = (prompt || '') + previousWorkSection;
+
+    // Nếu đang ghi recording → ghi event khởi tạo 'recording:init' NGAY
+    // trước khi phát bất kỳ event nào, để replay dựng lại state ban đầu.
+    if (activeRecording) {
+      activeRecording.missionId = missionId;
+      activeRecording.startedAt = ts;
+      activeRecording.events.push(
+        recordingSchema.createInitEvent({
+          prompt: fullPrompt,
+          description: description || '',
+          model: modelArg,
+          projectPath: projectPath || '',
+          executionMode: execMode,
+          missionState: {
+            agents: missionState.agents,
+            tasks: missionState.tasks,
+            mission_context: missionState.mission_context || null,
+          },
+        })
+      );
+    }
+
     sendToWindow('mission:status', { mission_id: missionId, status: 'launching' });
     // Reset frontend agent list
     sendToWindow('mission:agent-spawned', {
@@ -2503,8 +2678,6 @@ module.exports = function registerMission(getMainWindow) {
     // Spawn claude -p — planning phase only: do NOT enable AGENT_TEAMS here.
     // If AGENT_TEAMS=1 is set, Lead gains the Agent tool and will spawn sub-agents
     // directly, skipping our plan-review flow entirely.
-    const fullPrompt = (prompt || '') + previousWorkSection;
-
     const attemptSpawnLaunch = (attempt, resumeSessionId) => {
       const spawnArgs = resumeSessionId
         ? ['-p', '--resume', resumeSessionId, '--dangerously-skip-permissions', '--model', modelArg,
@@ -2538,6 +2711,7 @@ module.exports = function registerMission(getMainWindow) {
         attemptCtx, attempt, maxAttempts: 3, backoffMs: [30000, 60000, 120000],
         retrySpawn: (nextAttempt, nextSessionId) => attemptSpawnLaunch(nextAttempt, nextSessionId),
       };
+      attemptCtx.retryInfo = retryInfo;
 
       readProcessStdout_launch(proc, missionId, sendToWindow, attemptCtx);
       readProcessStderr(proc, sendToWindow, attemptCtx);
@@ -2746,6 +2920,7 @@ module.exports = function registerMission(getMainWindow) {
         attemptCtx, attempt, maxAttempts: 3, backoffMs: [30000, 60000, 120000],
         retrySpawn: (nextAttempt, nextSessionId) => attemptSpawnDeploy(nextAttempt, nextSessionId),
       };
+      attemptCtx.retryInfo = retryInfo;
 
       // Wire up readers — pass permission mode for question marker handling
       readProcessStdout_deploy(proc, sendToWindow, false, attemptCtx);
@@ -2926,6 +3101,7 @@ module.exports = function registerMission(getMainWindow) {
         attemptCtx, attempt, maxAttempts: 3, backoffMs: [30000, 60000, 120000],
         retrySpawn: (nextAttempt, nextSessionId) => attemptSpawnContinue(nextAttempt, nextSessionId),
       };
+      attemptCtx.retryInfo = retryInfo;
 
       // Wire up readers
       readProcessStdout_deploy(proc, sendToWindow, true, attemptCtx);
@@ -3017,6 +3193,7 @@ module.exports = function registerMission(getMainWindow) {
         attemptCtx, attempt, maxAttempts: 3, backoffMs: [30000, 60000, 120000],
         retrySpawn: (nextAttempt) => spawnAnswerAttempt(nextAttempt),
       };
+      attemptCtx.retryInfo = retryInfo;
 
       // Wire up readers — use launch reader for planning phase, deploy reader for execution
       const isPlanning = missionState.phase === 'Planning';
@@ -3267,6 +3444,9 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
 
   // ── stop_mission ───────────────────────────────────────────────
   ipcMain.handle('stop_mission', async () => {
+    // Mission bị dừng giữa chừng → huỷ recording nửa vời (tránh file rác).
+    discardActiveRecording();
+
     stopWatcher();
     stopAutosave();
     stopStuckChecker();
@@ -3296,6 +3476,9 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
 
   // ── reset_mission ──────────────────────────────────────────────
   ipcMain.handle('reset_mission', async () => {
+    // Mission bị reset giữa chừng → huỷ recording nửa vời (tránh file rác).
+    discardActiveRecording();
+
     stopWatcher();
     stopAutosave();
     stopStuckChecker();
@@ -3539,8 +3722,170 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
       if (pdfWindow && !pdfWindow.isDestroyed()) pdfWindow.destroy();
     }
   });
+
+  // ═══════════════════════════════════════════════════════════════
+  // RECORDING — ghi lại business events khi mission chạy
+  // ═══════════════════════════════════════════════════════════════
+
+  // ── recording_start ────────────────────────────────────────────
+  // Bật ghi. CHỈ cho phép TRƯỚC khi launch_mission (mission phải
+  // null/Idle). Trả về { ok: true } hoặc { error }.
+  ipcMain.handle('recording_start', async () => {
+    if (missionState &&
+        missionState.status !== 'Idle' &&
+        missionState.status !== 'Completed' &&
+        missionState.status !== 'Failed' &&
+        missionState.status !== 'Stopped') {
+      return { error: 'Không thể bật ghi khi mission đang chạy. Hãy bật Record TRƯỚC khi khởi chạy mission.' };
+    }
+    if (activeRecording) {
+      return { error: 'Đang có 1 phiên ghi. Hãy lưu hoặc huỷ trước khi bắt đầu phiên mới.' };
+    }
+    activeRecording = { startedAt: Date.now(), missionId: null, events: [] };
+    return { ok: true, startedAt: activeRecording.startedAt };
+  });
+
+  // ── recording_stop_and_save ────────────────────────────────────
+  // Dừng ghi, ghi file JSON ra ~/.claude/agent-teams-recordings/.
+  // Trả về metadata bản ghi, hoặc { error }.
+  ipcMain.handle('recording_stop_and_save', async (_event, args) => {
+    if (!activeRecording) {
+      return { error: 'Không có phiên ghi nào đang hoạt động.' };
+    }
+    const { name } = args || {};
+    const rec = activeRecording;
+    activeRecording = null; // ngừng capture ngay lập tức
+
+    const createdAt = Date.now();
+    const recordingId = `rec-${rec.startedAt}`;
+    const durationMs = rec.events.length > 0
+      ? rec.events[rec.events.length - 1].relativeTimestamp
+      : (createdAt - rec.startedAt);
+
+    // Lấy metadata mô tả từ event init nếu có.
+    const initEvent = rec.events.find(e => e.channel === recordingSchema.INIT_CHANNEL);
+    const initPayload = initEvent ? initEvent.payload || {} : {};
+
+    const recording = recordingSchema.createRecording(
+      {
+        id: recordingId,
+        name: (name != null && String(name).trim().length > 0)
+          ? String(name).trim()
+          : (initPayload.description || `Bản ghi ${new Date(createdAt).toLocaleString('vi-VN')}`),
+        missionId: rec.missionId,
+        createdAt,
+        durationMs,
+        missionDescription: initPayload.description || '',
+        projectPath: initPayload.projectPath || '',
+      },
+      rec.events
+    );
+
+    try {
+      const meta = recordingStore.saveRecording(recording);
+      return { ok: true, recording: meta };
+    } catch (err) {
+      return { error: `Lưu recording thất bại: ${err.message}` };
+    }
+  });
+
+  // ── recording_discard ──────────────────────────────────────────
+  // Huỷ phiên ghi hiện tại mà không lưu.
+  ipcMain.handle('recording_discard', async () => {
+    const had = !!activeRecording;
+    discardActiveRecording();
+    return { ok: true, discarded: had };
+  });
+
+  // ── recording_status ───────────────────────────────────────────
+  // Trạng thái ghi hiện tại (frontend hiển thị nút Record).
+  ipcMain.handle('recording_status', async () => {
+    if (!activeRecording) return { recording: false };
+    return {
+      recording: true,
+      startedAt: activeRecording.startedAt,
+      missionId: activeRecording.missionId,
+      eventCount: activeRecording.events.length,
+    };
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // RECORDING LIST / MANAGE — list, get, delete, rename
+  // ═══════════════════════════════════════════════════════════════
+
+  // ── list_recordings ────────────────────────────────────────────
+  // Trả về mảng metadata (không load toàn bộ events) — đọc từ index.json.
+  ipcMain.handle('list_recordings', async () => {
+    try {
+      return recordingStore.listRecordings();
+    } catch (err) {
+      console.error('list_recordings error:', err);
+      return [];
+    }
+  });
+
+  // ── get_recording ──────────────────────────────────────────────
+  // Đọc đầy đủ 1 recording theo id (kèm events) — dùng khi replay.
+  ipcMain.handle('get_recording', async (_event, args) => {
+    const { recordingId } = args || {};
+    if (!recordingId) return { error: 'Thiếu recordingId.' };
+    const rec = recordingStore.getRecording(recordingId);
+    if (!rec) return { error: `Không tìm thấy recording: ${recordingId}` };
+    return rec;
+  });
+
+  // ── delete_recording ───────────────────────────────────────────
+  ipcMain.handle('delete_recording', async (_event, args) => {
+    const { recordingId } = args || {};
+    if (!recordingId) return { error: 'Thiếu recordingId.' };
+    try {
+      const existed = recordingStore.deleteRecording(recordingId);
+      return { ok: true, deleted: existed };
+    } catch (err) {
+      return { error: `Xoá recording thất bại: ${err.message}` };
+    }
+  });
+
+  // ── rename_recording ───────────────────────────────────────────
+  ipcMain.handle('rename_recording', async (_event, args) => {
+    const { recordingId, name } = args || {};
+    if (!recordingId) return { error: 'Thiếu recordingId.' };
+    try {
+      const meta = recordingStore.renameRecording(recordingId, name);
+      if (!meta) return { error: `Không tìm thấy recording: ${recordingId}` };
+      return { ok: true, recording: meta };
+    } catch (err) {
+      return { error: `Đổi tên recording thất bại: ${err.message}` };
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // REPLAY — phát lại 1 recording theo timeline
+  // ═══════════════════════════════════════════════════════════════
+
+  // ── replay_start ───────────────────────────────────────────────
+  // Load recording + bắt đầu phát. speed: 1 | 2 | 5 | Infinity.
+  ipcMain.handle('replay_start', async (_event, args) => {
+    const { recordingId, speed } = args || {};
+    if (!recordingId) return { error: 'Thiếu recordingId.' };
+    return replayEngine.start({ recordingId, speed });
+  });
+
+  // ── replay_pause / replay_resume ───────────────────────────────
+  ipcMain.handle('replay_pause', async () => replayEngine.pause());
+  ipcMain.handle('replay_resume', async () => replayEngine.resume());
+
+  // ── replay_seek ────────────────────────────────────────────────
+  ipcMain.handle('replay_seek', async (_event, args) => {
+    const { positionMs } = args || {};
+    return replayEngine.seek({ positionMs });
+  });
+
+  // ── replay_stop ────────────────────────────────────────────────
+  ipcMain.handle('replay_stop', async () => replayEngine.stop());
 };
 
 module.exports.retryMockupGeneration = retryMockupGeneration;
 module.exports.isTransientApiError = isTransientApiError;
 module.exports.retryTransientSpawn = retryTransientSpawn;
+module.exports.tryRecoverDanglingQuestion = tryRecoverDanglingQuestion;

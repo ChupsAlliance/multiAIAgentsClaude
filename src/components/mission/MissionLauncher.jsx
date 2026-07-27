@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { Rocket, FolderOpen, Zap, History, Trash2, Cpu, Eye, EyeOff, Users, FlaskConical, Paperclip, FileText, Image, Folder, Upload, X, AtSign, Shield, ShieldCheck, ShieldQuestion, Brain, Search } from 'lucide-react'
+import { Rocket, FolderOpen, Zap, History, Trash2, Cpu, Eye, EyeOff, Users, FlaskConical, Paperclip, FileText, Image, Folder, Upload, X, AtSign, Shield, ShieldCheck, ShieldQuestion, Brain, Search, Circle } from 'lucide-react'
 import { buildMissionPrompt } from '../../data/promptWrapper'
 import { useTauriFileDrop } from '../../hooks/useTauriFileDrop'
 import { useToast } from '../../hooks/useToast'
@@ -56,7 +56,7 @@ const PERMISSION_MODES = [
   },
 ]
 
-export function MissionLauncher({ onLaunch }) {
+export function MissionLauncher({ onLaunch, isRecording, onToggleRecording }) {
   const toast = useToast()
   const [requirement, setRequirement] = useState('')
   const [projectPath, setProjectPath] = useState('')
@@ -416,6 +416,46 @@ export function MissionLauncher({ onLaunch }) {
             </button>
           </div>
         </div>
+
+        {/* Record toggle — ghi lại phiên chạy mission */}
+        {onToggleRecording && (
+          <div className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border border-vs-border bg-vs-bg">
+            <div className="flex items-center gap-2 min-w-0">
+              <button
+                onClick={onToggleRecording}
+                aria-pressed={isRecording}
+                data-testid="btn-toggle-record"
+                title={isRecording ? 'Đang ghi lại — nhấn để tắt' : 'Bật ghi lại phiên chạy mission'}
+                className={`relative flex items-center justify-center w-7 h-7 rounded-full border shrink-0 transition-colors ${
+                  isRecording
+                    ? 'bg-vs-red border-vs-red text-[#ffffff] shadow-lg shadow-vs-red/30'
+                    : 'bg-vs-panel border-vs-border text-vs-muted hover:border-vs-red/50 hover:text-vs-red'
+                }`}
+              >
+                {isRecording && (
+                  <span className="absolute inset-0 rounded-full bg-vs-red animate-ping opacity-60" />
+                )}
+                <Circle size={12} className="relative" fill="currentColor" />
+              </button>
+              <div className="min-w-0">
+                <p className={`text-xs font-semibold truncate ${isRecording ? 'text-vs-red' : 'text-vs-text'}`}>
+                  Ghi lại phiên chạy
+                </p>
+                <p className="text-[10px] text-vs-muted truncate">
+                  {isRecording
+                    ? 'Đang bật — bản ghi sẽ được hỏi lưu khi mission xong'
+                    : 'Bật để ghi lại toàn bộ mission, dùng cho demo/trình chiếu sau này'}
+                </p>
+              </div>
+            </div>
+            {isRecording && (
+              <span className="flex items-center gap-1 text-[9px] font-mono text-vs-red uppercase tracking-wider shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-vs-red animate-pulse" />
+                REC
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Requirement textarea */}
         <div className="space-y-1.5">

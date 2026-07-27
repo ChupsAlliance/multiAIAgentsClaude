@@ -17,6 +17,7 @@ export function useMission() {
   const [pendingQuestions, setPendingQuestions] = useState(null)
   const [mockupInfo, setMockupInfo] = useState(null)
   const [recoverableMission, setRecoverableMission] = useState(null)
+  const [isRecording, setIsRecording] = useState(false)
   const unlistenersRef = useRef([])
   const { toast } = useToast()
 
@@ -171,6 +172,7 @@ export function useMission() {
             setMissionState(null)
             setIsRunning(false)
             setPlanReady(null)
+            setIsRecording(false)
             return
           }
 
@@ -767,6 +769,17 @@ export function useMission() {
   }, [toast])
 
   const stop = useCallback(async () => {
+    // Recording phải trọn vẹn từ đầu đến cuối — nếu Stop giữa chừng khi đang ghi,
+    // tự động huỷ bản ghi (không lưu bản ghi dang dở) và báo cho user.
+    if (isRecording) {
+      try {
+        await invoke('recording_discard')
+      } catch (_) {
+        // best-effort — vẫn tiếp tục stop mission dù discard lỗi
+      }
+      setIsRecording(false)
+      toast.warn('Đã huỷ bản ghi', 'Mission bị dừng giữa chừng nên bản ghi không được lưu')
+    }
     try {
       await invoke('stop_mission')
     } catch (err) {
@@ -776,7 +789,7 @@ export function useMission() {
     setIsRunning(false)
     setPlanReady(null)
     setMockupInfo(null)
-  }, [toast, clearPlanningTimer])
+  }, [toast, clearPlanningTimer, isRecording])
 
   const reset = useCallback(async () => {
     await invoke('reset_mission').catch(() => {})
@@ -784,6 +797,40 @@ export function useMission() {
     setIsRunning(false)
     setPlanReady(null)
   }, [])
+
+  // ── Recording: ghi lại phiên chạy mission ──
+  const startRecording = useCallback(async () => {
+    try {
+      await invoke('recording_start')
+      setIsRecording(true)
+      toast.info('Đang ghi lại phiên chạy', 'Bản ghi sẽ được lưu khi mission hoàn thành')
+    } catch (err) {
+      toast.error('Không thể bắt đầu ghi', err?.message)
+      setIsRecording(false)
+    }
+  }, [toast])
+
+  const stopRecordingAndSave = useCallback(async (name) => {
+    try {
+      await invoke('recording_stop_and_save', { name })
+      setIsRecording(false)
+      toast.success('Đã lưu bản ghi', name)
+      return true
+    } catch (err) {
+      toast.error('Không thể lưu bản ghi', err?.message)
+      return false
+    }
+  }, [toast])
+
+  const discardRecording = useCallback(async () => {
+    try {
+      await invoke('recording_discard')
+    } catch (err) {
+      toast.warn('Không thể huỷ bản ghi trên backend', err?.message)
+    } finally {
+      setIsRecording(false)
+    }
+  }, [toast])
 
   // ── Re-plan: send modified agents/tasks to Lead for incremental update ──
   const [isReplanning, setIsReplanning] = useState(false)
@@ -854,5 +901,10 @@ export function useMission() {
     }
   }, [toast])
 
-  return { missionState, isRunning, planReady, setPlanReady, isReplanning, pendingQuestions, mockupInfo, recoverableMission, setRecoverableMission, launch, deploy, continueM, stop, reset, replan, answerQuestion, respondToMockup, retryAgent }
+  return {
+    missionState, isRunning, planReady, setPlanReady, isReplanning, pendingQuestions, mockupInfo,
+    recoverableMission, setRecoverableMission,
+    isRecording, startRecording, stopRecordingAndSave, discardRecording,
+    launch, deploy, continueM, stop, reset, replan, answerQuestion, respondToMockup, retryAgent,
+  }
 }

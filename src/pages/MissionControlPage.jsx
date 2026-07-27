@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { invoke } from '@tauri-apps/api/core'
 import { Sidebar } from '../components/Sidebar'
 import { MissionLauncher } from '../components/mission/MissionLauncher'
@@ -8,14 +9,19 @@ import { PlanReview } from '../components/mission/PlanReview'
 import { PlanDocument } from '../components/mission/PlanDocument'
 import { PromptPreview } from '../components/mission/PromptPreview'
 import { MissionHistoryPanel } from '../components/mission/MissionHistoryPanel'
+import { RecordingSaveDialog } from '../components/mission/RecordingSaveDialog'
+import { ReplayControls } from '../components/mission/ReplayControls'
 import { useMission } from '../hooks/useMission'
+import { useReplay } from '../hooks/useReplay'
 import { buildMissionPrompt } from '../data/promptWrapper'
 import { ShortcutsHelpModal } from '../components/common/ShortcutsHelpModal'
 import { useAppHotkeys } from '../hooks/useAppHotkeys'
+import { Radio } from 'lucide-react'
 
 export function MissionControlPage() {
   const { missionState, isRunning, planReady, setPlanReady, isReplanning, pendingQuestions,
           mockupInfo, recoverableMission, setRecoverableMission,
+          isRecording, startRecording, stopRecordingAndSave, discardRecording,
           launch, deploy, continueM, stop, reset, replan, answerQuestion, respondToMockup, retryAgent } = useMission()
   const [elapsed, setElapsed] = useState('0:00')
   const [promptPreview, setPromptPreview] = useState(null) // { agents, tasks }
@@ -23,6 +29,15 @@ export function MissionControlPage() {
   const [historyView, setHistoryView] = useState(null)     // full MissionState snapshot from history
   const [historyViewMode, setHistoryViewMode] = useState('view') // 'view' | 'continue'
   const [showShortcuts, setShowShortcuts] = useState(false)
+  const [showSaveRecordingDialog, setShowSaveRecordingDialog] = useState(false)
+  const recordingSaveHandledRef = useRef(false) // tránh mở dialog lặp lại cho cùng 1 lần Completed
+
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const replayRecordingId = searchParams.get('replay')
+  const isReplayMode = !!replayRecordingId
+
+  const replay = useReplay(isReplayMode ? replayRecordingId : null)
 
   useAppHotkeys({
     scope: 'global',
@@ -31,6 +46,41 @@ export function MissionControlPage() {
       'escape': () => setShowShortcuts(false),
     },
   })
+
+  // ── Recording: khi mission hoàn thành (status Completed) và đang ghi, tự mở dialog lưu tên ──
+  useEffect(() => {
+    if (isReplayMode) return
+    if (isRecording && missionState?.status === 'Completed' && !recordingSaveHandledRef.current) {
+      recordingSaveHandledRef.current = true
+      setShowSaveRecordingDialog(true)
+    }
+    if (missionState?.status !== 'Completed') {
+      recordingSaveHandledRef.current = false
+    }
+  }, [isRecording, missionState?.status, isReplayMode])
+
+  const handleToggleRecording = useCallback(() => {
+    if (isRecording) {
+      discardRecording()
+    } else {
+      startRecording()
+    }
+  }, [isRecording, discardRecording, startRecording])
+
+  const handleSaveRecording = useCallback(async (name) => {
+    const ok = await stopRecordingAndSave(name)
+    if (ok) setShowSaveRecordingDialog(false)
+  }, [stopRecordingAndSave])
+
+  const handleDiscardRecording = useCallback(async () => {
+    await discardRecording()
+    setShowSaveRecordingDialog(false)
+  }, [discardRecording])
+
+  const handleExitReplay = useCallback(async () => {
+    await replay.stopReplay()
+    navigate('/recordings')
+  }, [replay, navigate])
 
   // Elapsed timer
   useEffect(() => {
@@ -113,6 +163,58 @@ export function MissionControlPage() {
       setHistoryViewMode('continue')
     }
   }, [])
+
+  // ── Replay-on-real-UI mode: đọc-only, feed MissionDashboard bằng replayMissionState ──
+  if (isReplayMode) {
+    return (
+      <div data-testid="mission-dashboard-replay-mode" className="h-screen bg-vs-bg text-vs-text flex overflow-hidden">
+        <Sidebar />
+        <main className="flex-1 md:ml-64 flex flex-col h-screen overflow-hidden relative">
+          <div className="h-8 shrink-0 drag-region" />
+
+          {/* Banner: đang phát lại bản ghi */}
+          <div className="mx-4 mt-1 mb-2 shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg border border-purple-500/40 bg-purple-500/10">
+            <Radio size={13} className="text-purple-300 shrink-0 animate-pulse" />
+            <span className="text-xs font-mono text-purple-200">
+              Đang phát lại bản ghi: <strong>{replay.recordingMeta?.name || replay.replayMissionState?.description || replayRecordingId}</strong>
+            </span>
+            {replay.loading && (
+              <span className="text-[10px] text-purple-300/60 ml-auto">Đang tải...</span>
+            )}
+          </div>
+
+          <div className="flex-1 px-4 pb-28 min-h-0 overflow-hidden">
+            <MissionDashboard
+              state={replay.replayMissionState}
+              isRunning={true}
+              isHistoryView={true}
+              onStop={() => {}}
+              onContinue={async () => {}}
+              onNewMission={handleExitReplay}
+              elapsed=""
+            />
+          </div>
+
+          {/* ReplayControls overlay cố định ở đáy */}
+          <div className="absolute left-0 right-0 bottom-0 px-4 pb-4 md:pl-4 pointer-events-none">
+            <div className="pointer-events-auto max-w-3xl mx-auto">
+              <ReplayControls
+                isPlaying={replay.isPlaying}
+                speed={replay.speed}
+                currentMs={replay.currentMs}
+                totalMs={replay.totalMs}
+                stepMarkers={replay.stepMarkers}
+                onPlayPause={replay.togglePlayPause}
+                onSpeedChange={replay.changeSpeed}
+                onSeek={replay.seek}
+                onExit={handleExitReplay}
+              />
+            </div>
+          </div>
+        </main>
+      </div>
+    )
+  }
 
   return (
     <div className="h-screen bg-vs-bg text-vs-text flex overflow-hidden">
@@ -320,7 +422,11 @@ export function MissionControlPage() {
                   </div>
                 </div>
               )}
-              <MissionLauncher onLaunch={launch} />
+              <MissionLauncher
+                onLaunch={launch}
+                isRecording={isRecording}
+                onToggleRecording={handleToggleRecording}
+              />
             </div>
             <MissionHistoryPanel
               onViewHistory={handleViewHistory}
@@ -330,6 +436,12 @@ export function MissionControlPage() {
         )}
       </main>
       <ShortcutsHelpModal isOpen={showShortcuts} onClose={() => setShowShortcuts(false)} />
+      <RecordingSaveDialog
+        open={showSaveRecordingDialog}
+        defaultName={missionState?.description || ''}
+        onSave={handleSaveRecording}
+        onDiscard={handleDiscardRecording}
+      />
     </div>
   )
 }

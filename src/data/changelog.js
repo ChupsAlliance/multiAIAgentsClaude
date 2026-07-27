@@ -8,6 +8,40 @@
 
 export const changelog = [
   {
+    version: '0.11.4',
+    date: '2026-07-27',
+    title: 'Fix Bug: Mission báo "Completed" sai khi đang resume sau câu hỏi',
+    highlights: [
+      'Fix mission bị đánh dấu "Completed" ngay sau khi trả lời câu hỏi, dù Lead vẫn đang chạy tiếp thật',
+      'Nguyên nhân: event đóng process cũ đến trễ (do kill là bất đồng bộ) và bị hiểu nhầm thành mission đã xong',
+      'Thêm kiểm tra process hiện tại còn đúng là process đang theo dõi hay không trước khi cập nhật trạng thái mission',
+    ],
+    items: [
+      { type: 'fixed', badge: 'Mission Control',
+        text: 'Khi user trả lời câu hỏi, hệ thống kill process cũ và spawn process mới ngay. Vì signal kill bất đồng bộ, event "process đã đóng" của process cũ có thể đến trễ sau khi process mới đã set status "Running" — bị hiểu nhầm thành mission hoàn tất, đánh dấu sai toàn bộ mission và agents là "Done"' },
+      { type: 'fixed', badge: 'Mission Control',
+        text: 'Thêm guard so sánh process nhận được close event với process hiện tại đang theo dõi (childProcess) — nếu không khớp (đã bị thay thế bởi lần resume mới hơn), bỏ qua event đó hoàn toàn' },
+    ],
+  },
+  {
+    version: '0.11.3',
+    date: '2026-07-27',
+    title: 'Fix Bug: "No plan structured" khi Lead hỏi câu hỏi',
+    highlights: [
+      'Fix mission báo sai "Completed — no plan structure found" dù Lead đã hỏi câu hỏi hợp lệ, do turn kết thúc trước khi ghi đủ marker đóng',
+      'Thêm parser nới lỏng để khôi phục câu hỏi thiếu marker đóng, áp dụng cho cả Planning và Execution phase',
+      'Thêm retry dự phòng khi JSON câu hỏi bị cắt/hỏng, không khôi phục được bằng parser nới lỏng',
+    ],
+    items: [
+      { type: 'fixed', badge: 'Mission Control',
+        text: 'Lead đôi khi kết thúc turn ngay sau <<<QUESTION>>>{...} mà không ghi <<<END_QUESTION>>>/<<<QUESTIONS_END>>>, khiến detection cũ (yêu cầu đủ cả 3 marker) bỏ sót câu hỏi hợp lệ và báo sai "no plan found"' },
+      { type: 'fixed', badge: 'Mission Control',
+        text: 'Thêm tryRecoverDanglingQuestion() — khôi phục block câu hỏi kể cả khi thiếu marker đóng, miễn JSON hợp lệ và có field question. Áp dụng cho cả reader Planning và Execution' },
+      { type: 'added', badge: 'Mission Control',
+        text: 'Retry dự phòng (safety-net): khi có marker <<<QUESTION>>> nhưng JSON bị cắt/hỏng không khôi phục được, hệ thống tự động respawn theo lịch retry sẵn có (tối đa 3 lần, 30s/60s/120s) thay vì báo lỗi ngay' },
+    ],
+  },
+  {
     version: '0.11.2',
     date: '2026-07-27',
     title: 'Fix Bug: Mockup Timeout 180s',

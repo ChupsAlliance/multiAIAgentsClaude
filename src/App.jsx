@@ -9,6 +9,8 @@ const PlaygroundPage = lazy(() => import('./pages/PlaygroundPage').then(m => ({ 
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })))
 const MissionControlPage = lazy(() => import('./pages/MissionControlPage').then(m => ({ default: m.MissionControlPage })))
+const RecordingsPage = lazy(() => import('./pages/RecordingsPage').then(m => ({ default: m.RecordingsPage })))
+const PresentationModePage = lazy(() => import('./pages/PresentationModePage').then(m => ({ default: m.PresentationModePage })))
 
 const SETUP_DONE_KEY = 'agent_teams_setup_done'
 
@@ -85,6 +87,8 @@ export default function App() {
         <Route path="/playground" element={<PlaygroundPage />} />
         <Route path="/dashboard"  element={<DashboardPage />} />
         <Route path="/mission"    element={<MissionControlPage />} />
+        <Route path="/recordings" element={<RecordingsPage />} />
+        <Route path="/presentation/:recordingId" element={<PresentationModePage />} />
       </Routes>
       <ChangelogModal open={showChangelog} onClose={closeChangelog} currentVersion={appVersion} updateInfo={updateInfo} />
     </Suspense>

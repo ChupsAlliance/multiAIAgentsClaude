@@ -10,6 +10,25 @@ Format dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.11.4] — 2026-07-27
+
+### Sửa lỗi
+
+- **Mission bị đánh dấu "Completed" ngay sau khi trả lời câu hỏi, dù Lead vẫn đang chạy tiếp**: khi user trả lời câu hỏi, hệ thống `kill` process cũ và spawn process mới để resume session ngay lập tức. Nhưng signal kill là bất đồng bộ — event "process đã đóng" của process cũ có thể đến **trễ**, sau khi process mới đã chạy và đang set status là "Running". Vì không có cơ chế phân biệt "process cũ đã bị thay thế" với "process hiện tại", event trễ này bị hiểu nhầm thành mission đã hoàn tất, đánh dấu toàn bộ mission và agents là "Done" ngay giữa lúc Lead vẫn đang thực thi các bước tiếp theo (đọc file, tạo plan, ...).
+- **Fix**: thêm kiểm tra tại thời điểm process đóng — nếu process đó không còn là process đang được theo dõi hiện tại (đã bị thay thế bởi lần resume mới hơn), bỏ qua event đó hoàn toàn thay vì cập nhật trạng thái mission.
+
+---
+
+## [0.11.3] — 2026-07-27
+
+### Sửa lỗi
+
+- **Mission báo "Completed — no plan structure found" dù Lead đã hỏi câu hỏi hợp lệ**: Lead đôi khi kết thúc turn ngay sau khi ghi `<<<QUESTION>>>{...json...}` mà không ghi tiếp 2 marker đóng bắt buộc (`<<<END_QUESTION>>>`, `<<<QUESTIONS_END>>>`). Vì cơ chế nhận diện cũ yêu cầu đủ cả 3 marker mới coi là có câu hỏi, câu hỏi hợp lệ này bị bỏ sót hoàn toàn và mission rơi vào nhánh fallback "không tìm thấy plan" — dù thực chất Lead đang chờ người dùng trả lời.
+- **Parser nới lỏng (lenient)**: thêm bước khôi phục cuối cùng, chấp nhận block `<<<QUESTION>>>{...}` kể cả khi thiếu marker đóng — miễn JSON trích ra hợp lệ và có field `question`. Áp dụng cho cả 2 luồng: Planning (lập kế hoạch) và Execution (thực thi/deploy/continue).
+- **Retry dự phòng (safety-net)**: khi phát hiện marker `<<<QUESTION>>>` nhưng JSON theo sau bị cắt/hỏng (parser nới lỏng cũng không khôi phục được), hệ thống tự động thử lại (respawn) theo đúng lịch retry sẵn có (tối đa 3 lần, chờ 30s/60s/120s) thay vì báo "no plan found" ngay lập tức.
+
+---
+
 ## [0.11.2] — 2026-07-27
 
 ### Sửa lỗi

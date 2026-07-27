@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { invoke } from '@tauri-apps/api/core'
-import { Bot, BookOpen, Play, LayoutDashboard, Menu, X, ChevronRight, Settings, Rocket, Sparkles, Sun, Moon } from 'lucide-react'
+import { Bot, BookOpen, Play, LayoutDashboard, Menu, X, ChevronRight, Settings, Rocket, Sparkles, Sun, Moon, Film } from 'lucide-react'
 import { sections } from '../data/sections'
 import { useTheme } from '../hooks/useTheme'
 
@@ -9,6 +9,7 @@ const navItems = [
   { path: '/',           label: 'Tài liệu',        icon: BookOpen },
   { path: '/playground', label: 'Playground',       icon: Play },
   { path: '/mission',    label: 'Mission Control',  icon: Rocket },
+  { path: '/recordings', label: 'Bản ghi',          icon: Film },
   { path: '/dashboard',  label: 'Dashboard',        icon: LayoutDashboard },
   { path: '/setup',      label: 'Setup',            icon: Settings },
 ]
