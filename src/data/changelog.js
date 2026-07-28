@@ -8,6 +8,24 @@
 
 export const changelog = [
   {
+    version: '0.12.0',
+    date: '2026-07-28',
+    title: 'Card Q&A và Mockup trên timeline Presentation Mode replay',
+    highlights: [
+      'Replay giờ hiển thị card "Lead hỏi → user trả lời" và "Lead đã tạo mockup" ngay trên timeline',
+      'Dùng dữ liệu đã có sẵn trong mọi recording (kể cả recording cũ) — không cần migrate',
+      'Card xen kẽ đúng vị trí thời gian với các event khác, hoạt động cả khi tua nhanh (seek)',
+    ],
+    items: [
+      { type: 'added', badge: 'Presentation Mode',
+        text: 'Card mới cho câu hỏi Lead hỏi user trong lúc mission chạy: "Lead hỏi: {câu hỏi} → User trả lời: {câu trả lời}", icon HelpCircle màu tím' },
+      { type: 'added', badge: 'Presentation Mode',
+        text: 'Card mới cho mockup Lead tạo ra: "Lead đã tạo mockup: {title}", icon LayoutTemplate màu hồng' },
+      { type: 'fixed', badge: 'Presentation Mode',
+        text: 'useReplay.js trước đây không lắng nghe channel mission:question/mission:mockup nên 2 loại sự kiện này bị bỏ sót hoàn toàn khi xem lại recording — dữ liệu vốn đã được ghi sẵn, chỉ cần đọc lại đúng channel, áp dụng ngay cả với recording ghi từ trước' },
+    ],
+  },
+  {
     version: '0.11.4',
     date: '2026-07-27',
     title: 'Fix Bug: Mission báo "Completed" sai khi đang resume sau câu hỏi',

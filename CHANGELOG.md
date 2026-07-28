@@ -10,6 +10,14 @@ Format dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.12.0] — 2026-07-28
+
+### Thêm mới
+
+- **Card Q&A và Mockup trên timeline Presentation Mode replay**: khi xem lại (replay) 1 recording, timeline giờ hiển thị thêm 2 loại card mới xen kẽ đúng vị trí thời gian: card "câu hỏi" (Lead hỏi → user trả lời) và card "Lead đã tạo mockup: `<title>`". Dữ liệu này vốn đã được ghi trong mọi recording (kể cả recording cũ) — chỉ là trước đây `useReplay.js` không lắng nghe 2 channel `mission:question`/`mission:mockup` nên bị bỏ sót khi replay, không cần migrate dữ liệu cũ.
+
+---
+
 ## [0.11.4] — 2026-07-27
 
 ### Sửa lỗi
