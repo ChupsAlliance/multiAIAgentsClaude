@@ -37,12 +37,14 @@ const EMPTY_STATE = () => ({
   messages: [],
   qa_events: [],
   mockup_events: [],
-  _pendingQuestion: null,
   started_at: Date.now(),
 })
 
 export function useReplay(recordingId) {
   const [replayMissionState, setReplayMissionState] = useState(null)
+  const [replayPlanReady, setReplayPlanReady] = useState(null)
+  const [pendingQuestion, setPendingQuestion] = useState(null)
+  const [mockupInfo, setMockupInfo] = useState(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [speed, setSpeed] = useState(1) // 1 | 2 | 5 | 'instant'
   const [currentMs, setCurrentMs] = useState(0)
@@ -63,11 +65,26 @@ export function useReplay(recordingId) {
         const { status } = payload
         if (status === 'reset') {
           setReplayMissionState(EMPTY_STATE())
+          setReplayPlanReady(null)
+          setPendingQuestion(null)
+          setMockupInfo(null)
           return
         }
-        setReplayMissionState(prev => prev
-          ? { ...prev, status: status.charAt(0).toUpperCase() + status.slice(1) }
-          : prev)
+        setReplayMissionState(prev => {
+          if (!prev) return prev
+          const capitalized = status.charAt(0).toUpperCase() + status.slice(1)
+          if (prev.phase === 'ReviewPlan') {
+            if (status === 'completed') return prev
+            if (['stopped', 'failed'].includes(status)) {
+              return { ...prev, phase: 'Done', status: capitalized }
+            }
+            return prev
+          }
+          if (['completed', 'stopped', 'failed'].includes(status)) {
+            return { ...prev, phase: 'Done', status: capitalized }
+          }
+          return { ...prev, status: capitalized }
+        })
         break
       }
       case 'mission:agent-spawned': {
@@ -78,6 +95,7 @@ export function useReplay(recordingId) {
           if (reset) {
             return {
               ...base,
+              phase: 'Planning',
               agents: [{
                 name: agentName, role, status: 'Running',
                 current_task: 'Analyzing requirement...',
@@ -142,6 +160,7 @@ export function useReplay(recordingId) {
         const taskDesc = description || ''
         setReplayMissionState(prev => {
           const base = prev || EMPTY_STATE()
+          const nextPhase = base.phase === 'ReviewPlan' ? 'Executing' : base.phase
           let idx = -1
           if (task_id) idx = base.tasks.findIndex(t => t.id === task_id)
           if (idx < 0 && taskDesc) {
@@ -156,10 +175,11 @@ export function useReplay(recordingId) {
               completed_at: status === 'completed' ? timestamp : tasks[idx].completed_at,
               started_at: status === 'in_progress' ? timestamp : tasks[idx].started_at,
             }
-            return { ...base, tasks }
+            return { ...base, phase: nextPhase, tasks }
           }
           return {
             ...base,
+            phase: nextPhase,
             tasks: [...base.tasks, {
               id: task_id || `task-${Date.now()}-${Math.random()}`,
               title: taskDesc || `Task by ${agentName}`,
@@ -167,6 +187,16 @@ export function useReplay(recordingId) {
               started_at: timestamp, completed_at: status === 'completed' ? timestamp : null,
             }],
           }
+        })
+        break
+      }
+      case 'mission:plan-ready': {
+        const { agents, tasks, mission_context } = payload
+        setReplayPlanReady({ agents, tasks, mission_context: mission_context || null })
+        setMockupInfo(null)
+        setReplayMissionState(prev => {
+          const base = prev || EMPTY_STATE()
+          return { ...base, phase: 'ReviewPlan' }
         })
         break
       }
@@ -196,35 +226,30 @@ export function useReplay(recordingId) {
       }
       case 'mission:question': {
         const { questions } = payload
-        setReplayMissionState(prev => {
-          const base = prev || EMPTY_STATE()
-          return { ...base, _pendingQuestion: { questions: questions || [], timestamp: Date.now() } }
-        })
+        setPendingQuestion({ questions: questions || [], timestamp: Date.now() })
         break
       }
       case 'mission:answer-sent': {
         const { answers } = payload
-        setReplayMissionState(prev => {
-          const base = prev || EMPTY_STATE()
-          const pending = base._pendingQuestion
+        setPendingQuestion(currentPending => {
           const entry = {
-            timestamp: pending ? pending.timestamp : Date.now(),
-            questions: pending ? pending.questions : [],
+            timestamp: currentPending ? currentPending.timestamp : Date.now(),
+            questions: currentPending ? currentPending.questions : [],
             answers: answers || [],
           }
-          return {
-            ...base,
-            qa_events: [...base.qa_events, entry],
-            _pendingQuestion: null,
-          }
+          setReplayMissionState(prev => {
+            const base = prev || EMPTY_STATE()
+            return { ...base, qa_events: [...base.qa_events, entry] }
+          })
+          return null
         })
         break
       }
       case 'mission:mockup': {
-        const { title } = payload
+        setMockupInfo(payload)
         setReplayMissionState(prev => {
           const base = prev || EMPTY_STATE()
-          const entry = { timestamp: Date.now(), title: title || '' }
+          const entry = { timestamp: Date.now(), title: payload?.title || '' }
           return { ...base, mockup_events: [...base.mockup_events, entry] }
         })
         break
@@ -241,7 +266,7 @@ export function useReplay(recordingId) {
       const channels = [
         'mission:status', 'mission:agent-spawned', 'mission:log', 'mission:file-change',
         'mission:task-update', 'mission:raw-line', 'mission:agent-message', 'mission:agent-stuck',
-        'mission:question', 'mission:answer-sent', 'mission:mockup',
+        'mission:question', 'mission:answer-sent', 'mission:mockup', 'mission:plan-ready',
       ]
       const unlisteners = await Promise.all([
         ...channels.map(ch => listen(ch, (e) => applyEvent(ch, e.payload))),
@@ -275,6 +300,9 @@ export function useReplay(recordingId) {
     setLoading(true)
     setError(null)
     setReplayMissionState(EMPTY_STATE())
+    setReplayPlanReady(null)
+    setPendingQuestion(null)
+    setMockupInfo(null)
     setCurrentMs(0)
     setIsPlaying(false)
 
@@ -366,7 +394,8 @@ export function useReplay(recordingId) {
   }, [])
 
   return {
-    replayMissionState, isPlaying, speed, currentMs, totalMs, stepMarkers, recordingMeta,
+    replayMissionState, replayPlanReady, pendingQuestion, mockupInfo,
+    isPlaying, speed, currentMs, totalMs, stepMarkers, recordingMeta,
     loading, error,
     togglePlayPause, play, pause, changeSpeed, seek, stopReplay,
   }
