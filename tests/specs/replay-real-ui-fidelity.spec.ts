@@ -141,12 +141,14 @@ test.describe('Replay on Real UI — full phase fidelity', () => {
     await replayControls.pause();
 
     // Seek to the very start: the recording opens on the Planning phase.
+    // PlanningStream has no dedicated testid, but MissionControlPage.jsx's
+    // isReplayPlanning/isReplayReviewPlan conditions are mutually exclusive
+    // with both the dashboard wrapper and the ReviewPlan overlay — asserting
+    // both are absent (while ReplayControls stays mounted) positively proves
+    // we're in Planning specifically, not just "the app didn't crash".
     await replayControls.seekToRatio(0);
-    await expect(window.getByText('Đang khởi tạo nhóm agent cho nhiệm vụ demo ghi hình.').or(
-      window.getByText('Analyzing requirement').or(window.locator('body'))
-    )).toBeTruthy();
-    // PlanningStream is rendered (not the dashboard) — dashboard wrapper must be absent.
     await expect(replayControls.missionDashboardReplayMode).toBeHidden();
+    await expect(window.getByTestId('replay-readonly-overlay')).toBeHidden();
 
     // The ReviewPlan window is the gap between the recorded mission:plan-ready
     // event and the first mission:task-update event (useReplay.js flips phase
@@ -175,9 +177,22 @@ test.describe('Replay on Real UI — full phase fidelity', () => {
     await expect(window.getByText('Tao file cau hinh mau').first()).toBeVisible();
 
     // Seek to the end: mission is Done, MissionDashboard replay wrapper shows.
+    // seekToEnd() clicks the track clamped to ratio 0.99 (dodging the
+    // elementFromPoint edge-pixel bug), which lands before the recording's
+    // final mission:status:completed event — still inside Executing, not
+    // Done. Exercise the real click path first (proves clicking near the
+    // end works and switches to the dashboard), then use the exact-ms IPC
+    // seek to reach the literal last event and assert the header's status
+    // badge reads "Completed" (StatusBadge renders {status} verbatim;
+    // useReplay.js capitalizes the recorded 'completed' mission:status into
+    // 'Completed' only once the phase has actually reached Done) — proving
+    // Done, not just Executing, was really reached.
     await replayControls.seekToEnd();
     await replayControls.expectMissionDashboardInReplayMode();
     await replayControls.expectFinishedAtEnd();
+
+    await replayControls.seekToPositionMs(totalMs);
+    await expect(window.getByText('Completed', { exact: true })).toBeVisible({ timeout: 10_000 });
 
     // Seek backward again: the UI must switch back to the ReviewPlan screen,
     // proving phase state isn't a one-way ratchet and scrubbing works.

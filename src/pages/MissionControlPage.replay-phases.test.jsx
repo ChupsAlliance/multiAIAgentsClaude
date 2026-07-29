@@ -69,7 +69,7 @@ test('Planning phase renders PlanningStream', async () => {
   renderReplayPage()
   await waitFor(() => expect(screen.queryByText(/Đang tải/)).not.toBeInTheDocument())
 
-  act_emit('mission:agent-spawned', { agent_name: 'Lead', role: 'Coordinator', reset: true, timestamp: 1 })
+  emitEvent('mission:agent-spawned', { agent_name: 'Lead', role: 'Coordinator', reset: true, timestamp: 1 })
 
   await waitFor(() => expect(screen.getByText('Lead đang phân tích & lên plan')).toBeInTheDocument())
 })
@@ -78,8 +78,8 @@ test('ReviewPlan phase renders PlanReview inside a read-only overlay', async () 
   renderReplayPage()
   await waitFor(() => expect(screen.queryByText(/Đang tải/)).not.toBeInTheDocument())
 
-  act_emit('mission:agent-spawned', { agent_name: 'Lead', role: 'Coordinator', reset: true, timestamp: 1 })
-  act_emit('mission:plan-ready', {
+  emitEvent('mission:agent-spawned', { agent_name: 'Lead', role: 'Coordinator', reset: true, timestamp: 1 })
+  emitEvent('mission:plan-ready', {
     agents: [{ name: 'Dev', role: 'Developer' }],
     tasks: [{ id: 't1', title: 'Build it', agent: 'Dev' }],
     mission_context: null,
@@ -92,16 +92,16 @@ test('Executing phase renders MissionDashboard', async () => {
   renderReplayPage()
   await waitFor(() => expect(screen.queryByText(/Đang tải/)).not.toBeInTheDocument())
 
-  act_emit('mission:agent-spawned', { agent_name: 'Lead', role: 'Coordinator', reset: true, timestamp: 1 })
-  act_emit('mission:plan-ready', { agents: [{ name: 'Dev', role: 'Developer' }], tasks: [{ id: 't1', title: 'Build it', agent: 'Dev' }], mission_context: null })
-  act_emit('mission:task-update', { agent: 'Dev', description: 'Build it', status: 'in_progress', timestamp: 5 })
+  emitEvent('mission:agent-spawned', { agent_name: 'Lead', role: 'Coordinator', reset: true, timestamp: 1 })
+  emitEvent('mission:plan-ready', { agents: [{ name: 'Dev', role: 'Developer' }], tasks: [{ id: 't1', title: 'Build it', agent: 'Dev' }], mission_context: null })
+  emitEvent('mission:task-update', { agent: 'Dev', description: 'Build it', status: 'in_progress', timestamp: 5 })
 
   await waitFor(() => expect(screen.getByTestId('mission-dashboard-replay-mode')).toBeInTheDocument())
 })
 
-// Small helper — React Testing Library's `render` already wraps effects in
-// act() via its own internal scheduler for these synchronous IPC-mock
-// callbacks, but wrapping explicitly keeps intent obvious.
-function act_emit(channel, payload) {
+// Named alias for `emit` used at call sites below, purely for readability —
+// no act() wrapping happens here; the downstream waitFor() calls are what
+// flush the resulting state updates.
+function emitEvent(channel, payload) {
   emit(channel, payload)
 }

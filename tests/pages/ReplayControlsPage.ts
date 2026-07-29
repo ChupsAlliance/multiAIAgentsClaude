@@ -93,6 +93,23 @@ export class ReplayControlsPage {
     await this.seekToRatio(1);
   }
 
+  /**
+   * Seek to an exact millisecond position via the same IPC channel the seek
+   * track's onClick uses (`replay_seek`), bypassing pixel/click targeting
+   * entirely. `seekToRatio`/`seekToEnd` clamp to [0.01, 0.99] to dodge the
+   * elementFromPoint edge-pixel bug (see seekToRatio's doc comment) — but
+   * that clamp means clicking never reaches the literal last event, so it
+   * cannot prove a recording's true terminal state (e.g. mission Done) was
+   * reached. Use this instead when the assertion specifically depends on
+   * having replayed every event, not just "close enough" for a UI-switch check.
+   */
+  async seekToPositionMs(positionMs: number) {
+    await this.page.evaluate(
+      (ms) => (window as any).electronAPI.invoke('replay_seek', { positionMs: ms }),
+      positionMs
+    );
+  }
+
   async expectFinishedAtEnd() {
     // Playhead pinned at 100% and play/pause button shows "play" (not playing) state.
     await expect(this.playPauseButton).toHaveAttribute('title', 'Phát');
