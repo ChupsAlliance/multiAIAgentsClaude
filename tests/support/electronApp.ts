@@ -70,10 +70,22 @@ export async function launchApp(options: LaunchOptions = {}): Promise<LaunchedAp
     // Point recordingStore.cjs at an isolated temp dir for this test only.
     RECORDINGS_DIR_OVERRIDE: recordingsDir,
     FAKE_CLAUDE_DELAY_MS: String(options.fakeClaudeDelayMs ?? 20),
+    // Prevent electron/ipc/system.cjs's checkForUpdates from hitting the
+    // real GitHub API — a genuine "update available" response bypasses the
+    // changelog_seen_version localStorage seed below and force-opens the
+    // "What's New" modal on top of the app.
+    DISABLE_UPDATE_CHECK: '1',
   };
   if (fakeClaudeScriptPath) {
     env.FAKE_CLAUDE_SCRIPT = fakeClaudeScriptPath;
   }
+  // If the test runner's own environment was itself launched under Electron
+  // (e.g. an editor/agent host embedding Node via Electron), it may inherit
+  // ELECTRON_RUN_AS_NODE=1. That forces electron.exe into plain-Node CLI
+  // parsing, which rejects every Electron/Chromium flag Playwright passes
+  // (--remote-debugging-port, --inspect, etc.) with "bad option: ..." and
+  // the app never launches. Strip it so the child always runs as real Electron.
+  delete env.ELECTRON_RUN_AS_NODE;
 
   const app = await electron.launch({
     args: [MAIN_ENTRY, `--user-data-dir=${userDataDir}`],
@@ -83,14 +95,28 @@ export async function launchApp(options: LaunchOptions = {}): Promise<LaunchedAp
 
   const window = await app.firstWindow();
 
+  // electron/ipc/system.cjs's app_version comes from Electron's own
+  // app.getVersion(), which — when launched unpackaged via `electron
+  // main.cjs` (as this harness does, not `electron .`) — resolves to the
+  // Electron runtime's own version, NOT this repo's package.json version.
+  // Read the app's actual reported version at runtime rather than assuming
+  // package.json's, so the changelog_seen_version seed below always matches
+  // what ChangelogModal.jsx compares against.
+  const { app_version: appVersion } = await window.evaluate(() =>
+    window.electronAPI.invoke('get_system_info')
+  );
+
   // Skip the onboarding/setup screen (App.jsx redirects to /setup unless
-  // localStorage.agent_teams_setup_done is set) — this must run before the
-  // app's own scripts, so it's an init script rather than a post-load
-  // localStorage.setItem call. Onboarding/setup itself is out of scope for
+  // localStorage.agent_teams_setup_done is set) and the auto-opening "What's
+  // New" changelog modal (ChangelogModal.jsx shows it whenever
+  // changelog_seen_version !== the running app's version) — both must run
+  // before the app's own scripts, so this is an init script rather than a
+  // post-load localStorage.setItem call. Neither screen is in scope for
   // recording/replay E2E coverage.
-  await window.addInitScript(() => {
+  await window.addInitScript((version) => {
     window.localStorage.setItem('agent_teams_setup_done', '1');
-  });
+    window.localStorage.setItem('changelog_seen_version', version);
+  }, appVersion);
   await window.reload();
   await window.waitForLoadState('domcontentloaded');
 

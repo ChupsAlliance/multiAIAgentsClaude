@@ -10,6 +10,11 @@ const { compareSemver } = require('../lib/compareSemver.cjs');
 const RELEASES_URL = 'https://api.github.com/repos/ChupsAlliance/multiAIAgentsClaude/releases/latest';
 
 async function checkForUpdates(currentVersion) {
+  // E2E tests run offline/sandboxed and must never depend on the real
+  // GitHub API — a real "update available" response would force the
+  // "What's New" modal open regardless of the changelog_seen_version
+  // localStorage flag, blocking every spec that touches the sidebar.
+  if (process.env.DISABLE_UPDATE_CHECK) return { hasUpdate: false };
   try {
     const res = await fetch(RELEASES_URL, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) return { hasUpdate: false };

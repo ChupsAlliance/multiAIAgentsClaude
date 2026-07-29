@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────────
 
 const { ipcMain, shell, dialog, BrowserWindow } = require('electron');
-const { spawn }   = require('child_process');
+const { spawn }   = require('cross-spawn');
 const readline    = require('readline');
 const fs          = require('fs');
 const path        = require('path');

@@ -67,11 +67,23 @@ export class ReplayControlsPage {
     await this.exitButton.click();
   }
 
-  /** Click a point on the seek track proportional to the given ratio (0..1) of totalMs. */
+  /**
+   * Click a point on the seek track proportional to the given ratio (0..1) of totalMs.
+   *
+   * Clamped to [0.01, 0.99]: clicking at the literal edge (ratio exactly 0 or
+   * 1) computes x/y sitting precisely on the seek track's boundary pixel,
+   * where elementFromPoint unreliably resolves to the outer
+   * `replay-controls` wrapper div instead of the `replay-seek-track` child
+   * (confirmed via elementFromPoint probing — the wrapper has no onClick,
+   * so the click is silently swallowed and currentMs never updates). A
+   * 1%-inset click still lands well within the intended segment of the
+   * track for any realistic totalMs.
+   */
   async seekToRatio(ratio: number) {
     const box = await this.seekTrack.boundingBox();
     if (!box) throw new Error('seek track not visible/attached — cannot compute click position');
-    const x = box.x + box.width * Math.min(1, Math.max(0, ratio));
+    const clamped = Math.min(0.99, Math.max(0.01, ratio));
+    const x = box.x + box.width * clamped;
     const y = box.y + box.height / 2;
     await this.page.mouse.click(x, y);
   }
