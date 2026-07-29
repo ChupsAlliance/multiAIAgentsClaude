@@ -26,6 +26,7 @@ export function MissionControlPage() {
   const [elapsed, setElapsed] = useState('0:00')
   const [promptPreview, setPromptPreview] = useState(null) // { agents, tasks }
   const [planViewTab, setPlanViewTab] = useState('visual') // 'visual' | 'document'
+  const [replayPlanViewTab, setReplayPlanViewTab] = useState('plan') // 'plan' | 'prompts' — replay-only tab
   const [historyView, setHistoryView] = useState(null)     // full MissionState snapshot from history
   const [historyViewMode, setHistoryViewMode] = useState('view') // 'view' | 'continue'
   const [showShortcuts, setShowShortcuts] = useState(false)
@@ -164,10 +165,14 @@ export function MissionControlPage() {
     }
   }, [])
 
-  // ── Replay-on-real-UI mode: đọc-only, feed MissionDashboard bằng replayMissionState ──
+  // ── Replay-on-real-UI mode: read-only, switches UI by recorded phase ──
   if (isReplayMode) {
+    const replayPhase = replay.replayMissionState?.phase
+    const isReplayPlanning = replayPhase === 'Planning'
+    const isReplayReviewPlan = replayPhase === 'ReviewPlan' && replay.replayPlanReady
+
     return (
-      <div data-testid="mission-dashboard-replay-mode" className="h-screen bg-vs-bg text-vs-text flex overflow-hidden">
+      <div className="h-screen bg-vs-bg text-vs-text flex overflow-hidden">
         <Sidebar />
         <main className="flex-1 md:ml-64 flex flex-col h-screen overflow-hidden relative">
           <div className="h-8 shrink-0 drag-region" />
@@ -184,16 +189,84 @@ export function MissionControlPage() {
           </div>
 
           <div className="flex-1 px-4 pb-28 min-h-0 overflow-hidden">
-            <MissionDashboard
-              state={replay.replayMissionState}
-              isRunning={true}
-              isHistoryView={true}
-              onStop={() => {}}
-              onContinue={async () => {}}
-              onNewMission={handleExitReplay}
-              elapsed=""
-            />
+            {isReplayPlanning && (
+              <PlanningStream
+                state={replay.replayMissionState}
+                isRunning={true}
+                onStop={undefined}
+                mockupInfo={replay.mockupInfo}
+                onMockupRespond={replay.mockupInfo ? () => Promise.resolve() : undefined}
+              />
+            )}
+
+            {isReplayReviewPlan && (
+              <div data-testid="replay-readonly-overlay" className="relative h-full min-h-0">
+                <div className="absolute inset-0 z-10" />
+                {replayPlanViewTab === 'plan' ? (
+                  <div className="h-full min-h-0 bg-vs-bg rounded-lg border border-vs-border overflow-hidden flex flex-col">
+                    <PlanReview
+                      agents={replay.replayPlanReady.agents}
+                      tasks={replay.replayPlanReady.tasks}
+                      onDeploy={() => {}}
+                      onCancel={() => {}}
+                      onReplan={undefined}
+                      isReplanning={false}
+                    />
+                  </div>
+                ) : (
+                  <div className="h-full min-h-0 overflow-y-auto">
+                    <PromptPreview
+                      agents={replay.replayPlanReady.agents}
+                      tasks={replay.replayPlanReady.tasks}
+                      projectPath={replay.replayMissionState?.project_path || ''}
+                      onConfirm={() => {}}
+                      onBack={() => {}}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!isReplayPlanning && !isReplayReviewPlan && (
+              <div data-testid="mission-dashboard-replay-mode" className="h-full min-h-0">
+                <MissionDashboard
+                  state={replay.replayMissionState}
+                  isRunning={true}
+                  isHistoryView={true}
+                  onStop={() => {}}
+                  onContinue={async () => {}}
+                  onNewMission={handleExitReplay}
+                  elapsed=""
+                />
+              </div>
+            )}
           </div>
+
+          {/* Tab bar for ReviewPlan phase — mirrors live mode's PlanReview/PromptPreview split */}
+          {isReplayReviewPlan && (
+            <div className="absolute left-4 top-16 z-20 flex items-center gap-0.5">
+              <button
+                onClick={() => setReplayPlanViewTab('plan')}
+                className={`px-3 py-1.5 rounded-t-md text-xs font-mono transition-colors ${
+                  replayPlanViewTab === 'plan'
+                    ? 'bg-vs-panel text-vs-heading border-t border-x border-vs-border'
+                    : 'text-vs-muted hover:text-vs-heading hover:bg-vs-overlay/5'
+                }`}
+              >
+                Kế hoạch
+              </button>
+              <button
+                onClick={() => setReplayPlanViewTab('prompts')}
+                className={`px-3 py-1.5 rounded-t-md text-xs font-mono transition-colors ${
+                  replayPlanViewTab === 'prompts'
+                    ? 'bg-vs-panel text-vs-heading border-t border-x border-vs-border'
+                    : 'text-vs-muted hover:text-vs-heading hover:bg-vs-overlay/5'
+                }`}
+              >
+                Prompts
+              </button>
+            </div>
+          )}
 
           {/* ReplayControls overlay cố định ở đáy */}
           <div className="absolute left-0 right-0 bottom-0 px-4 pb-4 md:pl-4 pointer-events-none">
