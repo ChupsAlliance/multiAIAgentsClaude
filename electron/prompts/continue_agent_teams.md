@@ -45,7 +45,7 @@ After spawning, ACTIVELY monitor:
 ### Step 4: Final Verification & Shutdown
 When all teammates have reported completion OR been reassigned/timed out:
 1. Run final build verification yourself: {{PROJECT_TYPE}}
-2. If verification fails, send the error to the responsible teammate to fix (or fix it yourself if they are no longer active)
+2. If verification fails, send the error to the responsible teammate to fix. If they are no longer active, spawn a new teammate for the same role and hand it the error — never fix it yourself
 3. Only after PASSING: send shutdown_request to each teammate
    - **Do NOT wait for acknowledgement** — agents that completed their work may have gone idle, that is normal
    - Proceed to cleanup after sending shutdown_request regardless of response

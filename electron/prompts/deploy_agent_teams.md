@@ -126,7 +126,7 @@ When ALL agents have reported completion OR been reassigned/timed out:
 3. If build fails:
    - Identify which agent's code caused the error
    - Send them a DM with the exact error and file to fix (if still active)
-   - If agent is no longer active, fix the error yourself or spawn a new agent for it
+   - If agent is no longer active, respawn the same role as a new agent and hand it the error — Lead never edits code to fix another agent's mistake directly
    - Repeat until build passes
 4. If possible, run a smoke test:
    - For web apps: start dev server, check it doesn't crash immediately

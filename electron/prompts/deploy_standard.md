@@ -113,7 +113,7 @@ After all agents report PASS:
    - Missing file errors (referenced but doesn't exist)
 3. If build fails:
    - Identify the errors
-   - Fix them directly using Edit/Write tools, OR spawn a fix agent
+   - Spawn a fix agent to resolve them — Lead never edits code directly to fix another agent's mistake
    - Rebuild and repeat until 0 errors
 4. If possible, run a smoke test:
    - Web apps: start dev server briefly, verify no crash
