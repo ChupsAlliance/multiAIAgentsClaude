@@ -60,12 +60,61 @@ const PLAN_LINE = JSON.stringify({
   message: { content: [{ type: 'text', text: `=== MISSION PLAN ===\n${JSON.stringify(FAKE_PLAN)}\n=== END PLAN ===` }] },
 });
 
+// Since mission.cjs's QC/QA gate (electron/ipc/mission.cjs's enqueueQcCheck),
+// a task completing no longer reaches 'completed' directly — it goes through
+// pending_qc first, and tests/fixtures/fake-claude/claude.cjs's QC/QA verdict
+// emulation always FAILs the very first QC check for a launched app instance,
+// then PASSes every subsequent one (same fixture behavior
+// qcqa-verification-loop.spec.ts's script already exercises deliberately).
+// This spec's script needs the same two adjustments that spec's own comments
+// document, or the mission can never reach real 'Completed':
+//
+//   1. No "[Lead] Starting: ..." line: OutputParser's STARTING_RE matches
+//      ANY "[Agent] Starting: ..." line regardless of agent, and
+//      mission.cjs's case 'TaskStarted' only reconciles against the
+//      plan-seeded row when assigned_agent also matches (Task 12's fix). The
+//      plan only assigns this task to Dev, so a "[Lead] Starting: ..." line
+//      pushes a brand-new, permanently orphaned 'in_progress' task row for
+//      Lead (no Completed: line ever retires it) — that alone deadlocks
+//      runFinalQaSweep()'s `.every(t => t.status === 'completed')` gate
+//      forever, since the UI shows "Tasks 0/2" instead of "Tasks 0/1".
+//   2. A second "[Dev] Completed: ..." line (plus filler lines to buy real
+//      wall-clock time for the QC round-trip): the FIRST "Completed:" line
+//      only gets the task to 'pending_qc', which then FAILs QC and flips
+//      back to 'in_progress' — nothing re-completes it without a second
+//      "Completed:" line, so the retry's QC-pass -> QA-pass -> 'completed'
+//      chain (and thus runFinalQaSweep() ever seeing allCompleted) never
+//      fires.
 const FAKE_CLAUDE_SCRIPT = [
   PLAN_LINE,
-  '[Lead] Starting: Tao file cau hinh mau',
   "[Lead] Đang spawning teammate 'Dev'",
   '[Dev] Starting: Tao file cau hinh mau',
   '[Dev] Completed: Tao file cau hinh mau',
+  // Filler lines buy real wall-clock time (each costs fakeClaudeDelayMs) for
+  // the first QC check (FAIL) -> back to in_progress round-trip to land
+  // before the second "Completed:" line is read, so it's recognized as the
+  // same task's retry (mission.cjs's TaskCompleted handler only re-matches
+  // an existing task when it's back to 'in_progress') instead of being
+  // treated as unmatched.
+  '[Lead] Waiting for QC verification to finish (1/6)...',
+  '[Lead] Waiting for QC verification to finish (2/6)...',
+  '[Lead] Waiting for QC verification to finish (3/6)...',
+  '[Lead] Waiting for QC verification to finish (4/6)...',
+  '[Lead] Waiting for QC verification to finish (5/6)...',
+  '[Lead] Waiting for QC verification to finish (6/6)...',
+  '[Dev] Completed: Tao file cau hinh mau',
+  // More filler after the retry's "Completed:" line so the deploy process
+  // stays alive long enough for the retry's QC check (PASS) -> QA check
+  // (PASS) -> task 'completed' -> the final whole-picture QA sweep (also
+  // PASS) to all finish before this process exits — runFinalQaSweep() only
+  // runs when the deploy process closes, and silently no-ops (mission stuck
+  // Running forever) if not every task is 'completed' yet at that moment.
+  '[Lead] Waiting for QA verification to finish (1/6)...',
+  '[Lead] Waiting for QA verification to finish (2/6)...',
+  '[Lead] Waiting for QA verification to finish (3/6)...',
+  '[Lead] Waiting for QA verification to finish (4/6)...',
+  '[Lead] Waiting for QA verification to finish (5/6)...',
+  '[Lead] Waiting for QA verification to finish (6/6)...',
   '[Lead] Nhiem vu da hoan thanh thanh cong.',
 ];
 
