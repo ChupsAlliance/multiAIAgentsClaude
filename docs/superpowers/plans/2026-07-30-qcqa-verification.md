@@ -1801,7 +1801,7 @@ git commit -m "fix: gate Agent Teams inactivity completion behind the final QA s
 - [ ] **Step 1: Run the full unit test suite**
 
 Run: `npm test`
-Expected: all tests pass, including every new `.test.cjs`/`.test.jsx`/`.test.js` file added in Tasks 1, 5, 6, 7, 8, 9, 12, 13, 14.
+Expected: all tests pass, including every new `.test.cjs`/`.test.jsx`/`.test.js` file added in Tasks 1, 5, 6, 7, 8, 9, 12, 13, 14, 16.
 
 - [ ] **Step 2: Run the full E2E suite**
 
@@ -1816,6 +1816,56 @@ git commit -m "test: fix findings from QC/QA verification regression pass"
 ```
 
 (Skip this commit entirely if Steps 1-2 passed with no changes needed.)
+
+---
+
+## Task 16: Fix mission.cjs QC/QA transient-state gaps — `pending_qa` never emitted, `failed_qc`/`failed_qa` visible for ~0ms
+
+**Background:** Discovered during Task 11's E2E retry (round 4, after Task 13 landed and closed the prior UI-wiring gap). The implementer instrumented the running app with a `MutationObserver` and IPC-event timestamps and confirmed two genuine, pre-existing defects in `electron/ipc/mission.cjs`, both dating to Task 6's original implementation — not test/fixture artifacts, and not fixable within Task 11's test-only scope:
+
+1. **`enqueueQcCheck()` (`mission.cjs:244-265`) never emits `pending_qa`.** On QC `PASS`, it calls `enqueueQaCheck(task, agent, verdict)` directly (line 260) with no status mutation or `sendToWindowRef` call in between. `enqueueQaCheck()` itself (`mission.cjs:267-294`) only mutates/emits on the *terminal* QA outcome (`completed` at line 285-289, or routes to `handleQcQaFailure` for `failed_qa` at line 291) — there is no interim `task.status = 'pending_qa'` anywhere. Confirmed via `grep -rn "pending_qa" electron/ src/` that no code path in the entire codebase sets or sends `pending_qa`, even though the renderer side (`StatusBadge.jsx`'s `labelMap`/`config`, `TaskList.jsx`'s wiring from Task 13, `useMission.js`'s matcher from Task 9, and all their tests) is fully ready to display it. A task going through QA review is silently invisible to the user — it looks like nothing is happening between `pending_qc` and `completed`.
+
+2. **`handleQcQaFailure()` (`mission.cjs:296-324`) makes `failed_qc`/`failed_qa` visible for only ~2ms.** It sets `task.status = stage === 'qc' ? 'failed_qc' : 'failed_qa'` and calls `sendToWindowRef('mission:task-update', {status: task.status, ...})` (lines 298-303), then — synchronously, in the same function invocation, zero delay — falls through to `task.status = 'in_progress'` and sends a second `mission:task-update` (lines 319-323) when the tier is `retry-same`/`retry-fresh`. The implementer confirmed via `MutationObserver` that the DOM genuinely does paint `"QC Failed"` for a real, non-flaky instant — but the window between the two `sendToWindowRef` calls is so short (~2ms) that no polling-based observer (Playwright's `toBeVisible`, or a real user's eyes) can reliably catch it. Widening `FAKE_CLAUDE_DELAY_MS` in the test fixture does not help, since that knob only delays *when the verdict arrives* from the QC/QA subprocess — not the gap between the two `sendToWindowRef` calls once the verdict has already arrived and `handleQcQaFailure` starts executing.
+
+**Files:**
+- Modify: `electron/ipc/mission.cjs` (`enqueueQaCheck`, `handleQcQaFailure`)
+- Test: `electron/ipc/mission.test.cjs` (extend)
+
+**Interfaces:**
+- No new exports or signature changes — both fixes are internal to existing functions.
+- `enqueueQaCheck(task, agent, qcVerdict)`: add a `task.status = 'pending_qa'` mutation + `sendToWindowRef('mission:task-update', { agent, description: task.title, status: 'pending_qa', timestamp: now() })` call at the top of the function, before `qcQaRunner(...)` is invoked for the QA stage.
+- `handleQcQaFailure(task, stage, responsibleAgent, reason)`: introduce an observable delay between the `failed_qc`/`failed_qa` emit (lines 300-303) and the follow-up `in_progress` emit (lines 319-323) for the `retry-same`/`retry-fresh` path only (the `needs-attention` path already `return`s before reaching the `in_progress` transition, so it's unaffected). Use whichever mechanism best fits the existing codebase conventions — e.g. a small `setTimeout`-based delay (a few hundred ms is enough to be reliably observable; this is a real, user-facing UX improvement too, not just a test accommodation — a failed QC/QA check flashing for 2ms before auto-retrying would be confusing to a real user watching the UI, not just to Playwright).
+
+- [ ] **Step 1: Write the failing tests**
+
+Using the existing `mission.test.cjs` test-hook pattern (`__setMissionStateForTest`, `__setSendToWindowForTest`, `__setQcQaRunnerForTest`, `__handleParsedEventForTest`), write two new tests:
+- One asserting that after a QC `PASS` verdict, `sendToWindow` is called with `status: 'pending_qa'` before it is ever called with `status: 'completed'` or `status: 'failed_qa'` for that task.
+- One asserting that after a QC `FAIL` verdict routed to `retry-same`/`retry-fresh` (not `needs-attention`), there is a real, measurable time gap (or an equivalent deterministic signal — e.g. two separate macrotask ticks via `setImmediate`/fake timers, whichever this test file's existing conventions use for timing assertions) between the `failed_qc` emit and the subsequent `in_progress` emit, rather than both happening synchronously in the same tick.
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `npx vitest run electron/ipc/mission.test.cjs`
+Expected: FAIL on both new tests against current `mission.cjs`.
+
+- [ ] **Step 3: Implement the fixes**
+
+In `enqueueQaCheck`, add the `pending_qa` status mutation + emit before the `qcQaRunner(...)` call. In `handleQcQaFailure`, wrap the `retry-same`/`retry-fresh` path's `in_progress` transition in a short delay (e.g. `setTimeout(() => { ... }, DELAY_MS)`) so the two emits are observably separated in wall-clock time. Pick a `DELAY_MS` that's negligible to real mission flow (e.g. 300-500ms) but comfortably longer than a Playwright polling interval.
+
+- [ ] **Step 4: Run tests to verify they pass, then run the full suite**
+
+Run: `npx vitest run electron/ipc/mission.test.cjs` (expect PASS on both new tests plus all pre-existing tests in the file still green), then `npm test` (expect the full suite green — no regressions in `qcqa.test.cjs` or any renderer test).
+
+- [ ] **Step 5: Retry Task 11's E2E test**
+
+Run: `npm run pretest:e2e && npx playwright test tests/specs/qcqa-verification-loop.spec.ts --reporter=list` (run at least twice to confirm no residual flakiness). Also re-run `npx playwright test tests/specs/replay-real-ui-fidelity.spec.ts --reporter=list` to confirm no regression there.
+Expected: both PASS reliably. If `qcqa-verification-loop.spec.ts` still fails for any reason at this point, do not attempt to fix `mission.cjs` further beyond this task's stated scope — report the new finding instead, since a 4th distinct blocker at this depth would itself warrant fresh user input rather than assuming further mission.cjs changes are pre-authorized.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add electron/ipc/mission.cjs electron/ipc/mission.test.cjs
+git commit -m "fix: emit pending_qa transition and delay failed_qc/failed_qa->in_progress for observability"
+```
 
 ---
 
