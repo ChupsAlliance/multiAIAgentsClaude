@@ -264,7 +264,18 @@ function enqueueQcCheck(task, agent) {
   });
 }
 
+// Small, real-UX-visible delay between the failed_qc/failed_qa emit and the
+// follow-up in_progress emit in handleQcQaFailure, so the failure state is
+// actually observable (by a user or a polling test) instead of flashing for
+// ~0ms in the same synchronous tick.
+const QC_QA_FAILURE_VISIBILITY_DELAY_MS = 400;
+
 function enqueueQaCheck(task, agent, qcVerdict) {
+  task.status = 'pending_qa';
+  sendToWindowRef('mission:task-update', {
+    agent, description: task.title, status: 'pending_qa', timestamp: now(),
+  });
+
   const template = loadPromptTemplate('qa_check.md');
   const prompt = fillTemplate(template, {
     PROJECT_PATH: missionState.project_path,
@@ -316,11 +327,16 @@ function handleQcQaFailure(task, stage, responsibleAgent, reason) {
   // by putting the task back in progress. Lead's own DM/resume mechanics
   // (unchanged, out of scope) pick this up the same way it already handles
   // build-failure feedback today.
-  task.status = 'in_progress';
-  sendToWindowRef('mission:task-update', {
-    agent: responsibleAgent, description: task.title, status: 'in_progress',
-    reason, timestamp: ts,
-  });
+  // The transition is delayed (rather than immediate) so the failed_qc/failed_qa
+  // state is actually visible for a moment -- both to a real user watching the
+  // UI and to any polling-based observer -- instead of flashing for ~0ms.
+  setTimeout(() => {
+    task.status = 'in_progress';
+    sendToWindowRef('mission:task-update', {
+      agent: responsibleAgent, description: task.title, status: 'in_progress',
+      reason, timestamp: now(),
+    });
+  }, QC_QA_FAILURE_VISIBILITY_DELAY_MS);
 }
 
 // ─────────────────────────────────────────────────────────────────
