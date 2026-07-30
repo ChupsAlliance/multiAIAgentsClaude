@@ -28,4 +28,10 @@ function parseQcQaVerdict(stdoutText, stage) {
   };
 }
 
-module.exports = { parseQcQaVerdict };
+function nextEscalationTier(qcRound) {
+  if (qcRound <= 2) return { tier: 'retry-same' };
+  if (qcRound <= 8) return { tier: 'retry-fresh' };
+  return { tier: 'needs-attention' };
+}
+
+module.exports = { parseQcQaVerdict, nextEscalationTier };

@@ -54,3 +54,23 @@ describe('parseQcQaVerdict', () => {
     })
   })
 })
+
+const { nextEscalationTier } = require('./qcqa.cjs')
+
+describe('nextEscalationTier', () => {
+  test('rounds 1-2 retry with the same agent', () => {
+    expect(nextEscalationTier(1)).toEqual({ tier: 'retry-same' })
+    expect(nextEscalationTier(2)).toEqual({ tier: 'retry-same' })
+  })
+
+  test('rounds 3-8 escalate to a fresh agent/stronger model', () => {
+    for (let round = 3; round <= 8; round++) {
+      expect(nextEscalationTier(round)).toEqual({ tier: 'retry-fresh' })
+    }
+  })
+
+  test('round 9 and beyond hits the safety ceiling', () => {
+    expect(nextEscalationTier(9)).toEqual({ tier: 'needs-attention' })
+    expect(nextEscalationTier(10)).toEqual({ tier: 'needs-attention' })
+  })
+})
