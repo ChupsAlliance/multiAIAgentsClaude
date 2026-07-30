@@ -19,8 +19,8 @@
 - `task.qcRound` is a single shared counter. Rounds 1-2: resume/resubmit to the same agent. Rounds 3-8: fresh agent instance or stronger model. Round 9 (8th retry also failed): stop, set `mission.status = 'Needs Attention'`, surface to UI — never auto-retry past this without asking the user.
 - A QC/QA failure blocks only the owning task (and its declared downstream dependents); other agents keep working.
 - Lead never hand-fixes another agent's bug — fixes always route back through a sub-agent.
-- Mission reaches `Completed` only via `runFinalQaSweep()` passing. Exit code alone never sets `Completed`.
-- Out of scope: Presentation Mode, the known `useReplay.js` `mission:team-event`/`mission:task-reassigned` gap, and changing how Lead spawns sub-agents (Agent tool/Agent Teams/SendMessage untouched).
+- Mission reaches `Completed` only via `runFinalQaSweep()` passing. Exit code alone never sets `Completed`. This includes the Agent Teams 90s inactivity-completion timer (`scheduleAgentTeamsCompletion`, closed in Task 12) — added after Task 7's review surfaced it as a second bypass of this same constraint.
+- Out of scope: Presentation Mode, the known `useReplay.js` `mission:team-event`/`mission:task-reassigned` gap, and changing how Lead spawns sub-agents (Agent tool/Agent Teams/SendMessage untouched). Note: Task 12 changes what happens when the inactivity timer fires, not how/when Lead spawns agents via Agent Teams — the spawn mechanics themselves remain untouched.
 
 ---
 
@@ -1494,14 +1494,150 @@ git commit -m "test: add E2E coverage for the QC/QA verification loop"
 
 ---
 
-## Task 12: Full regression pass
+## Task 12: Close the Agent Teams completion bypass — gate `scheduleAgentTeamsCompletion` behind `runFinalQaSweep()`
+
+**Background:** Discovered during Task 7's code review, not part of the original design. `scheduleAgentTeamsCompletion` (`electron/ipc/mission.cjs:733-783`, scheduled from the `result`-event handler at `mission.cjs:2425-2435` whenever all non-Lead agents in an Agent Teams mission report Done/Error) force-sets `missionState.status = 'Completed'` and force-completes every task after a 90-second inactivity timer, with **zero QC/QA involvement**. This is a second, independent bypass of the plan's own Global Constraint (line 22: "Mission reaches `Completed` only via `runFinalQaSweep()` passing. Exit code alone never sets `Completed`."), reachable only in `execution_mode: 'agent_teams'`. It predates this plan and was not introduced by any prior task here — this task closes it using the same pattern Task 7 already established for the exit-code path.
+
+**Files:**
+- Modify: `electron/ipc/mission.cjs:733-783` (`scheduleAgentTeamsCompletion`)
+- Test: `electron/ipc/mission.test.cjs`
+
+**Interfaces:**
+- Consumes: `runFinalQaSweep()` (Task 7).
+- Produces: the 90s inactivity timer now routes through `runFinalQaSweep()` instead of directly assigning `'Completed'` and force-completing tasks. If not every task is `'completed'` yet, the sweep leaves the mission `'Running'` (visible gap, not papered over) rather than force-completing stragglers — same behavior Task 7 already established for the exit-code path. This intentionally removes the old "any task not yet `completed` gets force-completed" loop at lines 758-760, since that loop is exactly the kind of unverified completion this whole plan exists to close.
+
+- [ ] **Step 1: Write the failing test**
+
+Append to `electron/ipc/mission.test.cjs`:
+
+```js
+describe('scheduleAgentTeamsCompletion gating', () => {
+  let mission
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    delete require.cache[require.resolve('./mission.cjs')]
+    mission = require('./mission.cjs')
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  test('90s inactivity timeout routes through runFinalQaSweep, not a direct Completed assignment', async () => {
+    const sendToWindow = vi.fn()
+    mission.__setMissionStateForTest({
+      id: 'm1', status: 'Running', phase: 'Executing',
+      execution_mode: 'agent_teams',
+      tasks: [{ id: 't1', title: 'A', status: 'completed' }],
+      agents: [{ name: 'Lead', status: 'Working' }, { name: 'Dev', status: 'Done' }],
+      log: [], project_path: '/tmp/proj', file_changes: [],
+    })
+    mission.__setSendToWindowForTest(sendToWindow)
+    mission.__setQcQaRunnerForTest(async () => ({ verdict: 'PASS' }))
+
+    mission.__scheduleAgentTeamsCompletionForTest('m1', sendToWindow)
+    await vi.advanceTimersByTimeAsync(90_000)
+
+    expect(mission.__getMissionStateForTest().status).toBe('Completed')
+  })
+
+  test('does not force-complete a still-pending task — leaves mission Running instead', async () => {
+    const sendToWindow = vi.fn()
+    mission.__setMissionStateForTest({
+      id: 'm1', status: 'Running', phase: 'Executing',
+      execution_mode: 'agent_teams',
+      tasks: [{ id: 't1', title: 'A', status: 'completed' },
+              { id: 't2', title: 'B', status: 'pending_qc' }],
+      agents: [{ name: 'Lead', status: 'Working' }, { name: 'Dev', status: 'Done' }],
+      log: [], project_path: '/tmp/proj', file_changes: [],
+    })
+    mission.__setSendToWindowForTest(sendToWindow)
+    mission.__setQcQaRunnerForTest(async () => ({ verdict: 'PASS' }))
+
+    mission.__scheduleAgentTeamsCompletionForTest('m1', sendToWindow)
+    await vi.advanceTimersByTimeAsync(90_000)
+
+    const state = mission.__getMissionStateForTest()
+    expect(state.status).not.toBe('Completed')
+    expect(state.tasks[1].status).not.toBe('completed')
+  })
+})
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run electron/ipc/mission.test.cjs`
+Expected: FAIL — `__scheduleAgentTeamsCompletionForTest is not a function`, and/or the force-complete-all-tasks behavior makes the second test's `state.tasks[1].status` assertion fail.
+
+- [ ] **Step 3: Write minimal implementation**
+
+In `electron/ipc/mission.cjs`, replace the body of the `setTimeout` callback inside `scheduleAgentTeamsCompletion` (currently lines ~735-782) — keep the same guard clauses and logging, but replace the direct `'Completed'` assignment and the force-complete-tasks loop with a call into `runFinalQaSweep()`:
+
+```js
+function scheduleAgentTeamsCompletion(missionId, sendToWindow) {
+  clearAgentTeamsTimer();
+  agentTeamsCompletionTimer = setTimeout(() => {
+    agentTeamsCompletionTimer = null;
+    if (!missionState || missionState.status !== 'Running') return;
+    if (missionState.phase !== 'Executing') return;
+
+    const ts = now();
+    const logEntry = makeLogEntry(ts, 'System',
+      'All agents done — Lead process timed out after 90s, running final QA sweep', 'info');
+    missionState.log.push(logEntry);
+    sendToWindow('mission:log', logEntry);
+
+    killChild();
+    stopWatcher();
+    stopAutosave();
+    stopStuckChecker();
+
+    runFinalQaSweep().then(() => {
+      missionState.phase = 'Done';
+      for (const a of missionState.agents) {
+        if (a.status !== 'Error') a.status = 'Done';
+        if (a.name === 'Lead') a.current_task = missionState.status === 'Completed' ? 'Mission completed' : 'Mission failed';
+      }
+      finalizeDeployExit(missionId, sendToWindow, ts);
+    });
+  }, 90_000);
+}
+```
+
+This reuses `finalizeDeployExit` (Task 7) for the history/autosave/status-emit tail, so the two completion paths (process-exit and Agent-Teams-inactivity-timeout) stay consistent instead of duplicating that logic a third time. Since `scheduleAgentTeamsCompletion` is defined earlier in the file than `runFinalQaSweep`/`finalizeDeployExit` (both function declarations, so hoisting makes the forward reference safe — confirm with `node --check` same as Task 7), no reordering of function declarations is required.
+
+Add a test hook alongside the others:
+
+```js
+if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
+  module.exports.__scheduleAgentTeamsCompletionForTest = (missionId, sendToWindow) =>
+    scheduleAgentTeamsCompletion(missionId, sendToWindow);
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `node --check electron/ipc/mission.cjs && npx vitest run electron/ipc/mission.test.cjs`
+Expected: `node --check` prints nothing; vitest PASS (all tests in the file, including this task's 2 new ones).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add electron/ipc/mission.cjs electron/ipc/mission.test.cjs
+git commit -m "fix: gate Agent Teams inactivity completion behind the final QA sweep too"
+```
+
+---
+
+## Task 13: Full regression pass
 
 **Files:** none (verification-only task)
 
 - [ ] **Step 1: Run the full unit test suite**
 
 Run: `npm test`
-Expected: all tests pass, including every new `.test.cjs`/`.test.jsx`/`.test.js` file added in Tasks 1, 5, 6, 7, 8, 9.
+Expected: all tests pass, including every new `.test.cjs`/`.test.jsx`/`.test.js` file added in Tasks 1, 5, 6, 7, 8, 9, 12.
 
 - [ ] **Step 2: Run the full E2E suite**
 
