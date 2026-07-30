@@ -419,8 +419,18 @@ function handleParsedEvent(event, sendToWindow) {
 
     case 'TaskStarted': {
       const { agent, description } = event;
-      const taskId = `task-${ts}`;
       if (missionState) {
+        const existing = missionState.tasks.find(x =>
+          x.title === description && x.assigned_agent === agent && x.status === 'pending');
+        if (existing) {
+          existing.status = 'in_progress';
+          existing.started_at = ts;
+          const a = missionState.agents.find(x => x.name === agent);
+          if (a) { a.status = 'Working'; a.current_task = description; }
+          sendToWindow('mission:task-update', { task_id: existing.id, agent, description, status: 'in_progress', timestamp: ts });
+          break;
+        }
+        const taskId = `task-${ts}`;
         missionState.tasks.push({
           id: taskId, title: description,
           status: 'in_progress', assigned_agent: agent,
@@ -428,8 +438,8 @@ function handleParsedEvent(event, sendToWindow) {
         });
         const a = missionState.agents.find(x => x.name === agent);
         if (a) { a.status = 'Working'; a.current_task = description; }
+        sendToWindow('mission:task-update', { task_id: taskId, agent, description, status: 'in_progress', timestamp: ts });
       }
-      sendToWindow('mission:task-update', { task_id: taskId, agent, description, status: 'in_progress', timestamp: ts });
       break;
     }
 

@@ -162,3 +162,46 @@ describe('runFinalQaSweep gating', () => {
     expect(state.tasks[0].qcRound).toBe(1)
   })
 })
+
+describe('seed-task reconciliation', () => {
+  beforeEach(() => {
+    delete require.cache[require.resolve('./mission.cjs')]
+  })
+
+  test('TaskStarted reconciles against the plan-seeded row instead of creating a duplicate', () => {
+    const mission = require('./mission.cjs')
+    mission.__setMissionStateForTest({
+      id: 'm1', status: 'Running', phase: 'Executing',
+      tasks: [{ id: 'task-0', title: 'Build the widget', status: 'pending', assigned_agent: 'Dev' }],
+      agents: [{ name: 'Dev', status: 'Idle' }],
+      log: [], project_path: '/tmp/proj', file_changes: [],
+    })
+    mission.__setSendToWindowForTest(() => {})
+
+    mission.__handleParsedEventForTest({ type: 'TaskStarted', agent: 'Dev', description: 'Build the widget' }, () => {})
+
+    const state = mission.__getMissionStateForTest()
+    expect(state.tasks.length).toBe(1)
+    expect(state.tasks[0].id).toBe('task-0')
+    expect(state.tasks[0].status).toBe('in_progress')
+  })
+
+  test('TaskCompleted reconciles against the seeded row across the full QC/QA cycle to completed', () => {
+    const mission = require('./mission.cjs')
+    mission.__setMissionStateForTest({
+      id: 'm1', status: 'Running', phase: 'Executing',
+      tasks: [{ id: 'task-0', title: 'Build the widget', status: 'pending', assigned_agent: 'Dev' }],
+      agents: [{ name: 'Dev', status: 'Idle' }],
+      log: [], project_path: '/tmp/proj', file_changes: [],
+    })
+    mission.__setSendToWindowForTest(() => {})
+    mission.__setQcQaRunnerForTest(async () => ({ verdict: 'PASS' }))
+
+    mission.__handleParsedEventForTest({ type: 'TaskStarted', agent: 'Dev', description: 'Build the widget' }, () => {})
+    mission.__handleParsedEventForTest({ type: 'TaskCompleted', agent: 'Dev', description: 'Build the widget' }, () => {})
+
+    const state = mission.__getMissionStateForTest()
+    expect(state.tasks.length).toBe(1)
+    expect(state.tasks[0].id).toBe('task-0')
+  })
+})
