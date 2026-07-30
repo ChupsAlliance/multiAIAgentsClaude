@@ -1,5 +1,5 @@
 // electron/ipc/mission.test.cjs
-import { describe, test, expect, vi, beforeEach } from 'vitest'
+import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createRequire } from 'module'
 const require = createRequire(import.meta.url)
 
@@ -279,5 +279,58 @@ describe('seed-task reconciliation', () => {
     const state = mission.__getMissionStateForTest()
     expect(state.tasks.length).toBe(1)
     expect(state.tasks[0].id).toBe('task-0')
+  })
+})
+
+describe('scheduleAgentTeamsCompletion gating', () => {
+  let mission
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    delete require.cache[require.resolve('./mission.cjs')]
+    mission = require('./mission.cjs')
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  test('90s inactivity timeout routes through runFinalQaSweep, not a direct Completed assignment', async () => {
+    const sendToWindow = vi.fn()
+    mission.__setMissionStateForTest({
+      id: 'm1', status: 'Running', phase: 'Executing',
+      execution_mode: 'agent_teams',
+      tasks: [{ id: 't1', title: 'A', status: 'completed' }],
+      agents: [{ name: 'Lead', status: 'Working' }, { name: 'Dev', status: 'Done' }],
+      log: [], project_path: '/tmp/proj', file_changes: [],
+    })
+    mission.__setSendToWindowForTest(sendToWindow)
+    mission.__setQcQaRunnerForTest(async () => ({ verdict: 'PASS' }))
+
+    mission.__scheduleAgentTeamsCompletionForTest('m1', sendToWindow)
+    await vi.advanceTimersByTimeAsync(90_000)
+
+    expect(mission.__getMissionStateForTest().status).toBe('Completed')
+  })
+
+  test('does not force-complete a still-pending task — leaves mission Running instead', async () => {
+    const sendToWindow = vi.fn()
+    mission.__setMissionStateForTest({
+      id: 'm1', status: 'Running', phase: 'Executing',
+      execution_mode: 'agent_teams',
+      tasks: [{ id: 't1', title: 'A', status: 'completed' },
+              { id: 't2', title: 'B', status: 'pending_qc' }],
+      agents: [{ name: 'Lead', status: 'Working' }, { name: 'Dev', status: 'Done' }],
+      log: [], project_path: '/tmp/proj', file_changes: [],
+    })
+    mission.__setSendToWindowForTest(sendToWindow)
+    mission.__setQcQaRunnerForTest(async () => ({ verdict: 'PASS' }))
+
+    mission.__scheduleAgentTeamsCompletionForTest('m1', sendToWindow)
+    await vi.advanceTimersByTimeAsync(90_000)
+
+    const state = mission.__getMissionStateForTest()
+    expect(state.status).not.toBe('Completed')
+    expect(state.tasks[1].status).not.toBe('completed')
   })
 })

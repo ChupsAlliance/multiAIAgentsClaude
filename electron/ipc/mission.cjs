@@ -765,7 +765,7 @@ function scheduleAgentTeamsCompletion(missionId, sendToWindow) {
 
     const ts = now();
     const logEntry = makeLogEntry(ts, 'System',
-      'All agents done — auto-completing (Lead process timed out after 90s)', 'info');
+      'All agents done — Lead process timed out after 90s, running final QA sweep', 'info');
     missionState.log.push(logEntry);
     sendToWindow('mission:log', logEntry);
 
@@ -774,37 +774,14 @@ function scheduleAgentTeamsCompletion(missionId, sendToWindow) {
     stopAutosave();
     stopStuckChecker();
 
-    missionState.status = 'Completed';
-    missionState.phase  = 'Done';
-    missionState.ended_at = ts;
-    for (const a of missionState.agents) {
-      if (a.status !== 'Error') a.status = 'Done';
-      if (a.name === 'Lead') a.current_task = 'Mission completed';
-    }
-    for (const task of missionState.tasks) {
-      if (task.status !== 'completed') { task.status = 'completed'; task.completed_at = ts; }
-    }
-
-    // Persist to history like a normal completion
-    const histEntry = {
-      id: missionState.id,
-      description: missionState.description,
-      project_path: missionState.project_path,
-      execution_mode: missionState.execution_mode || 'agent_teams',
-      team_size: missionState.team_size,
-      forked_from: missionState.forked_from || null,
-      forked_from_desc: missionState.forked_from_desc || null,
-      status: 'completed',
-      started_at: missionState.started_at,
-      ended_at: ts,
-      agent_count: missionState.agents.length,
-      task_summary: missionState.tasks.map(t => `[${t.status}] ${t.title}`),
-      file_changes: missionState.file_changes,
-      log_count: missionState.log.length,
-    };
-    saveToHistory(histEntry);
-    saveMissionSnapshot(missionState);
-    sendToWindow('mission:status', { mission_id: missionId, status: 'completed' });
+    runFinalQaSweep().then(() => {
+      missionState.phase = 'Done';
+      for (const a of missionState.agents) {
+        if (a.status !== 'Error') a.status = 'Done';
+        if (a.name === 'Lead') a.current_task = missionState.status === 'Completed' ? 'Mission completed' : 'Mission failed';
+      }
+      finalizeDeployExit(missionId, sendToWindow, ts);
+    });
   }, 90_000);
 }
 
@@ -4126,4 +4103,6 @@ if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
     });
   };
   module.exports.__runFinalQaSweepForTest = () => runFinalQaSweep();
+  module.exports.__scheduleAgentTeamsCompletionForTest = (missionId, sendToWindow) =>
+    scheduleAgentTeamsCompletion(missionId, sendToWindow);
 }
