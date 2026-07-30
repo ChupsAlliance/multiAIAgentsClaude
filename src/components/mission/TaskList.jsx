@@ -4,6 +4,10 @@ import { CheckCircle2, Circle, Loader2, AlertCircle, Clock, AlertTriangle } from
 const statusIcon = {
   pending:     <Circle size={14} className="text-vs-muted" />,
   in_progress: <Loader2 size={14} className="text-vs-accent animate-spin" />,
+  pending_qc:  <Loader2 size={14} className="text-blue-400 animate-spin" />,
+  failed_qc:   <AlertTriangle size={14} className="text-vs-red" />,
+  pending_qa:  <Loader2 size={14} className="text-purple-400 animate-spin" />,
+  failed_qa:   <AlertTriangle size={14} className="text-vs-red" />,
   completed:   <CheckCircle2 size={14} className="text-vs-green" />,
   blocked:     <AlertCircle size={14} className="text-yellow-400" />,
   error:       <AlertCircle size={14} className="text-vs-red" />,
@@ -18,6 +22,7 @@ const PHASE_DEFS = [
 
 function inferPhase(task, agentLogs) {
   if (task.status === 'completed') return 'complete'
+  if (task.status === 'pending_qc' || task.status === 'pending_qa') return 'building'
   if (task.status !== 'in_progress') return null
 
   if (!task.assigned_agent) return 'investigating'
