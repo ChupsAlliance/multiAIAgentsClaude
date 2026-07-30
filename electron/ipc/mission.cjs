@@ -18,6 +18,9 @@ const recordingSchema = require('../lib/recordingSchema.cjs');
 const recordingStore  = require('../lib/recordingStore.cjs');
 const replayEngine    = require('../lib/replayEngine.cjs');
 
+// ── QC/QA per-task verification pipeline ────────────────────────
+const { runQcQaCheck, nextEscalationTier } = require('../lib/qcqa.cjs');
+
 // ── Prompt templates (loaded once at startup) ──────────────────
 // Dev: electron/prompts/   Prod (packaged): resources/prompts/
 function promptPath(filename) {
@@ -52,6 +55,14 @@ let stuckCheckerInterval = null;
 const agentLastActivity = new Map();  // agentName → lastLogTimestamp (ms)
 const agentLastTask = new Map();      // agentName → { text, since }
 const agentStuckWarnedAt = new Map(); // agentName → { no_log?: timestamp, task_frozen?: timestamp }
+
+// ── QC/QA per-task verification pipeline state ──
+// qcQaRunner: injectable so tests can stub out the real `claude` subprocess spawn.
+// sendToWindowRef: enqueueQcCheck/enqueueQaCheck/handleQcQaFailure live outside the
+// registerMission(...) closure that defines sendToWindow, so we capture a reference
+// to it here once, at registerMission time (see `sendToWindowRef = sendToWindow;` below).
+let qcQaRunner = runQcQaCheck;
+let sendToWindowRef = () => {};
 
 // ─────────────────────────────────────────────────────────────────
 // Helper: current timestamp in milliseconds
@@ -216,10 +227,100 @@ class OutputParser {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// enqueueQcCheck — stub (Task 6 replaces this with the real implementation)
+// QC/QA per-task verification pipeline
 // ─────────────────────────────────────────────────────────────────
-function enqueueQcCheck(_task, _agent) {
-  // TODO(Task 6): spawn QC-Agent subprocess and route the verdict.
+function loadPromptTemplate(filename) {
+  return fs.readFileSync(promptPath(filename), 'utf8');
+}
+
+function fillTemplate(template, values) {
+  let out = template;
+  for (const [key, value] of Object.entries(values)) {
+    out = out.split(`{{${key}}}`).join(value == null ? '' : String(value));
+  }
+  return out;
+}
+
+function enqueueQcCheck(task, agent) {
+  const template = loadPromptTemplate('qc_check.md');
+  const prompt = fillTemplate(template, {
+    PROJECT_PATH: missionState.project_path,
+    TASK_TITLE: task.title,
+    TASK_DETAIL: task.detail || task.title,
+    FILES_WRITTEN: (task.files_written || []).join(', ') || '(none reported)',
+    BUILD_HINT: detectProjectType(missionState.project_path || '.'),
+    RESPONSIBLE_AGENT: agent,
+  });
+
+  qcQaRunner({
+    spawnClaude, prompt, projectPath: missionState.project_path,
+    model: 'claude-sonnet-5', stage: 'QC', timeoutMs: 180000,
+  }).then((verdict) => {
+    if (verdict.verdict === 'PASS') {
+      enqueueQaCheck(task, agent, verdict);
+    } else {
+      handleQcQaFailure(task, 'qc', verdict.responsibleAgent || agent, verdict.reason);
+    }
+  });
+}
+
+function enqueueQaCheck(task, agent, qcVerdict) {
+  const template = loadPromptTemplate('qa_check.md');
+  const prompt = fillTemplate(template, {
+    PROJECT_PATH: missionState.project_path,
+    TASK_TITLE: task.title,
+    TASK_WHY: task.why || '(not specified)',
+    TASK_DETAIL: task.detail || task.title,
+    FILES_WRITTEN: (task.files_written || []).join(', ') || '(none reported)',
+    QC_VERDICT_SUMMARY: 'PASS',
+    RESPONSIBLE_AGENT: agent,
+    SCOPE_NOTE: '',
+  });
+
+  qcQaRunner({
+    spawnClaude, prompt, projectPath: missionState.project_path,
+    model: 'claude-sonnet-5', stage: 'QA', timeoutMs: 180000,
+  }).then((verdict) => {
+    if (verdict.verdict === 'PASS') {
+      task.status = 'completed';
+      task.completed_at = now();
+      sendToWindowRef('mission:task-update', {
+        agent, description: task.title, status: 'completed', timestamp: task.completed_at,
+      });
+    } else {
+      handleQcQaFailure(task, 'qa', verdict.responsibleAgent || agent, verdict.reason);
+    }
+  });
+}
+
+function handleQcQaFailure(task, stage, responsibleAgent, reason) {
+  task.qcRound = (task.qcRound || 0) + 1;
+  task.status = stage === 'qc' ? 'failed_qc' : 'failed_qa';
+  const ts = now();
+  sendToWindowRef('mission:task-update', {
+    agent: responsibleAgent, description: task.title, status: task.status,
+    reason, timestamp: ts,
+  });
+
+  const { tier } = nextEscalationTier(task.qcRound);
+  if (tier === 'needs-attention') {
+    missionState.status = 'Needs Attention';
+    sendToWindowRef('mission:status', {
+      mission_id: missionState.id, status: 'Needs Attention',
+      task_id: task.id, reason,
+    });
+    return;
+  }
+
+  // retry-same / retry-fresh: hand back to Lead's existing agent-resume flow
+  // by putting the task back in progress. Lead's own DM/resume mechanics
+  // (unchanged, out of scope) pick this up the same way it already handles
+  // build-failure feedback today.
+  task.status = 'in_progress';
+  sendToWindowRef('mission:task-update', {
+    agent: responsibleAgent, description: task.title, status: 'in_progress',
+    reason, timestamp: ts,
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -2564,6 +2665,11 @@ module.exports = function registerMission(getMainWindow) {
     } catch (_) {}
   }
 
+  // Make sendToWindow reachable from the QC/QA pipeline functions
+  // (enqueueQcCheck/enqueueQaCheck/handleQcQaFailure), which live outside
+  // this closure and would otherwise have no way to reach the renderer.
+  sendToWindowRef = sendToWindow;
+
   // Khởi tạo replay engine với sendToWindow (đúng channel gốc) và
   // 1 hàm kiểm tra mission thật có đang chạy hay không.
   replayEngine.init({
@@ -3905,4 +4011,27 @@ if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
   module.exports.__setMissionStateForTest = (state) => { missionState = state; };
   module.exports.__getMissionStateForTest = () => missionState;
   module.exports.__handleParsedEventForTest = (event, sendToWindow) => handleParsedEvent(event, sendToWindow);
+  module.exports.__setSendToWindowForTest = (fn) => { sendToWindowRef = fn; };
+  module.exports.__setQcQaRunnerForTest = (fn) => { qcQaRunner = fn; };
+  module.exports.__enqueueQcCheckForTest = (task, agent) => {
+    return new Promise((resolve) => {
+      const template = loadPromptTemplate('qc_check.md');
+      const prompt = fillTemplate(template, {
+        PROJECT_PATH: missionState.project_path, TASK_TITLE: task.title,
+        TASK_DETAIL: task.detail || task.title,
+        FILES_WRITTEN: (task.files_written || []).join(', ') || '(none reported)',
+        BUILD_HINT: detectProjectType(missionState.project_path || '.'),
+        RESPONSIBLE_AGENT: agent,
+      });
+      qcQaRunner({ spawnClaude, prompt, projectPath: missionState.project_path,
+        model: 'claude-sonnet-5', stage: 'QC', timeoutMs: 180000 }).then((verdict) => {
+        if (verdict.verdict === 'PASS') {
+          enqueueQaCheck(task, agent, verdict);
+        } else {
+          handleQcQaFailure(task, 'qc', verdict.responsibleAgent || agent, verdict.reason);
+        }
+        resolve();
+      });
+    });
+  };
 }
