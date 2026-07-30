@@ -1801,7 +1801,7 @@ git commit -m "fix: gate Agent Teams inactivity completion behind the final QA s
 - [ ] **Step 1: Run the full unit test suite**
 
 Run: `npm test`
-Expected: all tests pass, including every new `.test.cjs`/`.test.jsx`/`.test.js` file added in Tasks 1, 5, 6, 7, 8, 9, 12, 13, 14, 16.
+Expected: all tests pass, including every new `.test.cjs`/`.test.jsx`/`.test.js` file added in Tasks 1, 5, 6, 7, 8, 9, 12, 13, 14, 16. Task 17 (if it lands before Task 15 runs) should also be confirmed still green here.
 
 - [ ] **Step 2: Run the full E2E suite**
 
@@ -1866,6 +1866,45 @@ Expected: both PASS reliably. If `qcqa-verification-loop.spec.ts` still fails fo
 git add electron/ipc/mission.cjs electron/ipc/mission.test.cjs
 git commit -m "fix: emit pending_qa transition and delay failed_qc/failed_qa->in_progress for observability"
 ```
+
+---
+
+## Task 17: Fix `replay-real-ui-fidelity.spec.ts` — its fixture script never emits QC/QA verdicts, so its mission can never reach `Completed`
+
+**Background:** Discovered independently by the plan owner while verifying Task 16 (which gated mission `Completed` behind `runFinalQaSweep()` — a Task 7 change, already committed). `tests/specs/replay-real-ui-fidelity.spec.ts` predates this entire QC/QA plan and its own `FAKE_CLAUDE_SCRIPT` fixture script only emits plain `[Agent] Starting: ...` / `[Agent] Completed: ...` mission-transcript lines — it has no knowledge of QC/QA subprocess invocations. Since Task 7's change, a task completing via `TaskCompleted` now transitions to `pending_qc` (not `completed`) and calls `enqueueQcCheck()`, which spawns a real QC subprocess via the shadowed `claude` binary (`tests/fixtures/fake-claude/claude.cjs`). That fixture DOES already handle QC/QA-prompted invocations generically (added during Task 11, branching on the `-p` prompt's `"You are the QC-Agent"`/`"You are the QA-Agent"` opening line) — but confirmed via a live run that the mission driven by `replay-real-ui-fidelity.spec.ts` gets stuck at `"Running"` / `"Tasks 0/2"` and never reaches `Completed`, so its later assertion `await expect(this.saveDialog).toBeVisible())` (in `RecordingsPage.waitForSaveDialog()`, triggered only when `missionState.status === 'Completed'` — see `src/pages/MissionControlPage.jsx:54`) times out waiting for a dialog that never opens.
+
+Root cause is under investigation as part of this task's Step 1 (see below) — plausible candidates: the QC subprocess genuinely fails/errors for this spec's specific task shapes (e.g. it lacks the `RESPONSIBLE_AGENT`/prompt-fillable fields the fixture or `qc_check.md` template expects), or some other spec-specific interaction. This task's job is to diagnose and fix it — likely by confirming the fixture's generic QC/QA branching (from Task 11) does work correctly for this spec's task shape once invoked, and that nothing else about this older spec's assumptions (e.g. it expecting `Completed` on bare process exit) needs updating.
+
+**Global Constraint reminder:** this plan's Global Constraints and multiple tasks' testing-strategy notes require `replay-real-ui-fidelity.spec.ts` to remain green throughout this plan. It is not out of scope — closing this gap is required for the plan's own stated regression bar.
+
+**Files:**
+- Modify (likely): `tests/specs/replay-real-ui-fidelity.spec.ts` (fixture script content only — no assertion logic changes should be needed if the underlying mission lifecycle now genuinely reaches `Completed`)
+- Reference (read, don't modify unless Step 1 finds a genuine defect requiring it): `tests/fixtures/fake-claude/claude.cjs`, `electron/ipc/mission.cjs`
+
+**Interfaces:**
+- Consumes: `launchApp({ fakeClaudeLines, fakeClaudeDelayMs })` (existing harness, already used by this spec).
+- Produces: the spec's mission reaches real `Completed` status (via `runFinalQaSweep()` passing, same as Task 11's spec), so the pre-existing save-dialog assertion can pass again.
+
+- [ ] **Step 1: Reproduce and diagnose**
+
+Run `npx playwright test tests/specs/replay-real-ui-fidelity.spec.ts --reporter=list` to reproduce the failure. Inspect the failure screenshot/trace (`test-results/.../error-context.md`) to confirm the exact stuck state. Add temporary diagnostic instrumentation if needed (IPC event logging, following the pattern used during Task 11's investigation) to determine exactly why the mission never reaches `Completed` — e.g. does the QC subprocess for this spec's task(s) actually get invoked and PASS, or does something fail earlier (subprocess spawn error, prompt template filling error, etc.)? Remove all temporary instrumentation before finishing this task, regardless of outcome.
+
+- [ ] **Step 2: Fix the fixture script**
+
+Most likely fix: this spec's `FAKE_CLAUDE_SCRIPT` needs no changes at all IF the existing generic QC/QA branching in `tests/fixtures/fake-claude/claude.cjs` (from Task 11) already handles any QC/QA invocation correctly regardless of which spec triggered it — in which case the real fix might be elsewhere (e.g. `FAKE_QCQA_STATE_DIR` not being wired for this spec's `launchApp()` call, mirroring the note in Task 11's report that this env var is required or QC always fails permanently). Check whether `replay-real-ui-fidelity.spec.ts`'s own test setup passes everything `launchApp()` needs the same way Task 11's spec does. If a genuine fixture-side gap is found instead, fix it minimally, following the existing fixture's established conventions (per Task 11 and Task 3's prior work) rather than restructuring it.
+
+- [ ] **Step 3: Verify**
+
+Run: `npx playwright test tests/specs/replay-real-ui-fidelity.spec.ts --reporter=list` at least 3 times consecutively to confirm reliable green, and re-run `npx playwright test tests/specs/qcqa-verification-loop.spec.ts --reporter=list` to confirm no regression there.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add tests/specs/replay-real-ui-fidelity.spec.ts tests/support/electronApp.ts
+git commit -m "fix: make replay-real-ui-fidelity.spec.ts's mission reach Completed under the QC/QA gate"
+```
+
+(Adjust the file list above if Step 2's actual fix touches a different in-scope file — do not add `electron/ipc/mission.cjs` or any other application source file to this commit; if the root cause turns out to require an application-code change, stop and report BLOCKED with full findings instead of making that change under this task's scope.)
 
 ---
 
