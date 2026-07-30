@@ -34,4 +34,35 @@ function nextEscalationTier(qcRound) {
   return { tier: 'needs-attention' };
 }
 
-module.exports = { parseQcQaVerdict, nextEscalationTier };
+function runQcQaCheck({ spawnClaude, prompt, projectPath, model, stage, timeoutMs = 180000 }) {
+  return new Promise((resolve) => {
+    const args = ['-p', prompt, '--dangerously-skip-permissions', '--model', model,
+      '--output-format', 'stream-json', '--verbose'];
+    const proc = spawnClaude(args, projectPath, false);
+
+    let stdoutText = '';
+    let settled = false;
+
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try { proc.kill(); } catch (_) {}
+      resolve({
+        verdict: 'FAIL',
+        responsibleAgent: null,
+        reason: `QC/QA check timed out after ${timeoutMs}ms`,
+      });
+    }, timeoutMs);
+
+    proc.stdout.on('data', (chunk) => { stdoutText += chunk.toString('utf8'); });
+
+    proc.on('close', () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(parseQcQaVerdict(stdoutText, stage));
+    });
+  });
+}
+
+module.exports = { parseQcQaVerdict, nextEscalationTier, runQcQaCheck };
