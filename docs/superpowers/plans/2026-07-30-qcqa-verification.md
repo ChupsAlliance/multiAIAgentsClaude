@@ -1494,7 +1494,129 @@ git commit -m "test: add E2E coverage for the QC/QA verification loop"
 
 ---
 
-## Task 12: Close the Agent Teams completion bypass — gate `scheduleAgentTeamsCompletion` behind `runFinalQaSweep()`
+## Task 12: Fix seed-task reconciliation — close the `runFinalQaSweep()` deadlock
+
+**Background:** Discovered during Task 11 (E2E test implementation), independently re-verified via direct code reads and git history by the plan owner before this task was authored. `applyPlanToState` (`electron/ipc/mission.cjs:1456-1517`) is the sole place that assigns `missionState.tasks = newTasks` (line 1501), seeding every planned task at `id: 'task-${i}'`, `status: 'pending'` (lines 1473-1484). The UI's "Deploy Team" button (`PlanReview.jsx`'s `canDeploy` check) requires at least one such seeded, assigned task to ever be deployable at all — so this seed row is unavoidable for every mission launched through the normal UI flow.
+
+Once deployed, `TaskStarted` (`mission.cjs:420-434`) unconditionally `push`es a brand-new task row for the same logical task — it never looks up or reconciles against the plan-seeded row by title or id. `TaskCompleted` (`mission.cjs:436-462`) only matches an existing row via `x.assigned_agent === agent && x.status === 'in_progress'` — since the seed row's status is permanently `'pending'` (never `'in_progress'`), it can never match there either, so a *third*, separate row gets created instead. Net effect: the plan-seeded row is permanently orphaned at `status: 'pending'`, for the lifetime of the mission, disconnected from the real task-tracking machinery entirely.
+
+This orphaning itself predates this plan (confirmed via `git show 7df2326~1:electron/ipc/mission.cjs` — the old `TaskCompleted` handler had the identical `status === 'in_progress'`-only matcher). Before Task 7, it was silently masked: the old exit watcher set `missionState.status = code === 0 || code === null ? 'Completed' : 'Failed'` unconditionally on exit code (zero dependency on task statuses), and immediately after, force-completed every task still not `'completed'` (`if (missionState.status === 'Completed') { for (const task of missionState.tasks) { if (task.status !== 'completed') { task.status = 'completed'; ... } } }`) — silently laundering the orphaned seed row right after the fact.
+
+Task 7 (already committed, `76222c8`) kept this force-loop, now living inside `finalizeDeployExit` (`mission.cjs:2614-2620`), still gated behind `if (missionState.status === 'Completed')`. But `runFinalQaSweep()` (`mission.cjs:331-338`) gates entirely on `missionState.tasks.every(t => t.status === 'completed')` (line 332) — an unconditional `.every()` over the *entire* tasks array, including the permanently-orphaned seed row — and only if that passes does `missionState.status` ever become `'Completed'`. Since `finalizeDeployExit`'s force-loop only runs *after* `status` is already `'Completed'` (confirmed via the call chain in `watchProcessExit_deploy`, `mission.cjs:2599-2610`: `runFinalQaSweep().then(finishDeployExit)`, where `finishDeployExit` calls `finalizeDeployExit`), and `status` can only become `'Completed'` if the force-loop has *already* cleaned up the orphan — this is a genuine deadlock. **No mission deployed through the normal UI flow can ever reach `Completed` anymore.** This is a regression introduced by Task 7's restructuring (the force-loop used to be unconditionally reachable; now it is gated behind the very condition it alone can satisfy), not merely the old dormant bug resurfacing.
+
+This must land **before** Task 13 (which also calls `runFinalQaSweep()` from the Agent Teams inactivity path, and would otherwise be built on the same broken foundation) and before Task 11's E2E test can pass.
+
+**Files:**
+- Modify: `electron/ipc/mission.cjs` (`applyPlanToState`, `TaskStarted`, `TaskCompleted`)
+- Test: `electron/ipc/mission.test.cjs`
+
+**Interfaces:**
+- Consumes: nothing new.
+- Produces: `TaskStarted`/`TaskCompleted` reconcile against the plan-seeded row (matched by title) instead of creating parallel/orphaned rows. The seeded row's `id` becomes the stable identity used throughout the task's lifecycle, from `'pending'` all the way through `'completed'`.
+
+- [ ] **Step 1: Write the failing test**
+
+Append to `electron/ipc/mission.test.cjs`:
+
+```js
+describe('seed-task reconciliation', () => {
+  beforeEach(() => {
+    delete require.cache[require.resolve('./mission.cjs')]
+  })
+
+  test('TaskStarted reconciles against the plan-seeded row instead of creating a duplicate', () => {
+    const mission = require('./mission.cjs')
+    mission.__setMissionStateForTest({
+      id: 'm1', status: 'Running', phase: 'Executing',
+      tasks: [{ id: 'task-0', title: 'Build the widget', status: 'pending', assigned_agent: 'Dev' }],
+      agents: [{ name: 'Dev', status: 'Idle' }],
+      log: [], project_path: '/tmp/proj', file_changes: [],
+    })
+    mission.__setSendToWindowForTest(() => {})
+
+    mission.__handleParsedEventForTest({ type: 'TaskStarted', agent: 'Dev', description: 'Build the widget' }, () => {})
+
+    const state = mission.__getMissionStateForTest()
+    expect(state.tasks.length).toBe(1)
+    expect(state.tasks[0].id).toBe('task-0')
+    expect(state.tasks[0].status).toBe('in_progress')
+  })
+
+  test('TaskCompleted reconciles against the seeded row across the full QC/QA cycle to completed', () => {
+    const mission = require('./mission.cjs')
+    mission.__setMissionStateForTest({
+      id: 'm1', status: 'Running', phase: 'Executing',
+      tasks: [{ id: 'task-0', title: 'Build the widget', status: 'pending', assigned_agent: 'Dev' }],
+      agents: [{ name: 'Dev', status: 'Idle' }],
+      log: [], project_path: '/tmp/proj', file_changes: [],
+    })
+    mission.__setSendToWindowForTest(() => {})
+    mission.__setQcQaRunnerForTest(async () => ({ verdict: 'PASS' }))
+
+    mission.__handleParsedEventForTest({ type: 'TaskStarted', agent: 'Dev', description: 'Build the widget' }, () => {})
+    mission.__handleParsedEventForTest({ type: 'TaskCompleted', agent: 'Dev', description: 'Build the widget' }, () => {})
+
+    const state = mission.__getMissionStateForTest()
+    expect(state.tasks.length).toBe(1)
+    expect(state.tasks[0].id).toBe('task-0')
+  })
+})
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run electron/ipc/mission.test.cjs`
+Expected: FAIL — `state.tasks.length` is 2 (the seed row plus the newly-pushed row), not 1.
+
+- [ ] **Step 3: Write minimal implementation**
+
+In `TaskStarted` (`mission.cjs:420-434`), look up an existing `'pending'` row by title+agent before pushing a new one:
+
+```js
+case 'TaskStarted': {
+  const { agent, description } = event;
+  if (missionState) {
+    const existing = missionState.tasks.find(x =>
+      x.title === description && x.assigned_agent === agent && x.status === 'pending');
+    if (existing) {
+      existing.status = 'in_progress';
+      existing.started_at = ts;
+      const a = missionState.agents.find(x => x.name === agent);
+      if (a) { a.status = 'Working'; a.current_task = description; }
+      sendToWindow('mission:task-update', { task_id: existing.id, agent, description, status: 'in_progress', timestamp: ts });
+      break;
+    }
+    const taskId = `task-${ts}`;
+    missionState.tasks.push({
+      id: taskId, title: description,
+      status: 'in_progress', assigned_agent: agent,
+      started_at: ts, completed_at: null, priority: null,
+    });
+    const a = missionState.agents.find(x => x.name === agent);
+    if (a) { a.status = 'Working'; a.current_task = description; }
+    sendToWindow('mission:task-update', { task_id: taskId, agent, description, status: 'in_progress', timestamp: ts });
+  }
+  break;
+}
+```
+
+`TaskCompleted`'s existing matcher (`x.assigned_agent === agent && x.status === 'in_progress'`) already works correctly once `TaskStarted` reconciles the seeded row first — no change needed there, since the row it looks for now genuinely reaches `'in_progress'` under the seeded `id` instead of staying stuck at `'pending'` under a parallel row.
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `node --check electron/ipc/mission.cjs && npx vitest run electron/ipc/mission.test.cjs`
+Expected: `node --check` prints nothing; vitest PASS, `state.tasks.length` is 1 in both new tests.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add electron/ipc/mission.cjs electron/ipc/mission.test.cjs
+git commit -m "fix: reconcile TaskStarted against the plan-seeded task row instead of duplicating it"
+```
+
+---
+
+## Task 13: Close the Agent Teams completion bypass — gate `scheduleAgentTeamsCompletion` behind `runFinalQaSweep()`
 
 **Background:** Discovered during Task 7's code review, not part of the original design. `scheduleAgentTeamsCompletion` (`electron/ipc/mission.cjs:733-783`, scheduled from the `result`-event handler at `mission.cjs:2425-2435` whenever all non-Lead agents in an Agent Teams mission report Done/Error) force-sets `missionState.status = 'Completed'` and force-completes every task after a 90-second inactivity timer, with **zero QC/QA involvement**. This is a second, independent bypass of the plan's own Global Constraint (line 22: "Mission reaches `Completed` only via `runFinalQaSweep()` passing. Exit code alone never sets `Completed`."), reachable only in `execution_mode: 'agent_teams'`. It predates this plan and was not introduced by any prior task here — this task closes it using the same pattern Task 7 already established for the exit-code path.
 
@@ -1630,14 +1752,14 @@ git commit -m "fix: gate Agent Teams inactivity completion behind the final QA s
 
 ---
 
-## Task 13: Full regression pass
+## Task 14: Full regression pass
 
 **Files:** none (verification-only task)
 
 - [ ] **Step 1: Run the full unit test suite**
 
 Run: `npm test`
-Expected: all tests pass, including every new `.test.cjs`/`.test.jsx`/`.test.js` file added in Tasks 1, 5, 6, 7, 8, 9, 12.
+Expected: all tests pass, including every new `.test.cjs`/`.test.jsx`/`.test.js` file added in Tasks 1, 5, 6, 7, 8, 9, 12, 13.
 
 - [ ] **Step 2: Run the full E2E suite**
 
@@ -1661,7 +1783,7 @@ git commit -m "test: fix findings from QC/QA verification regression pass"
   - Note: the test-only exports guarded by `process.env.VITEST`/`NODE_ENV === 'test'` are the only way to reach `mission.cjs`'s internal, non-exported functions (`handleParsedEvent`, `enqueueQcCheck`, etc.) from a test file — this mirrors how the module already keeps `missionState` as private closure state with no other injection point.
 - Renderer unit: `StatusBadge.test.jsx`, `useMission.test.js` — new statuses render distinctly and don't create duplicate task entries.
 - E2E: `qcqa-verification-loop.spec.ts` exercises the real Electron app end-to-end via the existing fake-`claude` harness, asserting the actual UI text a user would see through a QC fail → retry → QC pass → QA pass → final sweep pass sequence.
-- Existing `replay-real-ui-fidelity.spec.ts` must remain green with zero modifications — it is unaffected by task-status granularity changes per the spec, and Task 12 explicitly reverifies this.
+- Existing `replay-real-ui-fidelity.spec.ts` must remain green with zero modifications — it is unaffected by task-status granularity changes per the spec, and Task 14 explicitly reverifies this. (Note: this spec was found to be broken on `main` prior to Task 12's fix, for the same seed-task-reconciliation deadlock Task 12 closes — Task 14 confirms Task 12 restores it to green.)
 
 ## Self-Review notes
 
