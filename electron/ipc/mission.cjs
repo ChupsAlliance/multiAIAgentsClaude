@@ -324,6 +324,54 @@ function handleQcQaFailure(task, stage, responsibleAgent, reason) {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// runFinalQaSweep — whole-picture QA gate checked whenever the deploy
+// process exits successfully. Only PASS here can flip the mission to
+// 'Completed'; a success exit code alone is no longer sufficient.
+// ─────────────────────────────────────────────────────────────────
+function runFinalQaSweep() {
+  const allCompleted = missionState.tasks.every(t => t.status === 'completed');
+  if (!allCompleted) {
+    // Process exited successfully but not every task reached real completion.
+    // Do not force it — leave the mission Running so the gap is visible
+    // rather than papered over. Lead's own narration is responsible for not
+    // claiming victory here (prompt change, Task 9).
+    return Promise.resolve();
+  }
+
+  missionState.status = 'AwaitingFinalQA';
+  sendToWindowRef('mission:status', { mission_id: missionState.id, status: 'AwaitingFinalQA' });
+
+  const template = loadPromptTemplate('qa_check.md');
+  const changedFiles = (missionState.file_changes || []).map(f => f.path || f).join(', ');
+  const taskSummaries = missionState.tasks.map(t => `- ${t.title} (owner: ${t.assigned_agent || 'unknown'})`).join('\n');
+  const prompt = fillTemplate(template, {
+    PROJECT_PATH: missionState.project_path,
+    TASK_TITLE: '(whole mission — see scope note)',
+    TASK_WHY: missionState.description || '(not specified)',
+    TASK_DETAIL: taskSummaries,
+    FILES_WRITTEN: changedFiles || '(none reported)',
+    QC_VERDICT_SUMMARY: 'N/A — every task already passed its own QC/QA',
+    RESPONSIBLE_AGENT: '(see REASON — name the specific agent at fault)',
+    SCOPE_NOTE: 'This is the FINAL WHOLE-PICTURE review: judge the mission as an integrated whole, not one task in isolation. Look specifically for cross-task mismatches (e.g. backend and frontend each correct alone but not correctly wired together).',
+  });
+
+  return qcQaRunner({
+    spawnClaude, prompt, projectPath: missionState.project_path,
+    model: 'claude-sonnet-5', stage: 'QA', timeoutMs: 240000,
+  }).then((verdict) => {
+    if (verdict.verdict === 'PASS') {
+      missionState.status = 'Completed';
+      sendToWindowRef('mission:status', { mission_id: missionState.id, status: 'Completed' });
+    } else {
+      missionState.status = 'Running';
+      const flagged = missionState.tasks.find(t => t.assigned_agent === verdict.responsibleAgent) || missionState.tasks[0];
+      handleQcQaFailure(flagged, 'qa', verdict.responsibleAgent || flagged.assigned_agent, verdict.reason);
+      sendToWindowRef('mission:status', { mission_id: missionState.id, status: 'Running' });
+    }
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────
 // handleParsedEvent — apply a parsed event to missionState & emit
 // ─────────────────────────────────────────────────────────────────
 function handleParsedEvent(event, sendToWindow) {
@@ -2535,48 +2583,65 @@ function watchProcessExit_deploy(proc, missionId, sendToWindow, retryInfo = null
     stopAutosave();
     stopStuckChecker();
     clearAgentTeamsTimer();
-    if (missionState.status === 'Running') {
-      missionState.status = code === 0 || code === null ? 'Completed' : 'Failed';
-    }
-    missionState.phase = 'Done';
 
-    // Mark all agents as Done/Error now that process has actually exited
-    for (const a of missionState.agents) {
-      if (a.status !== 'Error') a.status = 'Done';
-      if (a.name === 'Lead') a.current_task = missionState.status === 'Completed' ? 'Mission completed' : 'Mission failed';
-    }
+    const finishDeployExit = () => {
+      missionState.phase = 'Done';
 
-    // Mark remaining pending tasks
-    if (missionState.status === 'Completed') {
-      for (const task of missionState.tasks) {
-        if (task.status !== 'completed') { task.status = 'completed'; task.completed_at = ts; }
+      // Mark all agents as Done/Error now that process has actually exited
+      for (const a of missionState.agents) {
+        if (a.status !== 'Error') a.status = 'Done';
+        if (a.name === 'Lead') a.current_task = missionState.status === 'Completed' ? 'Mission completed' : 'Mission failed';
       }
-    }
 
-    // Auto-save
-    missionState.ended_at = ts;  // Persist ended_at in snapshot too
-    const statusStr = missionState.status === 'Completed' ? 'completed' : 'failed';
-    const entry = {
-      id: missionState.id,
-      description: missionState.description,
-      project_path: missionState.project_path,
-      execution_mode: missionState.execution_mode || 'standard',
-      team_size: missionState.team_size,
-      forked_from: missionState.forked_from || null,
-      forked_from_desc: missionState.forked_from_desc || null,
-      status: statusStr,
-      started_at: missionState.started_at,
-      ended_at: ts,
-      agent_count: missionState.agents.length,
-      task_summary: missionState.tasks.map(t => `[${t.status}] ${t.title}`),
-      file_changes: missionState.file_changes,
-      log_count: missionState.log.length,
+      finalizeDeployExit(missionId, sendToWindow, ts);
     };
-    saveToHistory(entry);
-    saveMissionSnapshot(missionState);
 
-    sendToWindow('mission:status', { mission_id: missionId, status: statusStr });
-  });
+    if (missionState.status === 'Running') {
+      if (code === 0 || code === null) {
+        // Success exit code alone is no longer sufficient — the final
+        // whole-picture QA sweep is the only path to 'Completed'. If any
+        // task isn't 'completed' yet, runFinalQaSweep() leaves status
+        // 'Running' rather than forcing it, per spec §3.
+        runFinalQaSweep().then(finishDeployExit);
+        return;
+      }
+      missionState.status = 'Failed';
+    }
+    finishDeployExit();
+  }); // end proc.on('close', ...)
+}
+
+function finalizeDeployExit(missionId, sendToWindow, ts) {
+  // Mark remaining pending tasks
+  if (missionState.status === 'Completed') {
+    for (const task of missionState.tasks) {
+      if (task.status !== 'completed') { task.status = 'completed'; task.completed_at = ts; }
+    }
+  }
+
+  // Auto-save
+  missionState.ended_at = ts;  // Persist ended_at in snapshot too
+  const statusStr = missionState.status === 'Completed' ? 'completed' : 'failed';
+  const entry = {
+    id: missionState.id,
+    description: missionState.description,
+    project_path: missionState.project_path,
+    execution_mode: missionState.execution_mode || 'standard',
+    team_size: missionState.team_size,
+    forked_from: missionState.forked_from || null,
+    forked_from_desc: missionState.forked_from_desc || null,
+    status: statusStr,
+    started_at: missionState.started_at,
+    ended_at: ts,
+    agent_count: missionState.agents.length,
+    task_summary: missionState.tasks.map(t => `[${t.status}] ${t.title}`),
+    file_changes: missionState.file_changes,
+    log_count: missionState.log.length,
+  };
+  saveToHistory(entry);
+  saveMissionSnapshot(missionState);
+
+  sendToWindow('mission:status', { mission_id: missionId, status: statusStr });
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -4034,4 +4099,5 @@ if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
       });
     });
   };
+  module.exports.__runFinalQaSweepForTest = () => runFinalQaSweep();
 }

@@ -100,3 +100,65 @@ describe('QC/QA per-task pipeline', () => {
       expect.objectContaining({ status: 'Needs Attention' }))
   })
 })
+
+describe('runFinalQaSweep gating', () => {
+  let mission
+
+  beforeEach(() => {
+    delete require.cache[require.resolve('./mission.cjs')]
+    mission = require('./mission.cjs')
+  })
+
+  test('does not set Completed while a task is still pending_qc', async () => {
+    const sendToWindow = vi.fn()
+    mission.__setMissionStateForTest({
+      id: 'm1', status: 'Running', phase: 'Executing',
+      tasks: [{ id: 't1', title: 'A', status: 'completed' },
+              { id: 't2', title: 'B', status: 'pending_qc' }],
+      agents: [{ name: 'Dev', status: 'Idle' }],
+      log: [], project_path: '/tmp/proj', file_changes: [],
+    })
+    mission.__setSendToWindowForTest(sendToWindow)
+
+    await mission.__runFinalQaSweepForTest()
+
+    expect(mission.__getMissionStateForTest().status).not.toBe('Completed')
+  })
+
+  test('sets Completed only after the final whole-picture QA PASSes', async () => {
+    const sendToWindow = vi.fn()
+    mission.__setMissionStateForTest({
+      id: 'm1', status: 'Running', phase: 'Executing',
+      tasks: [{ id: 't1', title: 'A', status: 'completed' }],
+      agents: [{ name: 'Dev', status: 'Idle' }],
+      log: [], project_path: '/tmp/proj', file_changes: [],
+    })
+    mission.__setSendToWindowForTest(sendToWindow)
+    mission.__setQcQaRunnerForTest(async () => ({ verdict: 'PASS' }))
+
+    await mission.__runFinalQaSweepForTest()
+
+    expect(mission.__getMissionStateForTest().status).toBe('Completed')
+  })
+
+  test('final QA FAIL keeps mission Running and routes failure to the named agent', async () => {
+    const sendToWindow = vi.fn()
+    mission.__setMissionStateForTest({
+      id: 'm1', status: 'Running', phase: 'Executing',
+      tasks: [{ id: 't1', title: 'A', status: 'completed', assigned_agent: 'Dev', qcRound: 0 }],
+      agents: [{ name: 'Dev', status: 'Idle' }],
+      log: [], project_path: '/tmp/proj', file_changes: [],
+    })
+    mission.__setSendToWindowForTest(sendToWindow)
+    mission.__setQcQaRunnerForTest(async () => ({
+      verdict: 'FAIL', responsibleAgent: 'Dev', reason: 'frontend and backend not wired together',
+    }))
+
+    await mission.__runFinalQaSweepForTest()
+
+    const state = mission.__getMissionStateForTest()
+    expect(state.status).toBe('Running')
+    expect(state.tasks[0].status).toBe('in_progress')
+    expect(state.tasks[0].qcRound).toBe(1)
+  })
+})
