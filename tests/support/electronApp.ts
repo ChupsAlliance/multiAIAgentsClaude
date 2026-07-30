@@ -70,6 +70,13 @@ export async function launchApp(options: LaunchOptions = {}): Promise<LaunchedAp
     // Point recordingStore.cjs at an isolated temp dir for this test only.
     RECORDINGS_DIR_OVERRIDE: recordingsDir,
     FAKE_CLAUDE_DELAY_MS: String(options.fakeClaudeDelayMs ?? 20),
+    // tests/fixtures/fake-claude/claude.cjs uses this directory to persist a
+    // per-stage invocation counter across the separate `claude` subprocesses
+    // spawned for QC/QA checks (electron/lib/qcqa.cjs's runQcQaCheck), so it
+    // can fail the first QC attempt for a task and pass on retry. Reusing
+    // recordingsDir keeps it unique per launched app instance (no cross-test
+    // collisions) without needing another temp dir to track/clean up.
+    FAKE_QCQA_STATE_DIR: recordingsDir,
     // Prevent electron/ipc/system.cjs's checkForUpdates from hitting the
     // real GitHub API — a genuine "update available" response bypasses the
     // changelog_seen_version localStorage seed below and force-opens the
