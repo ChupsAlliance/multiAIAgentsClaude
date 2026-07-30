@@ -10,6 +10,12 @@ import { useToast } from './useToast'
 
 const BATCH_INTERVAL = 120 // ms between flushes
 
+// Task statuses considered "still in flight" for the purposes of matching
+// an incoming mission:task-update event to an existing task entry when no
+// task_id/description match is available. Includes the QC/QA verification
+// states a task can bounce through before landing on 'completed'.
+const IN_FLIGHT_TASK_STATUSES = ['in_progress', 'pending_qc', 'failed_qc', 'pending_qa', 'failed_qa']
+
 export function useMission() {
   const [missionState, setMissionState] = useState(null)
   const [isRunning, setIsRunning] = useState(false)
@@ -358,7 +364,7 @@ export function useMission() {
 
             if (idx < 0 && status === 'completed' && agentName) {
               idx = prev.tasks.findLastIndex(
-                t => t.assigned_agent === agentName && t.status === 'in_progress'
+                t => t.assigned_agent === agentName && IN_FLIGHT_TASK_STATUSES.includes(t.status)
               )
             }
 
@@ -384,6 +390,8 @@ export function useMission() {
                 t => t.assigned_agent === agentName && t.status !== 'completed'
               )
             }
+            // (This last fallback already matches any non-completed status,
+            // including the QC/QA in-flight ones, so it needs no widening.)
 
             if (idx >= 0) {
               const tasks = [...prev.tasks]
