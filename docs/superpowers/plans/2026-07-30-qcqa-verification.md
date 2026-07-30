@@ -1616,7 +1616,49 @@ git commit -m "fix: reconcile TaskStarted against the plan-seeded task row inste
 
 ---
 
-## Task 13: Close the Agent Teams completion bypass — gate `scheduleAgentTeamsCompletion` behind `runFinalQaSweep()`
+## Task 13: Wire `StatusBadge` into `TaskList.jsx` — task-level QC/QA status text was never rendered
+
+**Background:** Discovered during Task 11's E2E retry (after Task 12's seed-task fix unblocked mission completion). Task 8 correctly added `labelMap` entries (`'In QC Review'`, `'QC Failed'`, `'In QA Review'`, `'QA Failed'`, etc.) and full `config` styling for every QC/QA task status inside `src/components/mission/StatusBadge.jsx`, and correctly extended `TaskList.jsx`'s `statusIcon` map with new icons for those statuses. However, `StatusBadge` itself is only ever rendered by `AgentCard.jsx` (agent-level status) and `MissionHeader.jsx` (mission-level status) — confirmed via `grep -rn "StatusBadge" src/components/`. `TaskList.jsx`'s `TaskItem` component (`src/components/mission/TaskList.jsx:121-188`) renders only `statusIcon[task.status]` (an icon, line 150) — there is no text label anywhere for task-level status. A real user watching a task cycle through QC/QA never sees "In QC Review" / "QC Failed" / "In QA Review" text anywhere in the UI, only a spinning/colored icon. This is a genuine gap in already-committed Task 8 work, not a regression from Task 12 or Task 11.
+
+**Files:**
+- Modify: `src/components/mission/TaskList.jsx` (`TaskItem`)
+- Test: `src/components/mission/TaskList.test.jsx` (create if it doesn't already exist — confirm via `ls`/`Glob` first; if it exists, extend it following its existing patterns)
+
+**Interfaces:**
+- Consumes: `StatusBadge` (`./StatusBadge`, already exported, already handles every task status including all QC/QA ones — no changes needed to `StatusBadge.jsx` itself).
+- Produces: each task row in `TaskList.jsx` renders a `<StatusBadge status={task.status} size="xs" />` alongside (not replacing — keep the existing `statusIcon` for compactness/scannability) the existing icon and title, so the E2E-visible text (`getByText(/In QC Review/i)`, etc.) actually appears in the DOM.
+
+- [ ] **Step 1: Confirm current test coverage**
+
+Run: `Glob src/components/mission/TaskList.test.jsx` (or equivalent) to check if a test file already exists for this component. If not, create one following the pattern of `StatusBadge.test.jsx` (render + `getByText` assertions) or `MissionHeader`'s test file if one exists with a closer structural match (a list of items, not a single badge).
+
+- [ ] **Step 2: Write the failing test**
+
+Add/extend a test asserting that rendering `<TaskList tasks={[{ id: 't1', title: 'Build the widget', status: 'pending_qc', assigned_agent: 'Dev' }]} logs={[]} />` results in the text `In QC Review` being present in the document (via `screen.getByText(/In QC Review/i)`). Add one more case for `failed_qc` → `QC Failed` to cover the fail-branch text too.
+
+- [ ] **Step 3: Run test to verify it fails**
+
+Run: `npx vitest run src/components/mission/TaskList.test.jsx`
+Expected: FAIL — the text is not present anywhere in the rendered output.
+
+- [ ] **Step 4: Write minimal implementation**
+
+In `TaskList.jsx`, import `StatusBadge` (`import { StatusBadge } from './StatusBadge'`) and render it inside `TaskItem`, e.g. immediately after the existing `<span className="mt-0.5 shrink-0">{statusIcon[...]}</span>` block or inside the metadata row (`flex items-center flex-wrap gap-x-2 mt-0.5` block) alongside `assigned_agent`/`priority`/duration — pick whichever placement reads cleanest given the existing layout, and only show it for non-default statuses if that avoids visual clutter for the common `pending`/`in_progress`/`completed` cases (use your judgement, but the QC/QA statuses in particular — `pending_qc`, `failed_qc`, `pending_qa`, `failed_qa` — MUST show the badge text, since that's what Task 11's E2E test and real users need to see).
+
+- [ ] **Step 5: Run test to verify it passes, then run Task 11's E2E test**
+
+Run: `npx vitest run src/components/mission/TaskList.test.jsx` (expect PASS), then `npm run pretest:e2e && npx playwright test tests/specs/qcqa-verification-loop.spec.ts` (expect PASS now that the badge text actually renders — this was Task 11's last remaining blocker per its report).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/components/mission/TaskList.jsx src/components/mission/TaskList.test.jsx
+git commit -m "fix: render QC/QA status text per task in TaskList, not just an icon"
+```
+
+---
+
+## Task 14: Close the Agent Teams completion bypass — gate `scheduleAgentTeamsCompletion` behind `runFinalQaSweep()`
 
 **Background:** Discovered during Task 7's code review, not part of the original design. `scheduleAgentTeamsCompletion` (`electron/ipc/mission.cjs:733-783`, scheduled from the `result`-event handler at `mission.cjs:2425-2435` whenever all non-Lead agents in an Agent Teams mission report Done/Error) force-sets `missionState.status = 'Completed'` and force-completes every task after a 90-second inactivity timer, with **zero QC/QA involvement**. This is a second, independent bypass of the plan's own Global Constraint (line 22: "Mission reaches `Completed` only via `runFinalQaSweep()` passing. Exit code alone never sets `Completed`."), reachable only in `execution_mode: 'agent_teams'`. It predates this plan and was not introduced by any prior task here — this task closes it using the same pattern Task 7 already established for the exit-code path.
 
@@ -1752,14 +1794,14 @@ git commit -m "fix: gate Agent Teams inactivity completion behind the final QA s
 
 ---
 
-## Task 14: Full regression pass
+## Task 15: Full regression pass
 
 **Files:** none (verification-only task)
 
 - [ ] **Step 1: Run the full unit test suite**
 
 Run: `npm test`
-Expected: all tests pass, including every new `.test.cjs`/`.test.jsx`/`.test.js` file added in Tasks 1, 5, 6, 7, 8, 9, 12, 13.
+Expected: all tests pass, including every new `.test.cjs`/`.test.jsx`/`.test.js` file added in Tasks 1, 5, 6, 7, 8, 9, 12, 13, 14.
 
 - [ ] **Step 2: Run the full E2E suite**
 
@@ -1783,7 +1825,7 @@ git commit -m "test: fix findings from QC/QA verification regression pass"
   - Note: the test-only exports guarded by `process.env.VITEST`/`NODE_ENV === 'test'` are the only way to reach `mission.cjs`'s internal, non-exported functions (`handleParsedEvent`, `enqueueQcCheck`, etc.) from a test file — this mirrors how the module already keeps `missionState` as private closure state with no other injection point.
 - Renderer unit: `StatusBadge.test.jsx`, `useMission.test.js` — new statuses render distinctly and don't create duplicate task entries.
 - E2E: `qcqa-verification-loop.spec.ts` exercises the real Electron app end-to-end via the existing fake-`claude` harness, asserting the actual UI text a user would see through a QC fail → retry → QC pass → QA pass → final sweep pass sequence.
-- Existing `replay-real-ui-fidelity.spec.ts` must remain green with zero modifications — it is unaffected by task-status granularity changes per the spec, and Task 14 explicitly reverifies this. (Note: this spec was found to be broken on `main` prior to Task 12's fix, for the same seed-task-reconciliation deadlock Task 12 closes — Task 14 confirms Task 12 restores it to green.)
+- Existing `replay-real-ui-fidelity.spec.ts` must remain green with zero modifications — it is unaffected by task-status granularity changes per the spec, and Task 15 explicitly reverifies this. (Note: this spec was found to be broken on `main` prior to Task 12's fix, for the same seed-task-reconciliation deadlock Task 12 closes — Task 15 confirms Task 12 restores it to green. A separate Windows-specific subprocess-kill issue affecting both this spec and Task 11's new spec, found during Task 11's retry, was also worked around at the test-fixture level; see Task 11's report for details — Task 15 should confirm both specs are green together, not just individually.)
 
 ## Self-Review notes
 
