@@ -1,5 +1,6 @@
 import { useMemo, memo } from 'react'
 import { CheckCircle2, Circle, Loader2, AlertCircle, Clock, AlertTriangle } from 'lucide-react'
+import { StatusBadge } from './StatusBadge'
 
 const statusIcon = {
   pending:     <Circle size={14} className="text-vs-muted" />,
@@ -153,6 +154,9 @@ const TaskItem = memo(function TaskItem({ task, agentLogs }) {
             {task.title}
           </p>
           <div className="flex items-center flex-wrap gap-x-2 mt-0.5">
+            {['pending_qc', 'failed_qc', 'pending_qa', 'failed_qa'].includes(task.status) && (
+              <StatusBadge status={task.status} size="xs" />
+            )}
             {task.assigned_agent && (
               <span className="text-[10px] text-vs-muted">→ {task.assigned_agent}</span>
             )}
