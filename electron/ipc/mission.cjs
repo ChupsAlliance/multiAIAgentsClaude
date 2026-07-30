@@ -216,6 +216,13 @@ class OutputParser {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// enqueueQcCheck — stub (Task 6 replaces this with the real implementation)
+// ─────────────────────────────────────────────────────────────────
+function enqueueQcCheck(_task, _agent) {
+  // TODO(Task 6): spawn QC-Agent subprocess and route the verdict.
+}
+
+// ─────────────────────────────────────────────────────────────────
 // handleParsedEvent — apply a parsed event to missionState & emit
 // ─────────────────────────────────────────────────────────────────
 function handleParsedEvent(event, sendToWindow) {
@@ -283,21 +290,25 @@ function handleParsedEvent(event, sendToWindow) {
         // Find matching in-progress task for this agent
         const t = missionState.tasks.find(x =>
           x.assigned_agent === agent && x.status === 'in_progress');
+        let targetTask;
         if (t) {
-          t.status = 'completed';
-          t.completed_at = ts;
+          t.status = 'pending_qc';
+          t.qc_started_at = ts;
+          targetTask = t;
         } else {
-          // Task wasn't tracked; add as completed
-          missionState.tasks.push({
+          // Task wasn't tracked; add as pending_qc
+          targetTask = {
             id: `task-${ts}`, title: description,
-            status: 'completed', assigned_agent: agent,
-            started_at: ts, completed_at: ts, priority: null,
-          });
+            status: 'pending_qc', assigned_agent: agent,
+            started_at: ts, qc_started_at: ts, priority: null, qcRound: 0,
+          };
+          missionState.tasks.push(targetTask);
         }
         const a = missionState.agents.find(x => x.name === agent);
         if (a) { a.status = 'Idle'; a.current_task = null; }
+        enqueueQcCheck(targetTask, agent);
       }
-      sendToWindow('mission:task-update', { agent, description, status: 'completed', timestamp: ts });
+      sendToWindow('mission:task-update', { agent, description, status: 'pending_qc', timestamp: ts });
       break;
     }
 
@@ -3889,3 +3900,9 @@ module.exports.retryMockupGeneration = retryMockupGeneration;
 module.exports.isTransientApiError = isTransientApiError;
 module.exports.retryTransientSpawn = retryTransientSpawn;
 module.exports.tryRecoverDanglingQuestion = tryRecoverDanglingQuestion;
+
+if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
+  module.exports.__setMissionStateForTest = (state) => { missionState = state; };
+  module.exports.__getMissionStateForTest = () => missionState;
+  module.exports.__handleParsedEventForTest = (event, sendToWindow) => handleParsedEvent(event, sendToWindow);
+}
