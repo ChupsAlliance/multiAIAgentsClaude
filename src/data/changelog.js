@@ -8,6 +8,37 @@
 
 export const changelog = [
   {
+    version: '0.13.0',
+    date: '2026-07-31',
+    title: 'Vòng lặp kiểm tra QC/QA cho từng task',
+    highlights: [
+      'Mỗi task giờ phải qua kiểm tra QC rồi QA độc lập trước khi được tính là "Completed"',
+      'Mission chỉ chuyển "Completed" sau khi vượt qua 1 lượt quét QA tổng thể, kể cả khi mọi task đã xanh',
+      'Thêm trạng thái "Needs Attention" và khả năng Retry khi 1 task fail QC/QA quá nhiều lần',
+      'Vá lỗi kill process claude trên Windows (trước đây chỉ kill được cmd.exe bao ngoài, để lại tiến trình thật chạy ngầm)',
+    ],
+    items: [
+      { type: 'added', badge: 'Agent',
+        text: 'Mỗi task giờ đi qua 1 vòng kiểm tra chất lượng độc lập trước khi hoàn tất: sau khi agent báo "Completed", task chuyển sang pending_qc (QC-Agent kiểm tra), nếu đạt thì sang pending_qa (QA-Agent kiểm tra), chỉ khi cả 2 đều PASS task mới thành completed. Nếu FAIL, task quay lại in_progress để agent sửa, có leo thang mức độ nếu fail nhiều lần liên tiếp' },
+      { type: 'added', badge: 'Dashboard',
+        text: 'Vòng quét QA toàn cục trước khi mission chuyển "Completed": dù các task đều xanh, mission chỉ hoàn tất sau khi vượt qua 1 lượt quét QA tổng thể (runFinalQaSweep) — áp dụng cho cả luồng thoát theo exit-code lẫn luồng Agent Teams (trước đây luồng Agent Teams có thể tự đánh dấu "Completed" sau 90s không hoạt động, bỏ qua hoàn toàn QC/QA)' },
+      { type: 'added', badge: 'Dashboard',
+        text: 'Trạng thái "Needs Attention" và khả năng phục hồi: nếu 1 task fail QC/QA quá nhiều lần, mission chuyển sang "Needs Attention" thay vì treo vô thời hạn — nút Retry trên agent card giờ nhận diện được trạng thái này, cho phép người dùng chủ động resume' },
+      { type: 'added', badge: 'UI',
+        text: 'TaskList và StatusBadge giờ hiện đúng nhãn cho từng trạng thái trung gian (Đang chờ QC, QC Failed, Đang chờ QA, QA Failed, ...) thay vì chỉ 1 icon chung chung' },
+      { type: 'fixed', badge: 'Dashboard',
+        text: 'Mission có thể báo "Failed" sai khi vòng quét QA cuối cùng fail và lên lịch retry ngay sau khi process chính đã thoát — giờ trường hợp này được nhận diện đúng là "đang chờ retry", không báo Failed nhầm' },
+      { type: 'fixed', badge: 'Build',
+        text: 'Tiến trình claude trên Windows không bị kill hoàn toàn: proc.kill() trước đây chỉ kill được tiến trình cmd.exe bao ngoài (do cách Windows resolve file .cmd), để lại tiến trình Node thật chạy ngầm — giờ dùng taskkill /T /F để kill cả cây tiến trình trên Windows' },
+      { type: 'fixed', badge: 'Agent',
+        text: 'Một số sự kiện cập nhật trạng thái task từ QC/QA thiếu task_id, có thể khiến giao diện match nhầm task trong vài trường hợp hiếm — đã bổ sung đầy đủ' },
+      { type: 'fixed', badge: 'Prompt',
+        text: 'Hàm dựng prompt fillTemplate có thể thay thế nhầm placeholder nếu nội dung 1 biến chứa chuỗi giống {{placeholder}} của biến khác — đã đổi sang thay thế 1 lượt duy nhất (single-pass) để tránh việc này' },
+      { type: 'fixed', badge: 'PlanReview',
+        text: 'Test E2E qcqa-verification-loop.spec.ts bị flaky ngẫu nhiên (~50% khi chạy song song với test khác) do cửa sổ hiển thị trạng thái fail quá ngắn (400ms) — tăng lên 900ms để ổn định' },
+    ],
+  },
+  {
     version: '0.12.0',
     date: '2026-07-28',
     title: 'Card Q&A và Mockup trên timeline Presentation Mode replay',
