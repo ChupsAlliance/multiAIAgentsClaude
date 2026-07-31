@@ -13,6 +13,7 @@
 | **OS** | Windows 10/11 (64-bit) |
 | **Claude CLI** | Lệnh `claude` phải có trong PATH ([cài đặt](https://docs.anthropic.com/en/docs/claude-cli)) |
 | **Anthropic API Key** | Cấu hình trong Claude CLI (`claude config`) |
+| **GitHub Copilot CLI** *(tùy chọn)* | Lệnh `copilot` trong PATH (gói `@github/copilot-cli`) — chỉ cần nếu muốn dùng backend Copilot. Kiểm tra: `copilot --version` |
 | **Node.js** | >= 18 (chỉ cần khi build từ source) |
 
 ```bash
@@ -60,6 +61,23 @@ node scripts/build-patch.cjs
 | **3. Plan Review** | Bạn review/chỉnh sửa: đổi tên agents, đổi model, sửa tasks, thêm skill files |
 | **4. Deploy** | Lead spawn các agents, mỗi agent thực hiện các tasks được giao |
 | **5. Monitor** | Real-time dashboard: Activity Log, Agents, Tasks, File Changes, Messages |
+
+---
+
+### Backend CLI (Claude hoặc GitHub Copilot)
+
+Ứng dụng hỗ trợ chọn **backend CLI** cho các agent — mặc định là **Claude CLI**, và có thể chọn **GitHub Copilot CLI** nếu đã cài trên máy.
+
+| Nơi chọn | Mô tả |
+|----------|-------|
+| **Mission Launcher** → khối *Backend CLI* | Chọn mặc định toàn cục: 2 thẻ **Claude CLI** (Mặc định) và **GitHub Copilot CLI** (Beta), kèm chấm trạng thái xanh (đã cài) / xám (chưa cài). Thẻ Copilot bị vô hiệu khi chưa phát hiện `copilot` trên máy. |
+| **Plan Review** → dropdown *CLI* trên mỗi agent | Override backend cho từng agent riêng lẻ (kế thừa mặc định toàn cục nếu để nguyên). |
+
+**Ghi chú kỹ thuật:**
+
+- **Claude** là mặc định — hành vi giữ **y hệt** như trước (không hồi quy).
+- **GitHub Copilot CLI**: binary thật là `copilot` (gói `@github/copilot-cli`), chạy non-interactive qua `copilot -p "<prompt>" --allow-all-tools`. Copilot **không** hỗ trợ resume phiên → khi tiếp tục mission, ứng dụng tự động khởi chạy mới và ghi log rõ ràng (tiếng Việt). Copilot cũng không dùng Agent Teams.
+- **Mockup HTML và vòng QC/QA vẫn luôn dùng Claude** (kể cả khi mission chọn Copilot), có log giải thích lý do — không âm thầm chuyển backend.
 
 ---
 
