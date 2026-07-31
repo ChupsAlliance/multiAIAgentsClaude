@@ -9,6 +9,18 @@ const { compareSemver } = require('../lib/compareSemver.cjs');
 
 const RELEASES_URL = 'https://api.github.com/repos/ChupsAlliance/multiAIAgentsClaude/releases/latest';
 
+// ─── Backend CLI detection config ──────────────────────────────────
+// Single source of truth for each backend's version-check command.
+// Swap COPILOT_VERSION_CMD/COPILOT_VERSION_ARGS here if the binary name
+// ever changes — every call site below reads from this constant, so it's
+// a one-line change. Confirmed with cli-adapter-core: real binary is the
+// standalone `copilot` (@github/copilot-cli v1.0.77), NOT `gh copilot`.
+const CLAUDE_VERSION_CMD = 'claude';
+const CLAUDE_VERSION_ARGS = ['--version'];
+const COPILOT_VERSION_CMD = 'copilot';
+const COPILOT_VERSION_ARGS = ['--version'];
+const BACKEND_CHECK_TIMEOUT_MS = 5000;
+
 async function checkForUpdates(currentVersion) {
   // E2E tests run offline/sandboxed and must never depend on the real
   // GitHub API — a real "update available" response would force the
@@ -52,6 +64,60 @@ module.exports = function registerSystem(getMainWindow) {
       return output.trim();
     } catch (e) {
       throw new Error(e.stderr || 'Claude CLI not found. Please install Claude Code first.');
+    }
+  });
+
+  // ─── check_backends_available ────────────────────────────────────
+  // Detect which agent CLIs are installed on this machine, in parallel.
+  // Must NEVER throw — an absent binary simply resolves to `false`.
+  ipcMain.handle('check_backends_available', async () => {
+    const checkOne = (cmd, args) => new Promise((resolve) => {
+      try {
+        const child = spawn(cmd, args, {
+          stdio: ['ignore', 'pipe', 'pipe'],
+          shell: process.platform === 'win32',
+          env: { ...process.env, CLAUDECODE: undefined, CLAUDE_CODE_SESSION: undefined },
+        });
+
+        let stdout = '';
+        let settled = false;
+        const finish = (result) => {
+          if (settled) return;
+          settled = true;
+          try { child.kill(); } catch {}
+          resolve(result);
+        };
+
+        const timer = setTimeout(() => finish({ ok: false }), BACKEND_CHECK_TIMEOUT_MS);
+
+        child.stdout?.on('data', (d) => { stdout += d.toString(); });
+        child.on('error', () => { clearTimeout(timer); finish({ ok: false }); });
+        child.on('close', (code) => {
+          clearTimeout(timer);
+          finish({ ok: code === 0, version: stdout.trim() });
+        });
+      } catch {
+        resolve({ ok: false });
+      }
+    });
+
+    try {
+      const [claudeResult, copilotResult] = await Promise.all([
+        checkOne(CLAUDE_VERSION_CMD, CLAUDE_VERSION_ARGS),
+        checkOne(COPILOT_VERSION_CMD, COPILOT_VERSION_ARGS),
+      ]);
+
+      const result = {
+        claude: !!claudeResult.ok,
+        copilot: !!copilotResult.ok,
+      };
+      if (copilotResult.ok && copilotResult.version) {
+        result.copilotVersion = copilotResult.version;
+      }
+      return result;
+    } catch {
+      // Absolute safety net — handler must never throw.
+      return { claude: false, copilot: false };
     }
   });
 

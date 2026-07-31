@@ -5,7 +5,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 // Commands the frontend can invoke (whitelist)
 const ALLOWED_COMMANDS = [
   // system
-  'check_claude_available', 'get_system_info', 'enable_agent_teams',
+  'check_claude_available', 'check_backends_available', 'get_system_info', 'enable_agent_teams',
   'read_settings', 'open_folder_in_explorer', 'launch_in_terminal', 'open_url',
   'check_for_updates',
   // files
@@ -18,7 +18,7 @@ const ALLOWED_COMMANDS = [
   // mission
   'launch_mission', 'deploy_mission', 'continue_mission', 'replan_mission',
   'stop_mission', 'reset_mission', 'get_mission_state', 'get_incomplete_missions',
-  'update_agent_model',
+  'update_agent_model', 'update_agent_backend',
   'read_planning_template', 'answer_question', 'read_superpowers_skill', 'mockup_respond', 'retry_agent',
   'save_plan_version', 'get_plan_versions', 'export_plan_markdown', 'export_plan_pdf',
   // recording (ghi lại business events)
