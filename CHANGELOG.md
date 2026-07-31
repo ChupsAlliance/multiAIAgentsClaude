@@ -10,6 +10,35 @@ Format dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.13.0] — 2026-07-31
+
+### Thêm mới
+
+- **Vòng lặp kiểm tra QC/QA cho từng task**: mỗi task giờ đi qua 1 vòng kiểm tra chất lượng độc lập trước khi được tính là hoàn tất — sau khi agent báo "Completed", task chuyển sang `pending_qc` (QC-Agent kiểm tra), nếu đạt thì sang `pending_qa` (QA-Agent kiểm tra), chỉ khi cả 2 đều PASS task mới thành `completed`. Nếu FAIL, task quay lại `in_progress` để agent sửa, có leo thang mức độ (escalation tier) nếu fail nhiều lần liên tiếp.
+- **Vòng quét QA toàn cục trước khi Mission "Completed"**: dù các task đều xanh, mission chỉ chuyển sang trạng thái `Completed` sau khi vượt qua 1 lượt quét QA tổng thể (`runFinalQaSweep`) — áp dụng cho cả luồng thoát theo exit-code lẫn luồng Agent Teams (trước đây luồng Agent Teams có thể tự đánh dấu "Completed" sau 90s không hoạt động, bỏ qua hoàn toàn QC/QA).
+- **Trạng thái "Needs Attention" và khả năng phục hồi**: nếu 1 task fail QC/QA quá nhiều lần, mission chuyển sang "Needs Attention" thay vì treo vô thời hạn — nút Retry trên agent card giờ nhận diện được trạng thái này, cho phép người dùng chủ động resume.
+- **Hiển thị trạng thái QC/QA rõ ràng trên giao diện**: `TaskList` và `StatusBadge` giờ hiện đúng nhãn cho từng trạng thái trung gian (`Đang chờ QC`, `QC Failed`, `Đang chờ QA`, `QA Failed`, ...) thay vì chỉ 1 icon chung chung.
+
+### Sửa lỗi
+
+- **Mission có thể báo "Failed" sai** khi vòng quét QA cuối cùng fail và lên lịch retry ngay sau khi process chính đã thoát — giờ trường hợp này được nhận diện đúng là "đang chờ retry", không báo Failed nhầm.
+- **`replay-real-ui-fidelity.spec.ts` không còn đạt trạng thái Completed** sau khi thêm cổng QC/QA — đã cập nhật kịch bản test để phát đúng các verdict QC/QA PASS cần thiết.
+- **Test E2E `qcqa-verification-loop.spec.ts` bị flaky ngẫu nhiên** (~50% khi chạy song song với test khác) do cửa sổ hiển thị trạng thái fail quá ngắn (400ms) — tăng lên 900ms để ổn định.
+- **Tiến trình `claude` trên Windows không bị kill hoàn toàn**: `proc.kill()` trước đây chỉ kill được tiến trình `cmd.exe` bao ngoài (do cách Windows resolve file `.cmd`), để lại tiến trình Node thật chạy ngầm — giờ dùng `taskkill /T /F` để kill cả cây tiến trình trên Windows.
+- **Một số sự kiện cập nhật trạng thái task từ QC/QA thiếu `task_id`**, có thể khiến giao diện match nhầm task trong vài trường hợp hiếm — đã bổ sung đầy đủ.
+- **Hàm dựng prompt `fillTemplate` có thể thay thế nhầm placeholder** nếu nội dung 1 biến chứa chuỗi giống `{{placeholder}}` của biến khác — đã đổi sang thay thế 1 lượt duy nhất (single-pass) để tránh việc này.
+
+---
+
+## [0.12.1] — 2026-07-30
+
+### Sửa lỗi
+
+- **"Phát trên UI thật" không chuyển đúng màn hình theo từng giai đoạn**: khi replay 1 recording ở chế độ "Phát trên UI thật" (`/mission?replay=<id>`), giao diện bị đứng nguyên ở Mission Dashboard suốt cả buổi thay vì chuyển màn hình theo đúng giai đoạn đã ghi (Planning → ReviewPlan → Executing → Done) như lúc chạy thật.
+- **Fix**: `useReplay.js` giờ theo dõi `phase` (dựng lại từ các sự kiện `mission:*` được replay) và `MissionControlPage.jsx` chuyển màn hình tương ứng — Planning hiện `PlanningStream`, ReviewPlan hiện `PlanReview` trong lớp phủ chỉ-xem (read-only overlay, nút Deploy bị vô hiệu hoá), Executing/Done hiện `MissionDashboard`.
+
+---
+
 ## [0.12.0] — 2026-07-28
 
 ### Thêm mới
