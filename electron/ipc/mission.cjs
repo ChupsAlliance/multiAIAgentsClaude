@@ -1318,6 +1318,17 @@ async function spawnMockupGenerator(title, spec, missionId, sendToWindow) {
     `- Include realistic placeholder content\n` +
     `Output ONLY the complete HTML document wrapped in <<<HTML>>> and <<<END_HTML>>> markers. Nothing else before or after.`;
 
+  // Mockup generation DELIBERATELY stays on Claude (Haiku) regardless of the
+  // mission backend — the <<<HTML>>> marker contract is validated on Claude
+  // only. Log clearly if the mission is on a different backend.
+  const _mockupBackend = (missionState && missionState.backend) || 'claude';
+  if (_mockupBackend !== 'claude') {
+    const entry = makeLogEntry(now(), 'System',
+      `Backend '${_mockupBackend}' đang dùng, nhưng mockup vẫn được tạo bằng Claude (Haiku).`, 'info');
+    if (missionState) missionState.log.push(entry);
+    sendToWindow('mission:log', entry);
+  }
+
   const MAX_MOCKUP_ATTEMPTS = 3;
   let warn30, warn50;
 
@@ -1405,20 +1416,20 @@ function restartLeadAfterMockup(missionId, injection, sendToWindow, attempt = 1)
   const leadModel   = missionState.agents.find(a => a.name === 'Lead')?.model || 'sonnet';
   const projectPath = missionState.project_path;
   const execMode    = missionState.execution_mode || 'standard';
+  const leadBackend = agentBackendOf(missionState.agents.find(a => a.name === 'Lead'));
 
-  const proc = spawnClaude(
-    ['-p', '--resume', sessionId, '--dangerously-skip-permissions',
-     '--model', leadModel,
-     '--output-format', 'stream-json', '--verbose', '--max-turns', '200'],
-    projectPath,
-    execMode === 'agent_teams'
-  );
+  const { proc, promptViaStdin } = spawnAgentProcess({
+    backendId: leadBackend, model: leadModel, prompt: injection,
+    resumeSessionId: sessionId, maxTurns: 200,
+    useAgentTeams: execMode === 'agent_teams',
+    cwd: projectPath, sendToWindow,
+  });
 
   // Assign childProcess immediately so the proc is tracked even if stdin.write fails
   childProcess = proc;
 
   try {
-    proc.stdin.write(injection, 'utf8');
+    if (promptViaStdin) proc.stdin.write(injection, 'utf8');
     proc.stdin.end();
   } catch (e) {
     const entry = makeLogEntry(now(), 'System', `Failed to resume Lead: ${e.message}`, 'error');
@@ -1435,7 +1446,7 @@ function restartLeadAfterMockup(missionId, injection, sendToWindow, attempt = 1)
   // Notify frontend that Lead is running again (keeps isRunning in sync)
   sendToWindow('mission:status', { status: 'running', phase: missionState?.phase || 'Planning' });
 
-  const attemptCtx = { stdoutText: '', stderrText: '', sessionId: null };
+  const attemptCtx = { stdoutText: '', stderrText: '', sessionId: null, backend: leadBackend };
   readProcessStdout_launch(proc, missionId, sendToWindow, attemptCtx);
   readProcessStderr(proc, sendToWindow, attemptCtx);
   watchProcessExit_launch(proc, missionId, sendToWindow, {
@@ -3687,19 +3698,19 @@ module.exports = function registerMission(getMainWindow) {
     const leadModel = missionState.agents.find(a => a.name === 'Lead')?.model || 'sonnet';
     const projectPath = missionState.project_path;
     const execMode = missionState.execution_mode || 'standard';
+    const answerBackend = agentBackendOf(missionState.agents.find(a => a.name === 'Lead'));
 
     const spawnAnswerAttempt = (attempt) => {
       killChild();
-      const proc = spawnClaude(
-        ['-p', '--resume', sessionId, '--dangerously-skip-permissions',
-         '--model', leadModel,
-         '--output-format', 'stream-json', '--verbose', '--max-turns', '200'],
-        projectPath,
-        execMode === 'agent_teams'
-      );
+      const { proc, promptViaStdin } = spawnAgentProcess({
+        backendId: answerBackend, model: leadModel, prompt: answerPrompt,
+        resumeSessionId: sessionId, maxTurns: 200,
+        useAgentTeams: execMode === 'agent_teams',
+        cwd: projectPath, sendToWindow,
+      });
 
       try {
-        proc.stdin.write(answerPrompt, 'utf8');
+        if (promptViaStdin) proc.stdin.write(answerPrompt, 'utf8');
         proc.stdin.end();
       } catch (e) {
         const entry = makeLogEntry(now(), 'System', `Failed to write answer prompt: ${e.message}`, 'error');
@@ -3713,7 +3724,7 @@ module.exports = function registerMission(getMainWindow) {
       startAutosave();
       startStuckChecker(sendToWindow, false);  // resume after Q&A — preserve silence clocks
 
-      const attemptCtx = { stdoutText: '', stderrText: '', sessionId: null };
+      const attemptCtx = { stdoutText: '', stderrText: '', sessionId: null, backend: answerBackend };
       const retryInfo = {
         attemptCtx, attempt, maxAttempts: 3, backoffMs: [30000, 60000, 120000],
         retrySpawn: (nextAttempt) => spawnAnswerAttempt(nextAttempt),
@@ -3832,14 +3843,14 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
       : 'sonnet';
 
     const projectPath = missionState ? missionState.project_path || '.' : '.';
+    const replanBackend = agentBackendOf(missionState ? missionState.agents.find(a => a.name === 'Lead') : null);
 
     const runReplanAttempt = () => new Promise((resolve, reject) => {
-      const proc = spawnClaude(
-        ['-p', '--dangerously-skip-permissions', '--model', leadModel,
-         '--output-format', 'stream-json', '--verbose', '--max-turns', '50'],
-        projectPath,
-        false
-      );
+      const { proc, promptViaStdin } = spawnAgentProcess({
+        backendId: replanBackend, model: leadModel, prompt: replanPrompt,
+        resumeSessionId: null, maxTurns: 50, useAgentTeams: false,
+        cwd: projectPath, sendToWindow,
+      });
 
       let fullText = '';
       let stderrText = '';
@@ -3849,8 +3860,15 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
       rl.on('line', (line) => {
         const trimmed = line.trim();
         if (!trimmed) return;
-        try {
-          const msg = JSON.parse(trimmed);
+        // Backend routing: normalize non-Claude lines into Claude stream-json
+        // shape so the text-extraction below is backend-independent.
+        let msg;
+        if (replanBackend && replanBackend !== 'claude') {
+          msg = normalizedEventToClaudeShape(replanBackend, trimmed);
+        } else {
+          try { msg = JSON.parse(trimmed); } catch (_) { msg = null; }
+        }
+        if (msg) {
           // Collect text from assistant messages
           if (msg.type === 'assistant' && msg.message?.content) {
             for (const block of msg.message.content) {
@@ -3867,8 +3885,8 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
           if (msg.type === 'result' && msg.result) {
             fullText += '\n' + msg.result;
           }
-        } catch (_) {
-          // Non-JSON line — just accumulate
+        } else {
+          // Non-JSON / unparseable line — just accumulate raw text.
           fullText += trimmed + '\n';
         }
       });
@@ -3907,9 +3925,9 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
         reject(new Error(`Re-plan process error: ${err.message}\n${stderrText}`));
       });
 
-      // Send prompt
+      // Send prompt (stdin for Claude; Copilot carries it in argv)
       try {
-        proc.stdin.write(replanPrompt, 'utf8');
+        if (promptViaStdin) proc.stdin.write(replanPrompt, 'utf8');
         proc.stdin.end();
       } catch (e) {
         if (!resolved) {
@@ -3922,7 +3940,7 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
       setTimeout(() => {
         if (!resolved) {
           resolved = true;
-          killClaudeProcess(proc);
+          killBackendProcess(proc, replanBackend);
           reject(new Error(`Re-plan timed out after 120s\n${stderrText}`));
         }
       }, 120000);
