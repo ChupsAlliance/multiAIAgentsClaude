@@ -25,6 +25,11 @@ const PRIORITIES = [
   { id: 'low',    label: 'Low',    color: 'bg-green-400' },
 ]
 
+const CLI_BACKENDS = [
+  { id: 'claude',  label: 'Claude' },
+  { id: 'copilot', label: 'Copilot' },
+]
+
 // ─── Draggable Task Item ───
 function DraggableTask({ task, onEdit, onDelete, onPriorityChange, onViewDetail }) {
   const [editing, setEditing] = useState(false)
@@ -194,7 +199,8 @@ function AddTaskInline({ onAdd, agentName }) {
 
 // ─── Agent Section (with droppable task area) ───
 function AgentSection({ agent, tasks, onModelChange, onCustomPromptChange, onRemove,
-                         onEditTask, onDeleteTask, onPriorityChange, onAddTask, onLoadSkillFile, isOnly, onViewDetail }) {
+                         onEditTask, onDeleteTask, onPriorityChange, onAddTask, onLoadSkillFile, isOnly, onViewDetail,
+                         onBackendChange, globalBackend, backendsAvailable }) {
   const [expanded, setExpanded] = useState(true)
   const [showCustom, setShowCustom] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -239,6 +245,31 @@ function AgentSection({ agent, tasks, onModelChange, onCustomPromptChange, onRem
             )
           })}
         </div>
+
+        {/* CLI backend override */}
+        {onBackendChange && (
+          <div className="flex items-center gap-1">
+            <span className="text-[9px] text-vs-muted font-mono">CLI:</span>
+            <select
+              value={agent.backend || globalBackend || 'claude'}
+              onChange={(e) => onBackendChange(agent.name, e.target.value)}
+              data-testid={`agent-cli-select-${agent.name}`}
+              title="Chọn CLI backend cho agent này"
+              className="bg-vs-bg border border-vs-border rounded-md px-1.5 py-1 text-[11px] font-mono
+                         text-vs-text focus:outline-none focus:border-vs-accent/60"
+            >
+              {CLI_BACKENDS.map(b => (
+                <option
+                  key={b.id}
+                  value={b.id}
+                  disabled={b.id === 'copilot' && backendsAvailable?.copilot === false}
+                >
+                  {b.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Remove agent */}
         {!isOnly && (
@@ -686,10 +717,24 @@ function BulkSkillModal({ agents, onApply, onClose }) {
 }
 
 // ─── Main PlanReview ───
-export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onReplan, isReplanning }) {
+export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onReplan, isReplanning, globalBackend = 'claude' }) {
   const [localAgents, setLocalAgents] = useState(() =>
     agents.map(a => ({ ...a, customPrompt: '' }))
   )
+  const [backendsAvailable, setBackendsAvailable] = useState({ claude: true, copilot: false })
+
+  // Detect which backend CLIs are installed, so the per-agent CLI dropdown
+  // can disable the Copilot option when it's not present on this machine.
+  useEffect(() => {
+    invoke('check_backends_available')
+      .then(result => {
+        setBackendsAvailable({
+          claude: result?.claude !== false,
+          copilot: !!result?.copilot,
+        })
+      })
+      .catch(() => setBackendsAvailable({ claude: true, copilot: false }))
+  }, [])
   const [localTasks, setLocalTasks] = useState(() =>
     tasks.map((t, i) => ({
       id: t.id || `task-${i}`,
@@ -764,6 +809,13 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
       a.name === agentName ? { ...a, model } : a
     ))
     setHasChanges(true)
+  }
+
+  const handleBackendChange = (agentName, backendId) => {
+    setLocalAgents(prev => prev.map(a =>
+      a.name === agentName ? { ...a, backend: backendId } : a
+    ))
+    invoke('update_agent_backend', { agentName, backend: backendId }).catch(() => {})
   }
 
   const handleCustomPromptChange = (agentName, prompt) => {
@@ -908,6 +960,7 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
         name: a.name,
         role: a.role,
         model: a.model || 'sonnet',
+        backend: a.backend || globalBackend || 'claude',
         customPrompt: mergedPrompt,
         skillFile: a.skillFile ? { name: a.skillFile.name, fileCount: a.skillFile.fileCount || 0 } : null,
       }
@@ -1320,6 +1373,9 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
                 onPriorityChange={handlePriorityChange}
                 onAddTask={handleAddTask}
                 onViewDetail={handleViewDetail}
+                onBackendChange={handleBackendChange}
+                globalBackend={globalBackend}
+                backendsAvailable={backendsAvailable}
               />
             )
           })}

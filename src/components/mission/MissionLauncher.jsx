@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { Rocket, FolderOpen, Zap, History, Trash2, Cpu, Eye, EyeOff, Users, FlaskConical, Paperclip, FileText, Image, Folder, Upload, X, AtSign, Shield, ShieldCheck, ShieldQuestion, Brain, Search, Circle } from 'lucide-react'
+import { Rocket, FolderOpen, Zap, History, Trash2, Cpu, Eye, EyeOff, Users, FlaskConical, Paperclip, FileText, Image, Folder, Upload, X, AtSign, Shield, ShieldCheck, ShieldQuestion, Brain, Search, Circle, Terminal } from 'lucide-react'
 import { buildMissionPrompt } from '../../data/promptWrapper'
 import { useTauriFileDrop } from '../../hooks/useTauriFileDrop'
 import { useToast } from '../../hooks/useToast'
@@ -10,6 +10,23 @@ const MODELS = [
   { id: 'sonnet',  label: 'Sonnet 4.6',  desc: 'Nhanh, tiết kiệm — phù hợp task đơn giản', badge: 'Fast' },
   { id: 'opus',    label: 'Opus 4.6',    desc: 'Mạnh nhất — task phức tạp, multi-agent', badge: 'Best' },
   { id: 'haiku',   label: 'Haiku 4.5',   desc: 'Siêu nhanh, rẻ — draft/prototype', badge: 'Cheap' },
+]
+
+const BACKENDS = [
+  {
+    id: 'claude',
+    label: 'Claude CLI',
+    desc: 'Claude Code — mặc định, ổn định nhất',
+    badge: 'Mặc định',
+    badgeCls: 'bg-vs-accent/30 text-vs-accent',
+  },
+  {
+    id: 'copilot',
+    label: 'GitHub Copilot CLI',
+    desc: 'Chạy agent bằng GitHub Copilot CLI',
+    badge: 'Beta',
+    badgeCls: 'bg-yellow-500/25 text-yellow-300',
+  },
 ]
 
 const EXEC_MODES = [
@@ -64,6 +81,8 @@ export function MissionLauncher({ onLaunch, isRecording, onToggleRecording }) {
   const [teamHintInput, setTeamHintInput] = useState('4') // raw string for the number input
   const [teamHintAuto, setTeamHintAuto] = useState(false)
   const [model, setModel] = useState('sonnet')
+  const [backend, setBackend] = useState('claude')
+  const [backendsAvailable, setBackendsAvailable] = useState({ claude: true, copilot: false })
   const [executionMode, setExecutionMode] = useState('standard')
   const [permissionMode, setPermissionMode] = useState(() =>
     localStorage.getItem('permission_mode') || 'auto'
@@ -307,6 +326,25 @@ export function MissionLauncher({ onLaunch, isRecording, onToggleRecording }) {
     invoke('load_history').then(setHistory).catch(() => {})
   }, [])
 
+  // Detect which backend CLIs are installed on this machine
+  useEffect(() => {
+    invoke('check_backends_available')
+      .then(result => {
+        setBackendsAvailable({
+          claude: result?.claude !== false,
+          copilot: !!result?.copilot,
+        })
+      })
+      .catch(() => setBackendsAvailable({ claude: true, copilot: false }))
+  }, [])
+
+  // If Copilot gets selected while unavailable (e.g. re-check after uninstall), fall back to Claude
+  useEffect(() => {
+    if (backend === 'copilot' && !backendsAvailable.copilot) {
+      setBackend('claude')
+    }
+  }, [backend, backendsAvailable.copilot])
+
   const handlePickFolder = async () => {
     try {
       const path = await invoke('pick_folder')
@@ -336,7 +374,7 @@ export function MissionLauncher({ onLaunch, isRecording, onToggleRecording }) {
         }
       }).catch(() => {})
 
-      await onLaunch({ projectPath, prompt, description: requirement, model, executionMode, permissionMode })
+      await onLaunch({ projectPath, prompt, description: requirement, model, backend, executionMode, permissionMode })
     } catch (err) {
       console.error('Launch failed:', err)
       toast.error(`Launch thất bại: ${err.message || 'Lỗi không xác định'}`)
@@ -606,6 +644,49 @@ export function MissionLauncher({ onLaunch, isRecording, onToggleRecording }) {
               Hỗ trợ: docs, code, images, folders
             </span>
           </div>
+        </div>
+
+        {/* Backend CLI selector */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-mono text-vs-muted uppercase tracking-wider flex items-center gap-1.5">
+            <Terminal size={11} />
+            Backend CLI
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            {BACKENDS.map(b => {
+              const installed = backendsAvailable[b.id] !== false
+              const disabled = !installed
+              return (
+                <button
+                  key={b.id}
+                  type="button"
+                  data-testid={`backend-card-${b.id}`}
+                  onClick={() => { if (!disabled) setBackend(b.id) }}
+                  disabled={disabled}
+                  title={disabled ? 'Chưa phát hiện Copilot CLI trên máy' : undefined}
+                  className={`relative text-left px-3 py-2.5 rounded-lg border text-xs transition-colors ${
+                    disabled
+                      ? 'border-vs-border/50 bg-vs-bg text-vs-muted/50 cursor-not-allowed'
+                      : backend === b.id
+                        ? 'border-vs-accent bg-vs-accent/10 text-vs-heading'
+                        : 'border-vs-border bg-vs-bg text-vs-muted hover:border-vs-text/30 hover:bg-vs-overlay/5'
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${installed ? 'bg-vs-green' : 'bg-vs-muted/40'}`} />
+                    <span className="font-semibold">{b.label}</span>
+                  </span>
+                  <span className="text-[10px] text-vs-muted block mt-0.5 leading-tight">{b.desc}</span>
+                  <span className={`absolute top-1.5 right-1.5 text-[9px] font-mono px-1 py-0.5 rounded ${
+                    backend === b.id && !disabled ? b.badgeCls : 'bg-vs-panel text-vs-muted'
+                  }`}>{b.badge}</span>
+                </button>
+              )
+            })}
+          </div>
+          <p className="text-[10px] text-vs-muted/70 font-mono leading-relaxed px-0.5">
+            Đây là mặc định toàn cục — bạn có thể override từng agent ở bước Duyệt kế hoạch.
+          </p>
         </div>
 
         {/* Model selector */}

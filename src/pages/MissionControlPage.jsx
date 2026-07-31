@@ -346,6 +346,7 @@ export function MissionControlPage() {
                   onCancel={stop}
                   onReplan={replan}
                   isReplanning={isReplanning}
+                  globalBackend={missionState?.backend || 'claude'}
                 />
               </div>
             )}
