@@ -2,7 +2,7 @@ import { memo } from 'react'
 import { AgentCard } from './AgentCard'
 import { Users } from 'lucide-react'
 
-export const AgentGrid = memo(function AgentGrid({ agents = [], logs = [], selectedAgent, onSelectAgent, onRetryAgent }) {
+export const AgentGrid = memo(function AgentGrid({ agents = [], logs = [], selectedAgent, onSelectAgent, onRetryAgent, missionStatus }) {
   if (agents.length === 0) {
     return (
       <div className="flex items-center gap-2 text-vs-muted text-xs font-mono py-6 justify-center">
@@ -26,6 +26,7 @@ export const AgentGrid = memo(function AgentGrid({ agents = [], logs = [], selec
             isSelected={selectedAgent === agent.name}
             onSelect={() => onSelectAgent(agent.name)}
             onRetryAgent={onRetryAgent}
+            missionStatus={missionStatus}
           />
         ))}
       </div>

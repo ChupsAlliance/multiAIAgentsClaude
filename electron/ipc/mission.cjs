@@ -340,6 +340,56 @@ function handleQcQaFailure(task, stage, responsibleAgent, reason) {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// retryAgentCore — core logic behind the 'retry_agent' IPC handler.
+// Widened to also recover a task stuck at failed_qc/failed_qa (the
+// 'Needs Attention' dead end from handleQcQaFailure's escalation-tier
+// ceiling): resets the task's qcRound so the next QC pass starts the
+// escalation tiers over, and exits 'Needs Attention' back to 'Running'
+// at the mission level (the task-level status was the only thing the
+// old code reset, leaving the mission stuck even after the task moved).
+// ─────────────────────────────────────────────────────────────────
+function retryAgentCore(agentName, sendToWindow) {
+  if (!missionState) return { ok: false, error: 'No active mission' };
+
+  const agent = missionState.agents.find(a => a.name === agentName);
+  if (!agent) return { ok: false, error: `Agent "${agentName}" not found` };
+
+  const task = missionState.tasks.find(t =>
+    t.assigned_agent === agentName &&
+    ['in_progress', 'completed', 'failed_qc', 'failed_qa'].includes(t.status)
+  );
+  if (!task) return { ok: false, error: 'No retryable task found' };
+
+  const wasQcQaFailure = task.status === 'failed_qc' || task.status === 'failed_qa';
+
+  agent.status = 'Idle';
+  agent.error = null;
+  task.status = 'pending';
+  if (wasQcQaFailure) {
+    task.qcRound = 0;
+  }
+
+  if (missionState.status === 'Needs Attention') {
+    missionState.status = 'Running';
+    sendToWindow('mission:status', { mission_id: missionState.id, status: 'Running' });
+  }
+
+  const agentEntry = makeLogEntry(now(), 'System',
+    `[Lead] Retrying agent "${agentName}"...`, 'info');
+  missionState.log.push(agentEntry);
+  sendToWindow('mission:log', agentEntry);
+  sendToWindow('mission:agent-spawned', { ...agent });
+
+  if (missionState.process && !missionState.process.killed) {
+    missionState.process.stdin.write(
+      `\n[System] Agent "${agentName}" encountered an error. Please re-spawn it with the same task.\n`
+    );
+  }
+
+  return { ok: true };
+}
+
+// ─────────────────────────────────────────────────────────────────
 // runFinalQaSweep — whole-picture QA gate checked whenever the deploy
 // process exits successfully. Only PASS here can flip the mission to
 // 'Completed'; a success exit code alone is no longer sufficient.
@@ -778,7 +828,11 @@ function scheduleAgentTeamsCompletion(missionId, sendToWindow) {
       missionState.phase = 'Done';
       for (const a of missionState.agents) {
         if (a.status !== 'Error') a.status = 'Done';
-        if (a.name === 'Lead') a.current_task = missionState.status === 'Completed' ? 'Mission completed' : 'Mission failed';
+        if (a.name === 'Lead') {
+          a.current_task = missionState.status === 'Completed' ? 'Mission completed'
+            : missionState.status === 'Running' ? 'Awaiting retry (final QA sweep scheduled one)'
+            : 'Mission failed';
+        }
       }
       finalizeDeployExit(missionId, sendToWindow, ts);
     });
@@ -2593,7 +2647,11 @@ function watchProcessExit_deploy(proc, missionId, sendToWindow, retryInfo = null
       // Mark all agents as Done/Error now that process has actually exited
       for (const a of missionState.agents) {
         if (a.status !== 'Error') a.status = 'Done';
-        if (a.name === 'Lead') a.current_task = missionState.status === 'Completed' ? 'Mission completed' : 'Mission failed';
+        if (a.name === 'Lead') {
+          a.current_task = missionState.status === 'Completed' ? 'Mission completed'
+            : missionState.status === 'Running' ? 'Awaiting retry (final QA sweep scheduled one)'
+            : 'Mission failed';
+        }
       }
 
       finalizeDeployExit(missionId, sendToWindow, ts);
@@ -2615,6 +2673,27 @@ function watchProcessExit_deploy(proc, missionId, sendToWindow, retryInfo = null
 }
 
 function finalizeDeployExit(missionId, sendToWindow, ts) {
+  // If the final QA sweep FAILed and scheduled a retry (handleQcQaFailure
+  // delays failed_qc/failed_qa -> in_progress rather than forcing it),
+  // missionState.status is left 'Running' even though the driving `claude`
+  // process has already exited/been killed by this point. Collapsing that
+  // to 'failed' here would show the user a false "Failed" while the backend
+  // is actually just waiting on a retry. Skip the completion-style emit and
+  // the history/snapshot save entirely -- the mission isn't over -- and log
+  // the gap instead: no process is left to actually drive the retried task,
+  // since spawning a fresh `claude` process from inside an exit handler is
+  // a materially larger change left as a follow-up.
+  if (missionState.status === 'Running') {
+    const entry = makeLogEntry(ts, 'System',
+      'Final QA sweep scheduled a retry after the driving process already exited — ' +
+      'mission is awaiting that retry, but no process is currently driving it. ' +
+      'This requires manual intervention (see Retry) or a follow-up to auto-resume it.',
+      'info');
+    missionState.log.push(entry);
+    sendToWindow('mission:log', entry);
+    return;
+  }
+
   // Mark remaining pending tasks
   if (missionState.status === 'Completed') {
     for (const task of missionState.tasks) {
@@ -3805,33 +3884,7 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
   // ── retry_agent ────────────────────────────────────────────────
   ipcMain.handle('retry_agent', async (_event, args) => {
     const { agentName } = args || {};
-    if (!missionState) return { ok: false, error: 'No active mission' };
-
-    const agent = missionState.agents.find(a => a.name === agentName);
-    if (!agent) return { ok: false, error: `Agent "${agentName}" not found` };
-
-    const task = missionState.tasks.find(t =>
-      t.assigned_agent === agentName && ['in_progress', 'completed'].includes(t.status)
-    );
-    if (!task) return { ok: false, error: 'No retryable task found' };
-
-    agent.status = 'Idle';
-    agent.error = null;
-    task.status = 'pending';
-
-    const agentEntry = makeLogEntry(now(), 'System',
-      `[Lead] Retrying agent "${agentName}"...`, 'info');
-    missionState.log.push(agentEntry);
-    sendToWindow('mission:log', agentEntry);
-    sendToWindow('mission:agent-spawned', { ...agent });
-
-    if (missionState.process && !missionState.process.killed) {
-      missionState.process.stdin.write(
-        `\n[System] Agent "${agentName}" encountered an error. Please re-spawn it with the same task.\n`
-      );
-    }
-
-    return { ok: true };
+    return retryAgentCore(agentName, sendToWindow);
   });
 
   // ── save_plan_version ──────────────────────────────────────────
@@ -4105,4 +4158,7 @@ if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
   module.exports.__runFinalQaSweepForTest = () => runFinalQaSweep();
   module.exports.__scheduleAgentTeamsCompletionForTest = (missionId, sendToWindow) =>
     scheduleAgentTeamsCompletion(missionId, sendToWindow);
+  module.exports.__retryAgentForTest = (agentName) => retryAgentCore(agentName, sendToWindowRef);
+  module.exports.__finalizeDeployExitForTest = (missionId, sendToWindow, ts) =>
+    finalizeDeployExit(missionId, sendToWindow, ts);
 }

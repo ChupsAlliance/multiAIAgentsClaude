@@ -180,6 +180,7 @@ export const MissionDashboard = memo(function MissionDashboard({ state, isRunnin
               selectedAgent={selectedAgent}
               onSelectAgent={handleSelectAgent}
               onRetryAgent={onRetryAgent}
+              missionStatus={state?.status}
             />
           </div>
 

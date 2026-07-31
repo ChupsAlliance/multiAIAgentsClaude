@@ -334,3 +334,56 @@ describe('scheduleAgentTeamsCompletion gating', () => {
     expect(state.tasks[1].status).not.toBe('completed')
   })
 })
+
+describe('Needs Attention recovery', () => {
+  let mission
+
+  beforeEach(() => {
+    delete require.cache[require.resolve('./mission.cjs')]
+    mission = require('./mission.cjs')
+  })
+
+  test('retry_agent resumes a task stuck at failed_qc/failed_qa (Needs Attention)', async () => {
+    const sendToWindow = vi.fn()
+    mission.__setMissionStateForTest({
+      id: 'm1', status: 'Needs Attention', phase: 'Executing',
+      tasks: [{ id: 't1', title: 'A', status: 'failed_qc', qcRound: 9, assigned_agent: 'Dev' }],
+      agents: [{ name: 'Dev', status: 'Error' }],
+      log: [], project_path: '/tmp/proj', file_changes: [],
+    })
+    mission.__setSendToWindowForTest(sendToWindow)
+
+    const result = await mission.__retryAgentForTest('Dev')
+
+    expect(result.ok).toBe(true)
+    const state = mission.__getMissionStateForTest()
+    expect(state.tasks[0].status).toBe('pending')
+    expect(state.tasks[0].qcRound).toBe(0)
+    expect(state.status).toBe('Running')
+  })
+})
+
+describe('final sweep FAIL after process exit does not report a false Failed', () => {
+  let mission
+
+  beforeEach(() => {
+    delete require.cache[require.resolve('./mission.cjs')]
+    mission = require('./mission.cjs')
+  })
+
+  test('finalizeDeployExit does not send a completion status when the sweep left the mission Running', () => {
+    const sendToWindow = vi.fn()
+    mission.__setMissionStateForTest({
+      id: 'm1', status: 'Running', phase: 'Executing',
+      tasks: [{ id: 't1', title: 'A', status: 'in_progress' }],
+      agents: [{ name: 'Dev', status: 'Working' }],
+      log: [], project_path: '/tmp/proj', file_changes: [],
+    })
+    mission.__setSendToWindowForTest(sendToWindow)
+
+    mission.__finalizeDeployExitForTest('m1', sendToWindow, Date.now())
+
+    const statusEmits = sendToWindow.mock.calls.filter(c => c[0] === 'mission:status')
+    expect(statusEmits.some(c => c[1].status === 'failed')).toBe(false)
+  })
+})

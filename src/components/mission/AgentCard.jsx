@@ -31,7 +31,7 @@ const LogLine = memo(function LogLine({ log }) {
   )
 })
 
-export const AgentCard = memo(function AgentCard({ agent, logs = [], isSelected, onSelect, onRetryAgent }) {
+export const AgentCard = memo(function AgentCard({ agent, logs = [], isSelected, onSelect, onRetryAgent, missionStatus }) {
   const [expanded, setExpanded] = useState(false)
   const { name, role, status, current_task, model, stuckWarning } = agent
   const modelInfo = model ? MODEL_META[model] : null
@@ -76,7 +76,7 @@ export const AgentCard = memo(function AgentCard({ agent, logs = [], isSelected,
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <StatusBadge status={status} size="xs" />
-            {(status === 'Error' || status === 'error') && onRetryAgent && (
+            {(status === 'Error' || status === 'error' || missionStatus === 'Needs Attention') && onRetryAgent && (
               <button
                 onClick={() => onRetryAgent(agent.name)}
                 className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-mono
