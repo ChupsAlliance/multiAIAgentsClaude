@@ -133,8 +133,9 @@ describe('QC/QA per-task pipeline', () => {
       expect(events.some((e) => e.status === 'in_progress')).toBe(false)
 
       // Without advancing the timer further, the in_progress follow-up must not
-      // have fired yet -- it must be scheduled behind a real delay.
-      await vi.advanceTimersByTimeAsync(500)
+      // have fired yet -- it must be scheduled behind a real delay
+      // (QC_QA_FAILURE_VISIBILITY_DELAY_MS); advance comfortably past it.
+      await vi.advanceTimersByTimeAsync(1000)
       await donePromise
 
       const failedIndex = events.findIndex((e) => e.status === 'failed_qc')
@@ -385,5 +386,112 @@ describe('final sweep FAIL after process exit does not report a false Failed', (
 
     const statusEmits = sendToWindow.mock.calls.filter(c => c[0] === 'mission:status')
     expect(statusEmits.some(c => c[1].status === 'failed')).toBe(false)
+  })
+})
+
+describe('fillTemplate substitution safety', () => {
+  test('does not re-substitute placeholder-shaped text introduced by an earlier substitution', () => {
+    const mission = require('./mission.cjs')
+    const out = mission.__fillTemplateForTest('A={{A}} B={{B}}', {
+      A: '{{B}}',
+      B: 'real-b-value',
+    })
+    expect(out).toBe('A={{B}} B=real-b-value')
+  })
+})
+
+describe('QC/QA task-update emits include task_id', () => {
+  let mission
+
+  beforeEach(() => {
+    delete require.cache[require.resolve('./mission.cjs')]
+    mission = require('./mission.cjs')
+  })
+
+  test('enqueueQcCheck -> QC PASS -> enqueueQaCheck -> QA PASS: every task-update emit carries task_id', async () => {
+    const sendToWindow = vi.fn()
+    const task = { id: 't1', title: 'Build it', status: 'pending_qc', assigned_agent: 'Dev', qcRound: 0 }
+    mission.__setMissionStateForTest({
+      tasks: [task],
+      agents: [{ name: 'Dev', status: 'Idle', current_task: null }],
+      log: [], project_path: '/tmp/proj',
+    })
+    mission.__setSendToWindowForTest(sendToWindow)
+    mission.__setQcQaRunnerForTest(async () => ({ verdict: 'PASS' }))
+
+    await mission.__enqueueQcCheckForTest(task, 'Dev')
+
+    const taskUpdateCalls = sendToWindow.mock.calls.filter(c => c[0] === 'mission:task-update')
+    expect(taskUpdateCalls.length).toBeGreaterThan(0)
+    for (const call of taskUpdateCalls) {
+      expect(call[1].task_id).toBe(task.id)
+    }
+  })
+
+  test('enqueueQcCheck -> QC FAIL -> handleQcQaFailure: failed_qc and in_progress emits carry task_id', async () => {
+    vi.useFakeTimers()
+    try {
+      const sendToWindow = vi.fn()
+      const task = { id: 't1', title: 'Build it', status: 'pending_qc', assigned_agent: 'Dev', qcRound: 0 }
+      mission.__setMissionStateForTest({
+        tasks: [task],
+        agents: [{ name: 'Dev', status: 'Idle', current_task: null }],
+        log: [], project_path: '/tmp/proj',
+      })
+      mission.__setSendToWindowForTest(sendToWindow)
+      mission.__setQcQaRunnerForTest(async () => ({
+        verdict: 'FAIL', responsibleAgent: 'Dev', reason: 'build broke',
+      }))
+
+      const donePromise = mission.__enqueueQcCheckForTest(task, 'Dev')
+      await vi.advanceTimersByTimeAsync(1000)
+      await donePromise
+
+      const taskUpdateCalls = sendToWindow.mock.calls.filter(c => c[0] === 'mission:task-update')
+      const failedCall = taskUpdateCalls.find(c => c[1].status === 'failed_qc')
+      const inProgressCall = taskUpdateCalls.find(c => c[1].status === 'in_progress')
+      expect(failedCall).toBeTruthy()
+      expect(inProgressCall).toBeTruthy()
+      expect(failedCall[1].task_id).toBe(task.id)
+      expect(inProgressCall[1].task_id).toBe(task.id)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('QC PASS -> QA FAIL: failed_qa and follow-up in_progress emits carry task_id', async () => {
+    vi.useFakeTimers()
+    try {
+      const sendToWindow = vi.fn()
+      const task = { id: 't1', title: 'Build it', status: 'pending_qc', assigned_agent: 'Dev', qcRound: 0 }
+      mission.__setMissionStateForTest({
+        tasks: [task],
+        agents: [{ name: 'Dev', status: 'Idle', current_task: null }],
+        log: [], project_path: '/tmp/proj',
+      })
+      mission.__setSendToWindowForTest(sendToWindow)
+      let stage = 'qc'
+      mission.__setQcQaRunnerForTest(async () => {
+        if (stage === 'qc') {
+          stage = 'qa'
+          return { verdict: 'PASS' }
+        }
+        return { verdict: 'FAIL', responsibleAgent: 'Dev', reason: 'wrong behavior' }
+      })
+
+      const donePromise = mission.__enqueueQcCheckForTest(task, 'Dev')
+      await vi.advanceTimersByTimeAsync(1000)
+      await donePromise
+
+      const taskUpdateCalls = sendToWindow.mock.calls.filter(c => c[0] === 'mission:task-update')
+      const failedCall = taskUpdateCalls.find(c => c[1].status === 'failed_qa')
+      const inProgressCall = taskUpdateCalls.find(c => c[1].status === 'in_progress')
+      expect(failedCall).toBeTruthy()
+      expect(inProgressCall).toBeTruthy()
+      expect(failedCall[1].task_id).toBe(task.id)
+      expect(inProgressCall[1].task_id).toBe(task.id)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

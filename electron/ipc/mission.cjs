@@ -7,6 +7,7 @@
 
 const { ipcMain, shell, dialog, BrowserWindow } = require('electron');
 const { spawn }   = require('cross-spawn');
+const { execFile } = require('child_process');
 const readline    = require('readline');
 const fs          = require('fs');
 const path        = require('path');
@@ -234,11 +235,22 @@ function loadPromptTemplate(filename) {
 }
 
 function fillTemplate(template, values) {
-  let out = template;
-  for (const [key, value] of Object.entries(values)) {
-    out = out.split(`{{${key}}}`).join(value == null ? '' : String(value));
-  }
-  return out;
+  const keys = Object.keys(values);
+  if (keys.length === 0) return template;
+  // Single-pass substitution: build one regex matching any {{KEY}} placeholder
+  // and resolve each match from `values` during replacement. This guarantees
+  // a substituted value's own content is never re-scanned for further
+  // placeholder matches, unlike a sequential per-key split/join loop.
+  const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(
+    keys.map((key) => `\\{\\{${escapeRegExp(key)}\\}\\}`).join('|'),
+    'g'
+  );
+  return template.replace(pattern, (match) => {
+    const key = match.slice(2, -2);
+    const value = values[key];
+    return value == null ? '' : String(value);
+  });
 }
 
 function enqueueQcCheck(task, agent) {
@@ -268,12 +280,12 @@ function enqueueQcCheck(task, agent) {
 // follow-up in_progress emit in handleQcQaFailure, so the failure state is
 // actually observable (by a user or a polling test) instead of flashing for
 // ~0ms in the same synchronous tick.
-const QC_QA_FAILURE_VISIBILITY_DELAY_MS = 400;
+const QC_QA_FAILURE_VISIBILITY_DELAY_MS = 900;
 
 function enqueueQaCheck(task, agent, qcVerdict) {
   task.status = 'pending_qa';
   sendToWindowRef('mission:task-update', {
-    agent, description: task.title, status: 'pending_qa', timestamp: now(),
+    task_id: task.id, agent, description: task.title, status: 'pending_qa', timestamp: now(),
   });
 
   const template = loadPromptTemplate('qa_check.md');
@@ -296,7 +308,7 @@ function enqueueQaCheck(task, agent, qcVerdict) {
       task.status = 'completed';
       task.completed_at = now();
       sendToWindowRef('mission:task-update', {
-        agent, description: task.title, status: 'completed', timestamp: task.completed_at,
+        task_id: task.id, agent, description: task.title, status: 'completed', timestamp: task.completed_at,
       });
     } else {
       handleQcQaFailure(task, 'qa', verdict.responsibleAgent || agent, verdict.reason);
@@ -309,7 +321,7 @@ function handleQcQaFailure(task, stage, responsibleAgent, reason) {
   task.status = stage === 'qc' ? 'failed_qc' : 'failed_qa';
   const ts = now();
   sendToWindowRef('mission:task-update', {
-    agent: responsibleAgent, description: task.title, status: task.status,
+    task_id: task.id, agent: responsibleAgent, description: task.title, status: task.status,
     reason, timestamp: ts,
   });
 
@@ -333,7 +345,7 @@ function handleQcQaFailure(task, stage, responsibleAgent, reason) {
   setTimeout(() => {
     task.status = 'in_progress';
     sendToWindowRef('mission:task-update', {
-      agent: responsibleAgent, description: task.title, status: 'in_progress',
+      task_id: task.id, agent: responsibleAgent, description: task.title, status: 'in_progress',
       reason, timestamp: now(),
     });
   }, QC_QA_FAILURE_VISIBILITY_DELAY_MS);
@@ -1044,7 +1056,34 @@ function spawnClaude(args, cwd, useAgentTeams) {
     env,
     stdio: ['pipe', 'pipe', 'pipe'],
     shell: false,
+    // On Windows, `claude` typically resolves through a `claude.cmd` shim,
+    // which cross-spawn can only launch via an implicit `cmd.exe /c` wrapper
+    // (regardless of shell:false) -- so the ChildProcess's pid is the wrapper's,
+    // not the real claude/node process underneath it. `windowsHide` avoids
+    // flashing a console window for that wrapper; the actual fix for killing
+    // the real process tree lives in killClaudeProcess() below, which does a
+    // Windows tree-kill instead of relying on proc.kill() alone.
+    windowsHide: true,
   });
+}
+
+// killClaudeProcess — terminate a ChildProcess returned by spawnClaude.
+// On non-Windows platforms this is exactly proc.kill() (unchanged behavior).
+// On Windows, proc.kill() only ever reaches the cmd.exe wrapper that
+// cross-spawn interposes to launch the claude.cmd shim, leaving the real
+// claude/node process (and any of its children) running as an orphan. Using
+// `taskkill /pid <pid> /T /F` kills the wrapper's entire process tree instead.
+// Guarded so a process that already exited (taskkill errors) never throws
+// uncaught.
+function killClaudeProcess(proc, signal) {
+  if (!proc) return;
+  if (process.platform === 'win32' && proc.pid) {
+    try {
+      execFile('taskkill', ['/pid', String(proc.pid), '/T', '/F'], () => {});
+    } catch (_) {}
+    return;
+  }
+  try { proc.kill(signal); } catch (_) {}
 }
 
 // runClaudeForHtml — spawn a one-shot Claude process to generate an HTML mockup.
@@ -1061,7 +1100,7 @@ async function runClaudeForHtml(prompt) {
     proc.stdout.on('data', d => { stdout += d.toString(); });
 
     const timer = setTimeout(() => {
-      proc.kill();
+      killClaudeProcess(proc);
       reject(new Error('Mockup generation timed out after 180s'));
     }, 180000);
 
@@ -1700,7 +1739,7 @@ function readProcessStdout_launch(proc, missionId, sendToWindow, attemptCtx = {}
                 fullTextBuf = '';
                 // Kill the planning process immediately — prevents Lead from continuing
                 // to Phase 3 (spawning agents) before the user reviews the plan.
-                try { proc.kill(); } catch (_) {}
+                killClaudeProcess(proc);
               }
             }
 
@@ -1811,7 +1850,7 @@ function readProcessStdout_launch(proc, missionId, sendToWindow, attemptCtx = {}
                 planEmitted = true;
                 applyPlanToState(parsed, ts, 'Mission plan detected from result — ready for review', sendToWindow);
                 fullTextBuf = '';
-                try { proc.kill(); } catch (_) {}
+                killClaudeProcess(proc);
               }
             }
 
@@ -1845,7 +1884,7 @@ function readProcessStdout_launch(proc, missionId, sendToWindow, attemptCtx = {}
                   missionState.status = 'RetryingDanglingQuestion';
                 }
                 sendToWindow('mission:log', entry);
-                try { proc.kill(); } catch (_) {}
+                killClaudeProcess(proc);
                 setTimeout(() => retrySpawn(attempt + 1, attemptCtx.sessionId || null), delay);
                 break;
               }
@@ -3661,7 +3700,7 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
       setTimeout(() => {
         if (!resolved) {
           resolved = true;
-          try { proc.kill(); } catch (_) {}
+          killClaudeProcess(proc);
           reject(new Error(`Re-plan timed out after 120s\n${stderrText}`));
         }
       }, 120000);
@@ -4133,6 +4172,7 @@ if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
   module.exports.__getMissionStateForTest = () => missionState;
   module.exports.__handleParsedEventForTest = (event, sendToWindow) => handleParsedEvent(event, sendToWindow);
   module.exports.__setSendToWindowForTest = (fn) => { sendToWindowRef = fn; };
+  module.exports.__fillTemplateForTest = (template, values) => fillTemplate(template, values);
   module.exports.__setQcQaRunnerForTest = (fn) => { qcQaRunner = fn; };
   module.exports.__enqueueQcCheckForTest = (task, agent) => {
     return new Promise((resolve) => {
