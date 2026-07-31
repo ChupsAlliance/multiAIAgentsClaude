@@ -2033,6 +2033,89 @@ git commit -m "fix: close two Critical QC/QA dead-end states (Needs Attention re
 
 ---
 
+## Task 19: Close remaining follow-ups from the final whole-plan review and Task 18's verification
+
+**Background**
+
+Task 18 fixed the 2 Critical dead-end states from the final whole-plan review (commit `fb73d2e`, independently verified — diff matches brief exactly, 227/227 real unit tests pass, both E2E specs reviewed). Four smaller, non-blocking items remain open:
+
+1. **Flaky `qcqa-verification-loop.spec.ts`** (discovered during Task 18's verification, root cause already diagnosed at Task 11 round 4/ledger): `handleQcQaFailure` (`mission.cjs:305-339`) delays the `failed_qc`/`failed_qa` → `in_progress` transition by `QC_QA_FAILURE_VISIBILITY_DELAY_MS = 400` (`mission.cjs:271`) so the failed state is visible for a moment before flipping back. In repeated runs this segment, `qcqa-verification-loop.spec.ts`'s `getByText(/QC Failed/i)` assertion (line ~161) passed 4/4 alone but failed ~50% of the time (2/4) when run paired with `replay-real-ui-fidelity.spec.ts` — the fixed 400ms window is still too tight/racy against Playwright's polling under load from a second Electron instance.
+
+2. **Windows `proc.kill()` only kills the `cmd.exe` wrapper, not the real `claude` process** (found during Task 11 round 2, confirmed systemic): `spawnClaude` (`mission.cjs:1042-1047`) calls `spawn('claude', args, { shell: false, ... })`. On Windows, Node resolves `claude` through `claude.cmd`, which `child_process.spawn` can only execute via an implicit `cmd.exe /c` wrapper regardless of `shell: false` — so `proc.kill()` (call sites at `mission.cjs:1064`, `1703`, `1814`, `1848`, `3664`) kills the wrapper, leaving the real Node grandchild process alive. This causes double-emitted transcript lines when a launch-phase process is "killed" and a deploy-phase process starts against the same project. Worked around at the test-fixture level for both `qcqa-verification-loop.spec.ts` and `replay-real-ui-fidelity.spec.ts` (truncating launch-phase invocations), but never fixed at the root.
+
+3. **QC/QA-originated `mission:task-update` emits omit `task_id`** (final review Important #4): the 4 emit sites inside `enqueueQcCheck`/`enqueueQaCheck`/`handleQcQaFailure` (`mission.cjs:275`, `298`, `311`, `335`) send `{ agent, description, status, timestamp }` with no `task_id`, unlike the emits at `mission.cjs:496`/`507` which do include it. `useMission.js`'s `mission:task-update` listener (`src/hooks/useMission.js:361-363`) prefers `task_id` for matching when present, falling back to description/agent/status-based matching stages otherwise (per Task 9's ledger note, those fallbacks already cover current QC/QA payload shapes, so this is not currently UI-breaking — but it's a latent landmine: any future fallback-stage change could silently misroute a QC/QA update).
+
+4. **`fillTemplate`'s sequential substitution can cross-contaminate** (final review Minor #5): `fillTemplate` (`mission.cjs:236-241`) does `out = out.split(`{{${key}}}`).join(value)` in a loop over `Object.entries(values)` — if one substituted value's *content* happens to contain another key's `{{PLACEHOLDER}}` token verbatim (e.g. a task description that literally contains the text `{{TASK_TITLE}}`), a later iteration will substitute inside data that was already substituted in, rather than leaving it literal. Low likelihood (requires attacker/user-controlled template-placeholder-shaped text in a task title/description), but easy to fix by building the output in one pass instead of N sequential passes.
+
+**Global Constraint reminder:** Mission reaches `Completed` only via `runFinalQaSweep()` passing (established Task 7/14). None of the 4 fixes below touch that gate — this task is hardening/reliability work, explicitly in scope per user decision, not scope creep.
+
+**Files**
+
+- Modify `electron/ipc/mission.cjs` (`QC_QA_FAILURE_VISIBILITY_DELAY_MS`, `spawnClaude`/kill call sites, `enqueueQcCheck`/`enqueueQaCheck`/`handleQcQaFailure`'s emits, `fillTemplate`)
+- Modify `electron/ipc/mission.test.cjs` (new tests for `fillTemplate` cross-contamination and `task_id` presence on QC/QA emits)
+- Modify `tests/specs/qcqa-verification-loop.spec.ts` only if the delay-constant change alone doesn't fully de-flake it (prefer fixing the root timing over loosening the test's own wait strategy)
+
+**Interfaces**
+
+- `QC_QA_FAILURE_VISIBILITY_DELAY_MS`: raise from `400` to `900` (still well under the `pending_qc`/QC-runner's own timeouts) to give Playwright's default polling comfortable margin even under paired/loaded runs.
+- `spawnClaude`: on `process.platform === 'win32'`, spawn via `claude.cmd` explicitly (or set `windowsHide: true` plus resolve the actual `.cmd` path) so the returned `ChildProcess` handle refers to the real process tree; kill call sites should use a tree-kill approach on Windows (e.g. `taskkill /pid <pid> /T /F` via `execFile`, guarded to `win32` only) instead of a bare `proc.kill()`, so the whole process tree — not just the `cmd.exe` wrapper — is terminated.
+- `enqueueQcCheck`/`enqueueQaCheck`/`handleQcQaFailure`: add `task_id: task.id` to all 4 `mission:task-update` payloads, matching the shape already used at `mission.cjs:496`/`507`.
+- `fillTemplate(template, values)`: rewrite as a single-pass replace (e.g. one regex built from `Object.keys(values)` matching `{{KEY}}` alternatives, looked up in a `Map`/object during replacement) so no substituted value's content is ever re-scanned for further placeholder matches.
+
+- [ ] **Step 1: Write failing tests**
+
+In `electron/ipc/mission.test.cjs`, add:
+
+```js
+describe('fillTemplate substitution safety', () => {
+  test('does not re-substitute placeholder-shaped text introduced by an earlier substitution', () => {
+    const mission = require('./mission.cjs')
+    const out = mission.__fillTemplateForTest('A={{A}} B={{B}}', {
+      A: '{{B}}',
+      B: 'real-b-value',
+    })
+    expect(out).toBe('A={{B}} B=real-b-value')
+  })
+})
+
+describe('QC/QA task-update emits include task_id', () => {
+  // ... construct a mission with one task, drive it through enqueueQcCheck/
+  // enqueueQaCheck/handleQcQaFailure via existing test hooks, and assert
+  // every captured 'mission:task-update' call's payload has task_id === task.id
+})
+```
+
+Add a `__fillTemplateForTest` hook alongside the existing test-only exports (guarded the same way).
+
+- [ ] **Step 2: Confirm tests fail**
+
+Run: `npx vitest run electron/ipc/mission.test.cjs` — expect the new tests to fail against the current sequential-substitution `fillTemplate` and the current `task_id`-less emits.
+
+- [ ] **Step 3: Minimal implementation**
+
+1. Rewrite `fillTemplate` as a single-pass substitution.
+2. Add `task_id: task.id` to the 4 QC/QA `mission:task-update` emit sites.
+3. Raise `QC_QA_FAILURE_VISIBILITY_DELAY_MS` to `900`.
+4. On `win32`, fix `spawnClaude` to resolve/spawn the real process and switch its `proc.kill()` call sites to a tree-kill helper (`win32`-only branch; non-Windows platforms keep the existing `proc.kill()`).
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `node --check electron/ipc/mission.cjs && npx vitest run electron/ipc/mission.test.cjs` — expect all tests, including the new ones, to pass.
+
+- [ ] **Step 5: Verify no regression and de-flake**
+
+Run `npm test` (expect same passing count + N new, same 2 known false-positive suites) and `npx playwright test tests/specs/qcqa-verification-loop.spec.ts tests/specs/replay-real-ui-fidelity.spec.ts --reporter=list` **5 times in a row, paired together** (not just once) — expect 5/5 clean for both specs, confirming the flakiness from Task 18's verification is resolved, not just hidden. If any run still fails on the same assertion after raising the delay, widen further or add an explicit poll/retry in the spec itself rather than declaring this step done.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add electron/ipc/mission.cjs electron/ipc/mission.test.cjs
+# include tests/specs/qcqa-verification-loop.spec.ts only if Step 5 required touching it
+git commit -m "fix: harden QC/QA timing, Windows process kill, task_id propagation, and template substitution"
+```
+
+---
+
 ## Testing strategy summary
 
 - Unit: `electron/lib/qcqa.test.cjs` (parsing, escalation tiers, subprocess wrapper — all pure/stubbed, no real `claude` spawns) and `electron/ipc/mission.test.cjs` (state-machine wiring, using injected test hooks so `missionState`/`sendToWindow`/the QC-QA runner are all controllable without spawning real processes).
