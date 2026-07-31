@@ -386,6 +386,9 @@ function retryAgentCore(agentName, sendToWindow) {
     sendToWindow('mission:status', { mission_id: missionState.id, status: 'Running' });
   }
 
+  // Manual retry is a fresh vote of confidence — reset auto-resume budget
+  missionState.autoResumeCount = 0;
+
   const agentEntry = makeLogEntry(now(), 'System',
     `[Lead] Retrying agent "${agentName}"...`, 'info');
   missionState.log.push(agentEntry);
@@ -439,6 +442,7 @@ function runFinalQaSweep() {
   }).then((verdict) => {
     if (verdict.verdict === 'PASS') {
       missionState.status = 'Completed';
+      missionState.autoResumeCount = 0;
       sendToWindowRef('mission:status', { mission_id: missionState.id, status: 'Completed' });
     } else {
       missionState.status = 'Running';
@@ -2711,25 +2715,155 @@ function watchProcessExit_deploy(proc, missionId, sendToWindow, retryInfo = null
   }); // end proc.on('close', ...)
 }
 
+// ─────────────────────────────────────────────────────────────────
+// spawnResumeOrFreshAttempt — shared helper to resume (or fresh-launch)
+// the Lead agent process after the driving process has exited. Used by
+// autoResumeAfterFinalQaFailure. Reuses the same spawn machinery as
+// answer_question and restartLeadAfterMockup.
+// ─────────────────────────────────────────────────────────────────
+function spawnResumeOrFreshAttempt({ missionId, sendToWindow, promptOverride, reasonForLog }) {
+  if (!missionState) return;
+
+  killChild();
+
+  const sessionId   = missionState.session_id || null;
+  const leadModel   = missionState.agents.find(a => a.name === 'Lead')?.model || 'sonnet';
+  const projectPath = missionState.project_path;
+  const execMode    = missionState.execution_mode || 'standard';
+
+  // Build prompt: use override if given, otherwise build a continuation prompt
+  const prompt = promptOverride || buildAutoResumePrompt(reasonForLog);
+
+  const args = ['-p', '--dangerously-skip-permissions',
+    '--model', leadModel,
+    '--output-format', 'stream-json', '--verbose', '--max-turns', '200'];
+  if (sessionId) {
+    args.splice(1, 0, '--resume', sessionId);
+  }
+
+  const proc = spawnClaude(args, projectPath, execMode === 'agent_teams');
+  childProcess = proc;
+
+  // Prevent unhandled 'error' event (e.g. ENOENT if claude binary not found)
+  proc.on('error', (err) => {
+    const entry = makeLogEntry(now(), 'System',
+      `Auto-resume spawn error: ${err.message}`, 'error');
+    if (missionState) missionState.log.push(entry);
+    sendToWindow('mission:log', entry);
+  });
+
+  try {
+    proc.stdin.write(prompt, 'utf8');
+    proc.stdin.end();
+  } catch (e) {
+    const entry = makeLogEntry(now(), 'System',
+      `Failed to write auto-resume prompt: ${e.message}`, 'error');
+    if (missionState) missionState.log.push(entry);
+    sendToWindow('mission:log', entry);
+    killChild();
+    return;
+  }
+
+  if (missionState) missionState.status = 'Running';
+  startAutosave();
+  startStuckChecker(sendToWindow, false);
+
+  sendToWindow('mission:status', { mission_id: missionId, status: 'Running' });
+
+  const attemptCtx = { stdoutText: '', stderrText: '', sessionId: null };
+  const retryInfo = {
+    attemptCtx, attempt: 1, maxAttempts: 3, backoffMs: [30000, 60000, 120000],
+    retrySpawn: (nextAttempt) => spawnResumeOrFreshAttempt({
+      missionId, sendToWindow, promptOverride: prompt, reasonForLog,
+    }),
+  };
+  attemptCtx.retryInfo = retryInfo;
+
+  readProcessStdout_deploy(proc, sendToWindow, false, attemptCtx);
+  readProcessStderr(proc, sendToWindow, attemptCtx);
+  watchProcessExit_deploy(proc, missionId, sendToWindow, retryInfo);
+
+  if (execMode === 'agent_teams' && projectPath) {
+    startFileWatcher(projectPath, sendToWindow);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// buildAutoResumePrompt — build the prompt for auto-resume after
+// final QA sweep failure. Two cases: resume (session_id present)
+// vs fresh launch (no session_id).
+// ─────────────────────────────────────────────────────────────────
+function buildAutoResumePrompt(reasonForLog) {
+  if (!missionState) return '';
+
+  // Find the flagged task (in_progress after handleQcQaFailure pushed it back)
+  const flaggedTask = missionState.tasks.find(t => t.status === 'in_progress');
+  const reason = (flaggedTask && flaggedTask.qcReason) || reasonForLog || 'final QA sweep found an issue';
+  const taskTitle = flaggedTask ? flaggedTask.title : '(unknown task)';
+  const taskAgent = flaggedTask ? (flaggedTask.assigned_agent || 'unknown') : 'unknown';
+
+  if (missionState.session_id) {
+    // Resume case: short nudge — the session already has context
+    return `\n[System] The final whole-picture QA sweep flagged an issue and scheduled a retry. ` +
+      `Task "${taskTitle}" (owner: ${taskAgent}) needs another pass. Reason: ${reason}\n` +
+      `Please address the issue and complete the mission.\n`;
+  }
+
+  // Fresh-launch case: full context needed
+  const taskList = missionState.tasks.map(t =>
+    `- [${t.status}] ${t.title} (owner: ${t.assigned_agent || 'unknown'})`
+  ).join('\n');
+
+  return `You are continuing a mission that was interrupted. ` +
+    `Mission: ${missionState.description || '(no description)'}\n` +
+    `Project path: ${missionState.project_path}\n\n` +
+    `Tasks:\n${taskList}\n\n` +
+    `This is a continuation after the final whole-picture QA sweep found an issue: ${reason}\n` +
+    `The following task needs another pass: "${taskTitle}" (owner: ${taskAgent}).\n` +
+    `Please address the issue and complete the mission.`;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// autoResumeAfterFinalQaFailure — auto-resume the mission when the
+// final QA sweep failed after the driving process already exited.
+// Bounded to 3 consecutive attempts; falls back to manual Retry.
+// ─────────────────────────────────────────────────────────────────
+function autoResumeAfterFinalQaFailure(missionId, sendToWindow, ts) {
+  missionState.autoResumeCount = (missionState.autoResumeCount || 0) + 1;
+
+  if (missionState.autoResumeCount > 3) {
+    const entry = makeLogEntry(ts, 'System',
+      'Final QA sweep scheduled a retry after the driving process already exited — ' +
+      'mission is awaiting that retry, but no process is currently driving it. ' +
+      'Auto-resume already tried 3 times without reaching Completed — stopping. ' +
+      'This requires manual intervention (see Retry).',
+      'info');
+    missionState.log.push(entry);
+    sendToWindow('mission:log', entry);
+    return;
+  }
+
+  const entry = makeLogEntry(ts, 'System',
+    `Final QA sweep scheduled a retry after the driving process already exited — ` +
+    `auto-resuming mission (attempt ${missionState.autoResumeCount}/3)...`,
+    'info');
+  missionState.log.push(entry);
+  sendToWindow('mission:log', entry);
+
+  spawnResumeOrFreshAttempt({
+    missionId, sendToWindow,
+    reasonForLog: 'final QA sweep failure after process exit',
+  });
+}
+
 function finalizeDeployExit(missionId, sendToWindow, ts) {
   // If the final QA sweep FAILed and scheduled a retry (handleQcQaFailure
   // delays failed_qc/failed_qa -> in_progress rather than forcing it),
   // missionState.status is left 'Running' even though the driving `claude`
-  // process has already exited/been killed by this point. Collapsing that
-  // to 'failed' here would show the user a false "Failed" while the backend
-  // is actually just waiting on a retry. Skip the completion-style emit and
-  // the history/snapshot save entirely -- the mission isn't over -- and log
-  // the gap instead: no process is left to actually drive the retried task,
-  // since spawning a fresh `claude` process from inside an exit handler is
-  // a materially larger change left as a follow-up.
+  // process has already exited. Auto-resume the mission instead of waiting
+  // for manual Retry (bounded to 3 consecutive attempts).
   if (missionState.status === 'Running') {
-    const entry = makeLogEntry(ts, 'System',
-      'Final QA sweep scheduled a retry after the driving process already exited — ' +
-      'mission is awaiting that retry, but no process is currently driving it. ' +
-      'This requires manual intervention (see Retry) or a follow-up to auto-resume it.',
-      'info');
-    missionState.log.push(entry);
-    sendToWindow('mission:log', entry);
+    autoResumeAfterFinalQaFailure(missionId, sendToWindow, ts);
     return;
   }
 
@@ -4201,4 +4335,8 @@ if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
   module.exports.__retryAgentForTest = (agentName) => retryAgentCore(agentName, sendToWindowRef);
   module.exports.__finalizeDeployExitForTest = (missionId, sendToWindow, ts) =>
     finalizeDeployExit(missionId, sendToWindow, ts);
+  module.exports.__autoResumeAfterFinalQaFailureForTest = (missionId, sendToWindow, ts) =>
+    autoResumeAfterFinalQaFailure(missionId, sendToWindow, ts);
+  module.exports.__spawnResumeOrFreshAttemptForTest = (opts) =>
+    spawnResumeOrFreshAttempt(opts);
 }
