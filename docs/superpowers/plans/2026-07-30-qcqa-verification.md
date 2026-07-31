@@ -1908,6 +1908,131 @@ git commit -m "fix: make replay-real-ui-fidelity.spec.ts's mission reach Complet
 
 ---
 
+## Task 18: Fix two Critical dead-end states found by the final whole-plan code review
+
+**Background:** After Task 17 landed, a full-branch code review (base `3dbbfea`, head `82c4039`, all 17 tasks) found two Critical, independently-verified-by-plan-owner issues. Both represent real states a production mission can reach that leave it permanently stuck, and neither is covered by any existing test:
+
+1. **`Needs Attention` is a permanent dead end.** `handleQcQaFailure` (`mission.cjs:307-340`) sets `missionState.status = 'Needs Attention'` and `return`s when `nextEscalationTier` reaches `'needs-attention'` (qcRound 9+), leaving the task's status at `failed_qc`/`failed_qa` forever — no timeout, no code path resets it. The only existing recovery mechanism, the `retry_agent` IPC handler (`mission.cjs:3806-3835`), looks up a task via `t.assigned_agent === agentName && ['in_progress', 'completed'].includes(t.status)` — this explicitly excludes `failed_qc`/`failed_qa`, so `retry_agent` returns `{ ok: false, error: 'No retryable task found' }` for a `Needs Attention` task. No UI anywhere (confirmed via grep of `src/` for `Needs Attention`/`needs-attention`) offers any action beyond a read-only `StatusBadge`. Once reached, the only way out today is abandoning the whole mission.
+
+2. **A final-sweep FAIL after the driving process has exited leaves the mission in a mismatched, unrecoverable state.** Both callers of `runFinalQaSweep()` — `watchProcessExit_deploy`'s `finishDeployExit` (via `finalizeDeployExit`, `mission.cjs:2602-2648`) and `scheduleAgentTeamsCompletion` (`mission.cjs:759-786`) — invoke it only *after* the `claude` subprocess has already exited/been killed. If the sweep FAILs, `runFinalQaSweep` (via `handleQcQaFailure`) leaves `missionState.status` at `'Running'` and schedules the failed task back to `in_progress` after a delay — but `finalizeDeployExit`'s `statusStr = missionState.status === 'Completed' ? 'completed' : 'failed'` (`mission.cjs:2627`) then emits `mission:status` with `'failed'` to the frontend regardless, even though the backend's own state is `'Running'` with a task waiting to be retried by a process that no longer exists. The frontend directly displays `'Failed'` while the backend silently sits in a `Running`/`in_progress` limbo no user action can progress.
+
+**Global Constraint reminder:** this task closes two new stuck-states the plan itself introduced while closing the *old* completion bypasses — a bypass at least let the mission finish; these dead ends do not. Fixing them is in scope of the plan's own stated goal (a QC/QA gate that is safe to ship), not scope creep.
+
+**Files:**
+- Modify: `electron/ipc/mission.cjs` (`retry_agent` handler, `finishDeployExit`/`finalizeDeployExit`, `scheduleAgentTeamsCompletion`)
+- Modify: `src/components/mission/AgentCard.jsx` (surface the existing Retry button for `Needs Attention` too, not just agent `Error`)
+- Test: `electron/ipc/mission.test.cjs`
+
+**Interfaces:**
+- `retry_agent`'s task lookup gains `failed_qc`/`failed_qa` to its allowed status list, and resets `task.qcRound = 0` alongside `task.status = 'pending'` so the next QC pass starts the escalation tiers over. It also needs to reset `missionState.status` back to `'Running'` when leaving `'Needs Attention'` (currently only the task-level status is stuck; the mission-level status also needs an exit path).
+- `finishDeployExit`/`finalizeDeployExit` and `scheduleAgentTeamsCompletion`'s post-sweep callback both need to branch on the actual post-sweep `missionState.status` instead of collapsing everything non-`'Completed'` to `'failed'`: if the sweep left it `'Running'` (a retry was scheduled), emit a status that reflects an actionable pending state — reuse `'Needs Attention'`'s meaning is wrong here (this is a normal in-flight retry, not an escalation dead-end) — instead leave `missionState.status` as `'Running'` and do **not** send a `'failed'`/`'completed'` `mission:status` event at all in this branch; only send it once the retried task's own QC/QA round eventually resolves (already handled by the existing `enqueueQcCheck`/`handleQcQaFailure`/`runFinalQaSweep` chain, since a mission left `Running` with a task freshly `in_progress` needs the **normal running UI**, not a completion-style event). The remaining gap this surfaces — no process is actually driving that `in_progress` task once the original `claude` process has exited — should be logged as a follow-up rather than solved in this task (spawning a whole new `claude` process from inside an exit handler is a materially larger change); document this explicitly in the log entry pushed to `missionState.log` so it's visible to the user rather than silently stuck.
+
+- [ ] **Step 1: Write the failing tests**
+
+Append to `electron/ipc/mission.test.cjs`:
+
+```js
+describe('Needs Attention recovery', () => {
+  let mission
+
+  beforeEach(() => {
+    delete require.cache[require.resolve('./mission.cjs')]
+    mission = require('./mission.cjs')
+  })
+
+  test('retry_agent resumes a task stuck at failed_qc/failed_qa (Needs Attention)', async () => {
+    const sendToWindow = vi.fn()
+    mission.__setMissionStateForTest({
+      id: 'm1', status: 'Needs Attention', phase: 'Executing',
+      tasks: [{ id: 't1', title: 'A', status: 'failed_qc', qcRound: 9, assigned_agent: 'Dev' }],
+      agents: [{ name: 'Dev', status: 'Error' }],
+      log: [], project_path: '/tmp/proj', file_changes: [],
+    })
+    mission.__setSendToWindowForTest(sendToWindow)
+
+    const result = await mission.__retryAgentForTest('Dev')
+
+    expect(result.ok).toBe(true)
+    const state = mission.__getMissionStateForTest()
+    expect(state.tasks[0].status).toBe('pending')
+    expect(state.tasks[0].qcRound).toBe(0)
+    expect(state.status).toBe('Running')
+  })
+})
+
+describe('final sweep FAIL after process exit does not report a false Failed', () => {
+  let mission
+
+  beforeEach(() => {
+    delete require.cache[require.resolve('./mission.cjs')]
+    mission = require('./mission.cjs')
+  })
+
+  test('finalizeDeployExit does not send a completion status when the sweep left the mission Running', () => {
+    const sendToWindow = vi.fn()
+    mission.__setMissionStateForTest({
+      id: 'm1', status: 'Running', phase: 'Executing',
+      tasks: [{ id: 't1', title: 'A', status: 'in_progress' }],
+      agents: [{ name: 'Dev', status: 'Working' }],
+      log: [], project_path: '/tmp/proj', file_changes: [],
+    })
+    mission.__setSendToWindowForTest(sendToWindow)
+
+    mission.__finalizeDeployExitForTest('m1', sendToWindow, Date.now())
+
+    const statusEmits = sendToWindow.mock.calls.filter(c => c[0] === 'mission:status')
+    expect(statusEmits.some(c => c[1].status === 'failed')).toBe(false)
+  })
+})
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `npx vitest run electron/ipc/mission.test.cjs`
+Expected: FAIL — `__retryAgentForTest`/`__finalizeDeployExitForTest` are not functions, and/or the current behavior emits `'failed'`/leaves the task stuck.
+
+- [ ] **Step 3: Write minimal implementation**
+
+In `electron/ipc/mission.cjs`:
+
+1. `retry_agent` handler: widen the task lookup to `['in_progress', 'completed', 'failed_qc', 'failed_qa'].includes(t.status)`; when the matched task's status was `failed_qc`/`failed_qa`, also reset `task.qcRound = 0` and, if `missionState.status === 'Needs Attention'`, reset it to `'Running'` and emit `mission:status` with `'Running'`. Keep the rest of the handler (agent reset, log entry, stdin write) unchanged. Extract the core logic into a plain function (e.g. `retryAgentCore(agentName, sendToWindow)`) called both by the `ipcMain.handle('retry_agent', ...)` wrapper and a new test hook, mirroring how other handlers in this file already separate core logic from the ipcMain wrapper.
+2. `finishDeployExit`/`finalizeDeployExit`: after the sweep, check `missionState.status` — if it's `'Running'` (sweep scheduled a retry rather than failing outright), skip the `mission:status` emit and the history/snapshot save's `statusStr` collapse entirely; push a `System` log entry noting the mission is awaiting a retry with no active process, so the gap is visible rather than silent. Only emit `mission:status` with `'failed'`/`'completed'` when the status is genuinely `'Failed'`/`'Completed'`.
+3. `scheduleAgentTeamsCompletion`: apply the same branch after its own `runFinalQaSweep().then(...)` callback.
+
+Add test hooks alongside the existing ones:
+
+```js
+if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
+  module.exports.__retryAgentForTest = (agentName) => retryAgentCore(agentName, sendToWindowRef);
+  module.exports.__finalizeDeployExitForTest = (missionId, sendToWindow, ts) =>
+    finalizeDeployExit(missionId, sendToWindow, ts);
+}
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `node --check electron/ipc/mission.cjs && npx vitest run electron/ipc/mission.test.cjs`
+Expected: all tests pass, including the new ones.
+
+- [ ] **Step 5: Wire the UI Retry button to Needs Attention**
+
+In `src/components/mission/AgentCard.jsx`, widen the existing Retry button's visibility condition (currently `status === 'Error' || status === 'error'`, line ~79) to also show when the mission-level status is `'Needs Attention'` for this agent's task — thread `missionStatus` (or equivalent) down from `MissionDashboard`/`AgentGrid` the same way `onRetryAgent` already is, and pass it through. Keep the click handler (`onRetryAgent(agent.name)`) unchanged — it already calls the now-widened `retry_agent` IPC handler.
+
+- [ ] **Step 6: Verify no regression**
+
+Run: `npm test` (expect the same 225+N passing, same known 2 pre-existing false-positive "failed suites") and `npx playwright test tests/specs/qcqa-verification-loop.spec.ts tests/specs/replay-real-ui-fidelity.spec.ts --reporter=list` (expect both still green — this task must not change the happy-path lifecycle, only add a recovery path for the two dead-end states).
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add electron/ipc/mission.cjs electron/ipc/mission.test.cjs src/components/mission/AgentCard.jsx src/components/mission/AgentGrid.jsx src/components/mission/MissionDashboard.jsx src/pages/MissionControlPage.jsx
+git commit -m "fix: close two Critical QC/QA dead-end states (Needs Attention recovery, false Failed after retry-scheduling sweep)"
+```
+
+(Adjust the file list if Step 5's prop-threading touches a different/fewer set of files than listed — only include files actually changed.)
+
+---
+
 ## Testing strategy summary
 
 - Unit: `electron/lib/qcqa.test.cjs` (parsing, escalation tiers, subprocess wrapper — all pure/stubbed, no real `claude` spawns) and `electron/ipc/mission.test.cjs` (state-machine wiring, using injected test hooks so `missionState`/`sendToWindow`/the QC-QA runner are all controllable without spawning real processes).
