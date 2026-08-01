@@ -48,6 +48,22 @@ function agentBackendOf(agent) {
   return 'claude';
 }
 
+/** Build QC/QA runner opts that route through the mission's backend adapter. */
+function qcQaSpawnOpts() {
+  const backendId = (missionState && missionState.backend) || 'claude';
+  const adapter = resolveAdapter(backendId);
+  if (adapter) {
+    return {
+      spawnFn: adapter.spawn.bind(adapter),
+      buildArgs: adapter.buildLaunchArgs.bind(adapter),
+      promptViaStdin: adapter.promptViaStdin !== false,
+      backend: backendId,
+    };
+  }
+  // Fallback: legacy Claude path via spawnClaude
+  return { spawnClaude, backend: backendId };
+}
+
 // ── Prompt templates (loaded once at startup) ──────────────────
 // Dev: electron/prompts/   Prod (packaged): resources/prompts/
 function promptPath(filename) {
@@ -292,7 +308,7 @@ function enqueueQcCheck(task, agent) {
   });
 
   qcQaRunner({
-    spawnClaude, prompt, projectPath: missionState.project_path,
+    ...qcQaSpawnOpts(), prompt, projectPath: missionState.project_path,
     model: 'claude-sonnet-5', stage: 'QC', timeoutMs: 180000,
   }).then((verdict) => {
     if (verdict.verdict === 'PASS') {
@@ -328,7 +344,7 @@ function enqueueQaCheck(task, agent, qcVerdict) {
   });
 
   qcQaRunner({
-    spawnClaude, prompt, projectPath: missionState.project_path,
+    ...qcQaSpawnOpts(), prompt, projectPath: missionState.project_path,
     model: 'claude-sonnet-5', stage: 'QA', timeoutMs: 180000,
   }).then((verdict) => {
     if (verdict.verdict === 'PASS') {
@@ -464,7 +480,7 @@ function runFinalQaSweep() {
   });
 
   return qcQaRunner({
-    spawnClaude, prompt, projectPath: missionState.project_path,
+    ...qcQaSpawnOpts(), prompt, projectPath: missionState.project_path,
     model: 'claude-sonnet-5', stage: 'QA', timeoutMs: 240000,
   }).then((verdict) => {
     if (verdict.verdict === 'PASS') {
@@ -1223,21 +1239,43 @@ function spawnAgentProcess(spec = {}) {
            supportsAgentTeams: adapter.supportsAgentTeams !== false };
 }
 
-// runClaudeForHtml — spawn a one-shot Claude process to generate an HTML mockup.
+// runMockupHtml — spawn a one-shot process to generate an HTML mockup.
+// Uses the mission's backend adapter when available, falls back to Claude.
 // Returns the HTML string extracted from <<<HTML>>>...<<<END_HTML>>> markers.
-async function runClaudeForHtml(prompt) {
+async function runMockupHtml(prompt) {
+  const backendId = (missionState && missionState.backend) || 'claude';
+  const adapter = resolveAdapter(backendId);
+
   return new Promise((resolve, reject) => {
-    const proc = spawn('claude', [
-      '-p', prompt,
-      '--model', 'claude-haiku-4-5-20251001',
-      '--dangerously-skip-permissions',
-    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let proc;
+
+    if (adapter) {
+      const args = adapter.buildLaunchArgs({
+        prompt: adapter.promptViaStdin !== false ? undefined : prompt,
+        model: 'haiku',
+      });
+      proc = adapter.spawn(args, missionState ? missionState.project_path : '.', {});
+
+      // For adapters that deliver prompt via stdin
+      if (adapter.promptViaStdin !== false) {
+        try { proc.stdin.write(prompt, 'utf8'); proc.stdin.end(); } catch (_) {}
+      } else {
+        try { proc.stdin.end(); } catch (_) {}
+      }
+    } else {
+      // Fallback: legacy Claude path
+      proc = spawn('claude', [
+        '-p', prompt,
+        '--model', 'claude-haiku-4-5-20251001',
+        '--dangerously-skip-permissions',
+      ], { stdio: ['ignore', 'pipe', 'pipe'] });
+    }
 
     let stdout = '';
     proc.stdout.on('data', d => { stdout += d.toString(); });
 
     const timer = setTimeout(() => {
-      killClaudeProcess(proc);
+      killBackendProcess(proc, backendId);
       reject(new Error('Mockup generation timed out after 180s'));
     }, 180000);
 
@@ -1253,7 +1291,7 @@ async function runClaudeForHtml(prompt) {
 
     proc.on('error', (err) => {
       clearTimeout(timer);
-      reject(new Error(`Failed to spawn claude for mockup: ${err.message}`));
+      reject(new Error(`Failed to spawn ${adapter ? adapter.displayName : 'claude'} for mockup: ${err.message}`));
     });
   });
 }
@@ -1322,13 +1360,13 @@ async function spawnMockupGenerator(title, spec, missionId, sendToWindow) {
     `- Include realistic placeholder content\n` +
     `Output ONLY the complete HTML document wrapped in <<<HTML>>> and <<<END_HTML>>> markers. Nothing else before or after.`;
 
-  // Mockup generation DELIBERATELY stays on Claude (Haiku) regardless of the
-  // mission backend — the <<<HTML>>> marker contract is validated on Claude
-  // only. Log clearly if the mission is on a different backend.
+  // Log which backend is being used for mockup generation.
   const _mockupBackend = (missionState && missionState.backend) || 'claude';
   if (_mockupBackend !== 'claude') {
+    const adapter = resolveAdapter(_mockupBackend);
+    const name = (adapter && adapter.displayName) || _mockupBackend;
     const entry = makeLogEntry(now(), 'System',
-      `Backend '${_mockupBackend}' đang dùng, nhưng mockup vẫn được tạo bằng Claude (Haiku).`, 'info');
+      `Mockup được tạo bằng ${name} (cùng backend với mission).`, 'info');
     if (missionState) missionState.log.push(entry);
     sendToWindow('mission:log', entry);
   }
@@ -1365,7 +1403,7 @@ async function spawnMockupGenerator(title, spec, missionId, sendToWindow) {
   try {
     armWarningTimers();
     const htmlContent = await retryMockupGeneration(
-      () => runClaudeForHtml(prompt),
+      () => runMockupHtml(prompt),
       onRetry,
       MAX_MOCKUP_ATTEMPTS
     );
@@ -2948,21 +2986,19 @@ function spawnResumeOrFreshAttempt({ missionId, sendToWindow, promptOverride, re
   const leadModel   = missionState.agents.find(a => a.name === 'Lead')?.model || 'sonnet';
   const projectPath = missionState.project_path;
   const execMode    = missionState.execution_mode || 'standard';
+  const resumeBackend = agentBackendOf(missionState.agents.find(a => a.name === 'Lead'));
 
   // Build prompt: use override if given, otherwise build a continuation prompt
   const prompt = promptOverride || buildAutoResumePrompt(reasonForLog);
 
-  const args = ['-p', '--dangerously-skip-permissions',
-    '--model', leadModel,
-    '--output-format', 'stream-json', '--verbose', '--max-turns', '200'];
-  if (sessionId) {
-    args.splice(1, 0, '--resume', sessionId);
-  }
+  const { proc, promptViaStdin } = spawnAgentProcess({
+    backendId: resumeBackend, model: leadModel, prompt,
+    resumeSessionId: sessionId, maxTurns: 200,
+    useAgentTeams: execMode === 'agent_teams',
+    cwd: projectPath, sendToWindow,
+  });
 
-  const proc = spawnClaude(args, projectPath, execMode === 'agent_teams');
-  childProcess = proc;
-
-  // Prevent unhandled 'error' event (e.g. ENOENT if claude binary not found)
+  // Prevent unhandled 'error' event (e.g. ENOENT if binary not found)
   proc.on('error', (err) => {
     const entry = makeLogEntry(now(), 'System',
       `Auto-resume spawn error: ${err.message}`, 'error');
@@ -2970,16 +3006,21 @@ function spawnResumeOrFreshAttempt({ missionId, sendToWindow, promptOverride, re
     sendToWindow('mission:log', entry);
   });
 
-  try {
-    proc.stdin.write(prompt, 'utf8');
-    proc.stdin.end();
-  } catch (e) {
-    const entry = makeLogEntry(now(), 'System',
-      `Failed to write auto-resume prompt: ${e.message}`, 'error');
-    if (missionState) missionState.log.push(entry);
-    sendToWindow('mission:log', entry);
-    killChild();
-    return;
+  // Prompt delivery: stdin (Claude) vs argv (Copilot) — adapter handles it
+  if (promptViaStdin) {
+    try {
+      proc.stdin.write(prompt, 'utf8');
+      proc.stdin.end();
+    } catch (e) {
+      const entry = makeLogEntry(now(), 'System',
+        `Failed to write auto-resume prompt: ${e.message}`, 'error');
+      if (missionState) missionState.log.push(entry);
+      sendToWindow('mission:log', entry);
+      killChild();
+      return;
+    }
+  } else {
+    try { proc.stdin.end(); } catch (_) {}
   }
 
   if (missionState) missionState.status = 'Running';
@@ -2988,7 +3029,7 @@ function spawnResumeOrFreshAttempt({ missionId, sendToWindow, promptOverride, re
 
   sendToWindow('mission:status', { mission_id: missionId, status: 'Running' });
 
-  const attemptCtx = { stdoutText: '', stderrText: '', sessionId: null };
+  const attemptCtx = { stdoutText: '', stderrText: '', sessionId: null, backend: resumeBackend };
   const retryInfo = {
     attemptCtx, attempt: 1, maxAttempts: 3, backoffMs: [30000, 60000, 120000],
     retrySpawn: (nextAttempt) => spawnResumeOrFreshAttempt({
@@ -4572,7 +4613,7 @@ if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
         BUILD_HINT: detectProjectType(missionState.project_path || '.'),
         RESPONSIBLE_AGENT: agent,
       });
-      qcQaRunner({ spawnClaude, prompt, projectPath: missionState.project_path,
+      qcQaRunner({ ...qcQaSpawnOpts(), prompt, projectPath: missionState.project_path,
         model: 'claude-sonnet-5', stage: 'QC', timeoutMs: 180000 }).then((verdict) => {
         if (verdict.verdict === 'PASS') {
           enqueueQaCheck(task, agent, verdict);

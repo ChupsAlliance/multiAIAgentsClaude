@@ -37,36 +37,56 @@ function nextEscalationTier(qcRound) {
 /**
  * runQcQaCheck — run one QC or QA verification pass and parse the verdict.
  *
- * QC/QA verification DELIBERATELY runs on Claude regardless of the mission's
- * agent backend: the verdict-parsing contract (stream-json + the exact
- * `[STAGE] VERDICT: …` marker protocol) is validated against Claude only, and
- * a mismatched verifier could silently pass/fail work. So even when the
- * mission backend is e.g. Copilot, QC/QA stays on Claude via `spawnClaude`.
+ * Uses the provided spawn function which should respect the mission's backend.
+ * The spawn function can be the adapter's spawn or the legacy spawnClaude.
  *
  * @param {{
- *   spawnClaude: Function,       // (args, cwd, useAgentTeams) => ChildProcess
+ *   spawnFn: Function,          // (args, cwd, opts) => ChildProcess
+ *   buildArgs: Function,        // (spec) => string[]  — adapter's buildLaunchArgs
+ *   promptViaStdin?: boolean,   // true for Claude, false for Copilot
  *   prompt: string,
  *   projectPath: string,
  *   model: string,
  *   stage: string,               // 'QC' | 'QA'
  *   timeoutMs?: number,
- *   backend?: string,            // mission/agent backend id (for logging only)
- *   log?: Function,              // optional (message) => void for surfacing the notice
+ *   backend?: string,            // backend id (for logging)
+ *   log?: Function,              // optional (message) => void
  * }} opts
  */
-function runQcQaCheck({ spawnClaude, prompt, projectPath, model, stage, timeoutMs = 180000, backend, log }) {
+function runQcQaCheck({ spawnFn, buildArgs, promptViaStdin, spawnClaude, prompt, projectPath, model, stage, timeoutMs = 180000, backend, log }) {
   return new Promise((resolve) => {
-    // QC/QA always runs on Claude. If a non-Claude backend was requested for
-    // the mission, log clearly that verification is staying on Claude.
-    if (backend && backend !== 'claude') {
-      const msg = `[${stage}] Backend '${backend}' được yêu cầu, nhưng kiểm định QC/QA vẫn chạy trên Claude (giao thức verdict chỉ được xác thực với Claude).`;
-      if (typeof log === 'function') { try { log(msg); } catch (_) {} }
-      else { try { console.log('[qcqa] ' + msg); } catch (_) {} }
-    }
+    let proc;
 
-    const args = ['-p', prompt, '--dangerously-skip-permissions', '--model', model,
-      '--output-format', 'stream-json', '--verbose'];
-    const proc = spawnClaude(args, projectPath, false);
+    if (spawnFn && buildArgs) {
+      // New adapter-based path
+      const viaStdin = promptViaStdin !== false;
+      const args = buildArgs({
+        prompt: viaStdin ? undefined : prompt,
+        model,
+      });
+      // Append the prompt as -p arg for stdin-based adapters (Claude style)
+      if (viaStdin && !args.includes('-p')) {
+        args.unshift('-p', prompt);
+      } else if (viaStdin) {
+        // -p is already in args from buildArgs but without prompt value for stdin adapters
+        // Just pass as-is, prompt goes via stdin
+      }
+      proc = spawnFn(args, projectPath, {});
+
+      if (viaStdin) {
+        try { proc.stdin.write(prompt, 'utf8'); proc.stdin.end(); } catch (_) {}
+      } else {
+        try { proc.stdin.end(); } catch (_) {}
+      }
+    } else if (spawnClaude) {
+      // Legacy fallback: spawnClaude path
+      const args = ['-p', prompt, '--dangerously-skip-permissions', '--model', model,
+        '--output-format', 'stream-json', '--verbose'];
+      proc = spawnClaude(args, projectPath, false);
+    } else {
+      resolve({ verdict: 'FAIL', responsibleAgent: null, reason: 'No spawn function provided for QC/QA' });
+      return;
+    }
 
     let stdoutText = '';
     let settled = false;
