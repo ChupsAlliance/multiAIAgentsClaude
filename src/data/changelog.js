@@ -8,6 +8,24 @@
 
 export const changelog = [
   {
+    version: '0.13.1',
+    date: '2026-08-01',
+    title: 'Auto-resume sau khi Final QA sweep fail',
+    highlights: [
+      'Mission tự động resume khi final QA sweep fail mà process đã thoát — không cần bấm Retry thủ công',
+      'Giới hạn tối đa 3 lần auto-resume liên tiếp, sau đó yêu cầu can thiệp thủ công',
+      'Hỗ trợ cả resume session (--resume) lẫn fresh launch nếu không có session_id',
+    ],
+    items: [
+      { type: 'added', badge: 'Agent',
+        text: 'Mission tự động resume khi final QA sweep fail sau khi process đã thoát: thay vì phải bấm Retry thủ công, hệ thống tự spawn lại process claude (resume session nếu có session_id, fresh launch nếu không) để tiếp tục sửa task bị đánh dấu lỗi' },
+      { type: 'added', badge: 'Agent',
+        text: 'Giới hạn auto-resume tối đa 3 lần liên tiếp: nếu mission vẫn không đạt Completed sau 3 lần tự resume, dừng lại và yêu cầu can thiệp thủ công qua nút Retry — tránh loop vô hạn đốt API' },
+      { type: 'added', badge: 'Agent',
+        text: 'Counter autoResumeCount tự reset về 0 khi mission đạt Completed hoặc khi user bấm Retry thủ công — mỗi lần retry thủ công là 1 budget mới' },
+    ],
+  },
+  {
     version: '0.13.0',
     date: '2026-07-31',
     title: 'Vòng lặp kiểm tra QC/QA cho từng task',

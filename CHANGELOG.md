@@ -10,6 +10,16 @@ Format dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.13.1] — 2026-08-01
+
+### Thêm mới
+
+- **Auto-resume mission sau khi Final QA sweep fail**: khi vòng quét QA cuối cùng (final QA sweep) phát hiện lỗi và lên lịch retry, nhưng process `claude` đã thoát — hệ thống giờ tự động spawn lại process mới (resume session nếu có `session_id`, fresh launch nếu không) để tiếp tục sửa task bị đánh dấu lỗi, thay vì dừng lại chờ user bấm Retry thủ công.
+- **Giới hạn auto-resume 3 lần liên tiếp**: nếu mission vẫn không đạt `Completed` sau 3 lần tự resume, dừng lại và yêu cầu can thiệp thủ công — tránh loop vô hạn đốt API credit.
+- **Reset counter auto-resume**: `autoResumeCount` tự reset về 0 khi mission đạt `Completed` hoặc khi user bấm Retry thủ công — mỗi lần retry thủ công được cấp budget mới.
+
+---
+
 ## [0.13.0] — 2026-07-31
 
 ### Thêm mới
