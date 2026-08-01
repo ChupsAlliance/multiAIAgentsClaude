@@ -1221,7 +1221,9 @@ function spawnAgentProcess(spec = {}) {
   }
 
   // ── Prompt delivery: stdin (Claude) vs argv (Copilot) ───────────────────
-  const promptViaStdin = adapter.promptViaStdin !== false;
+  // Static default from the adapter, but buildLaunchArgs may use `-p -` for
+  // long prompts (Copilot on Windows), which signals stdin delivery.
+  let promptViaStdin = adapter.promptViaStdin !== false;
 
   const args = adapter.buildLaunchArgs({
     prompt: promptViaStdin ? undefined : prompt,
@@ -1230,6 +1232,13 @@ function spawnAgentProcess(spec = {}) {
     maxTurns,
     useAgentTeams: effAgentTeams,
   });
+
+  // Detect `-p -` convention: adapter built args with `-p -` meaning
+  // "read prompt from stdin" (e.g. Copilot with long prompt).
+  const pIdx = args.indexOf('-p');
+  if (pIdx !== -1 && args[pIdx + 1] === '-') {
+    promptViaStdin = true;
+  }
 
   const proc = adapter.spawn(args, cwd, { useAgentTeams: effAgentTeams });
   childProcess = proc;
@@ -1251,13 +1260,17 @@ async function runMockupHtml(prompt) {
 
     if (adapter) {
       const args = adapter.buildLaunchArgs({
-        prompt: adapter.promptViaStdin !== false ? undefined : prompt,
+        prompt,
         model: 'haiku',
       });
+
+      // Detect `-p -` convention for stdin delivery
+      const pIdx = args.indexOf('-p');
+      const viaStdin = (pIdx !== -1 && args[pIdx + 1] === '-') || (adapter.promptViaStdin !== false);
+
       proc = adapter.spawn(args, missionState ? missionState.project_path : '.', {});
 
-      // For adapters that deliver prompt via stdin
-      if (adapter.promptViaStdin !== false) {
+      if (viaStdin) {
         try { proc.stdin.write(prompt, 'utf8'); proc.stdin.end(); } catch (_) {}
       } else {
         try { proc.stdin.end(); } catch (_) {}

@@ -79,7 +79,13 @@ function mapModel(shortId) {
 function buildLaunchArgs(spec = {}) {
   const prompt = spec.prompt != null ? String(spec.prompt) : '';
 
-  const args = ['-p', prompt,
+  // Use `-p -` (read from stdin) when prompt is long to avoid Windows
+  // command-line length limits (~8191 chars). Short prompts stay inline
+  // for simplicity and debuggability.
+  const INLINE_LIMIT = 6000;
+  const useStdin = prompt.length > INLINE_LIMIT;
+
+  const args = ['-p', useStdin ? '-' : prompt,
     '--allow-all-tools',
     '--no-ask-user',
     '--output-format', 'json',
@@ -239,7 +245,9 @@ module.exports = {
   parseLine,
   kill,
 
-  // Prompt delivery: Copilot's -p takes the prompt inline (argv), not stdin.
+  // Prompt delivery: Copilot's -p takes the prompt inline (argv) for short
+  // prompts, but falls back to `-p -` (stdin) for long prompts to avoid
+  // Windows command-line length limits.
   promptViaStdin: false,
 
   // Feature flags — see spec §8.

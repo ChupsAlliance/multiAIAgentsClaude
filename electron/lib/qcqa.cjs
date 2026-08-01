@@ -58,19 +58,13 @@ function runQcQaCheck({ spawnFn, buildArgs, promptViaStdin, spawnClaude, prompt,
     let proc;
 
     if (spawnFn && buildArgs) {
-      // New adapter-based path
-      const viaStdin = promptViaStdin !== false;
-      const args = buildArgs({
-        prompt: viaStdin ? undefined : prompt,
-        model,
-      });
-      // Append the prompt as -p arg for stdin-based adapters (Claude style)
-      if (viaStdin && !args.includes('-p')) {
-        args.unshift('-p', prompt);
-      } else if (viaStdin) {
-        // -p is already in args from buildArgs but without prompt value for stdin adapters
-        // Just pass as-is, prompt goes via stdin
-      }
+      // Adapter-based path: buildArgs decides prompt delivery
+      const args = buildArgs({ prompt, model });
+
+      // Detect `-p -` convention for stdin delivery
+      const pIdx = args.indexOf('-p');
+      const viaStdin = (pIdx !== -1 && args[pIdx + 1] === '-') || (promptViaStdin !== false);
+
       proc = spawnFn(args, projectPath, {});
 
       if (viaStdin) {
