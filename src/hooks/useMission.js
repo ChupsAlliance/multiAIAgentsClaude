@@ -608,7 +608,7 @@ export function useMission() {
     }
   }, [flushBuffers, scheduleFlush, startPlanningTimer, clearPlanningTimer])
 
-  const launch = useCallback(async ({ projectPath, prompt, description, model, executionMode, historyContext, permissionMode }) => {
+  const launch = useCallback(async ({ projectPath, prompt, description, model, backend, executionMode, historyContext, permissionMode }) => {
     setPlanReady(null)
     setPendingQuestions(null)
     try {
@@ -617,6 +617,7 @@ export function useMission() {
         prompt,
         description,
         model: model || 'sonnet',
+        backend: backend || 'claude',
         executionMode: executionMode || 'standard',
         historyContext: historyContext || '',
         permissionMode: permissionMode || 'auto',
