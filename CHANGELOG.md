@@ -10,7 +10,7 @@ Format dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [0.13.2] — 2026-08-04
+## [0.13.3] — 2026-08-04
 
 ### Sửa lỗi
 

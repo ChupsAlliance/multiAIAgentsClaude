@@ -8,7 +8,7 @@
 
 export const changelog = [
   {
-    version: '0.13.2',
+    version: '0.13.3',
     date: '2026-08-04',
     title: 'Sửa 2 bug khiến auto-resume loop 3 lần rồi dừng',
     highlights: [
