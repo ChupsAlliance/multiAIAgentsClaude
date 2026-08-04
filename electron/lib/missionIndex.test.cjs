@@ -132,3 +132,35 @@ describe('enqueueChunk / flushPending', () => {
     expect(written.chunks.map(c => c.id)).toEqual(['log-1', 'log-2']);
   }, 60000);
 });
+
+describe('queryIndex', () => {
+  const { enqueueChunk, flushPending, queryIndex, vectorsPathFor } = require('./missionIndex.cjs');
+  const missionId = 'mission-test-query-' + Date.now();
+  const filePath = vectorsPathFor(missionId);
+
+  afterEach(() => {
+    try { fs.unlinkSync(filePath); } catch (_) {}
+  });
+
+  test('returns top-K chunks ranked by keyword overlap when embeddings are unavailable', async () => {
+    // Write chunks directly with vector: null to force the keyword-fallback path deterministically.
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify({
+      missionId,
+      chunks: [
+        { id: 'a', text: 'Lead decided to use React for the frontend', vector: null, source: { type: 'log', ts: 1 } },
+        { id: 'b', text: 'Dev-Backend wrote the login API endpoint', vector: null, source: { type: 'log', ts: 2 } },
+        { id: 'c', text: 'unrelated chunk about database migrations', vector: null, source: { type: 'log', ts: 3 } },
+      ],
+    }), 'utf-8');
+
+    const results = await queryIndex(missionId, 'why was react chosen for the frontend', 2);
+    expect(results).toHaveLength(2);
+    expect(results[0].id).toBe('a');
+  });
+
+  test('returns empty array when the index file does not exist', async () => {
+    const results = await queryIndex('mission-does-not-exist-' + Date.now(), 'anything', 6);
+    expect(results).toEqual([]);
+  });
+});

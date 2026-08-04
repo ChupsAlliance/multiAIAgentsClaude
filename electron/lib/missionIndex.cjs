@@ -98,6 +98,47 @@ async function flushPending(missionId) {
   return pending.length;
 }
 
+function cosineSimilarity(a, b) {
+  let dot = 0, normA = 0, normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  if (normA === 0 || normB === 0) return 0;
+  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+function keywordScore(question, text) {
+  const words = [...new Set(question.toLowerCase().split(/\W+/).filter(Boolean))];
+  if (words.length === 0) return 0;
+  const lowerText = text.toLowerCase();
+  const hits = words.filter(w => lowerText.includes(w)).length;
+  return hits / words.length;
+}
+
+async function queryIndex(missionId, question, k = 6) {
+  const filePath = vectorsPathFor(missionId);
+  if (!fs.existsSync(filePath)) return [];
+
+  let indexData;
+  try { indexData = JSON.parse(fs.readFileSync(filePath, 'utf-8')); } catch (_) { return []; }
+  const chunks = indexData.chunks || [];
+  if (chunks.length === 0) return [];
+
+  const questionVector = await embedText(question);
+
+  const scored = chunks.map(chunk => {
+    const score = (questionVector && chunk.vector)
+      ? cosineSimilarity(questionVector, chunk.vector)
+      : keywordScore(question, chunk.text);
+    return { id: chunk.id, text: chunk.text, source: chunk.source, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, k);
+}
+
 module.exports = {
   buildChunksFromLogEntry,
   buildChunkFromFileChange,
@@ -107,4 +148,5 @@ module.exports = {
   embedText,
   enqueueChunk,
   flushPending,
+  queryIndex,
 };
