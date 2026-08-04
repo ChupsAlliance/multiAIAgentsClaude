@@ -180,6 +180,7 @@ describe('runFinalQaSweep gating', () => {
 
   test('does not set Completed while a task is still pending_qc', async () => {
     const sendToWindow = vi.fn()
+    mission.__setPendingQcQaTimeoutForTest(100)  // short timeout for test
     mission.__setMissionStateForTest({
       id: 'm1', status: 'Running', phase: 'Executing',
       tasks: [{ id: 't1', title: 'A', status: 'completed' },

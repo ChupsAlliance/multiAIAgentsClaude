@@ -448,51 +448,84 @@ function retryAgentCore(agentName, sendToWindow) {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// waitForPendingQcQa — wait for tasks stuck in pending_qc/pending_qa
+// to settle (become 'completed' or 'in_progress'/'failed_qc'/'failed_qa')
+// before running the final QA sweep. Without this, the process can exit
+// before async QC/QA checks finish, causing runFinalQaSweep to see
+// tasks in intermediate states and skip the sweep entirely.
+// Timeout: 120s (QC 180s + QA 180s max, but normally much faster).
+// ─────────────────────────────────────────────────────────────────
+let pendingQcQaTimeoutMs = 120000;
+
+function waitForPendingQcQa() {
+  const timeout = pendingQcQaTimeoutMs;
+  const start = Date.now();
+  return new Promise((resolve) => {
+    const check = () => {
+      if (!missionState) { resolve(); return; }
+      const hasPending = missionState.tasks.some(t =>
+        t.status === 'pending_qc' || t.status === 'pending_qa'
+      );
+      if (!hasPending || Date.now() - start > timeout) {
+        resolve();
+        return;
+      }
+      setTimeout(check, 500);
+    };
+    check();
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────
 // runFinalQaSweep — whole-picture QA gate checked whenever the deploy
 // process exits successfully. Only PASS here can flip the mission to
 // 'Completed'; a success exit code alone is no longer sufficient.
 // ─────────────────────────────────────────────────────────────────
 function runFinalQaSweep() {
-  const allCompleted = missionState.tasks.every(t => t.status === 'completed');
-  if (!allCompleted) {
-    // Process exited successfully but not every task reached real completion.
-    // Do not force it — leave the mission Running so the gap is visible
-    // rather than papered over. Lead's own narration is responsible for not
-    // claiming victory here (prompt change, Task 9).
-    return Promise.resolve();
-  }
-
-  missionState.status = 'AwaitingFinalQA';
-  sendToWindowRef('mission:status', { mission_id: missionState.id, status: 'AwaitingFinalQA' });
-
-  const template = loadPromptTemplate('qa_check.md');
-  const changedFiles = (missionState.file_changes || []).map(f => f.path || f).join(', ');
-  const taskSummaries = missionState.tasks.map(t => `- ${t.title} (owner: ${t.assigned_agent || 'unknown'})`).join('\n');
-  const prompt = fillTemplate(template, {
-    PROJECT_PATH: missionState.project_path,
-    TASK_TITLE: '(whole mission — see scope note)',
-    TASK_WHY: missionState.description || '(not specified)',
-    TASK_DETAIL: taskSummaries,
-    FILES_WRITTEN: changedFiles || '(none reported)',
-    QC_VERDICT_SUMMARY: 'N/A — every task already passed its own QC/QA',
-    RESPONSIBLE_AGENT: '(see REASON — name the specific agent at fault)',
-    SCOPE_NOTE: 'This is the FINAL WHOLE-PICTURE review: judge the mission as an integrated whole, not one task in isolation. Look specifically for cross-task mismatches (e.g. backend and frontend each correct alone but not correctly wired together).',
-  });
-
-  return qcQaRunner({
-    ...qcQaSpawnOpts(), prompt, projectPath: missionState.project_path,
-    model: 'claude-sonnet-5', stage: 'QA', timeoutMs: 240000,
-  }).then((verdict) => {
-    if (verdict.verdict === 'PASS') {
-      missionState.status = 'Completed';
-      missionState.autoResumeCount = 0;
-      sendToWindowRef('mission:status', { mission_id: missionState.id, status: 'Completed' });
-    } else {
-      missionState.status = 'Running';
-      const flagged = missionState.tasks.find(t => t.assigned_agent === verdict.responsibleAgent) || missionState.tasks[0];
-      handleQcQaFailure(flagged, 'qa', verdict.responsibleAgent || flagged.assigned_agent, verdict.reason);
-      sendToWindowRef('mission:status', { mission_id: missionState.id, status: 'Running' });
+  // Wait for any in-flight per-task QC/QA checks to settle before deciding.
+  // Without this, the process can exit before async QC/QA finishes, leaving
+  // tasks at pending_qc/pending_qa and causing the sweep to skip entirely.
+  return waitForPendingQcQa().then(() => {
+    const allCompleted = missionState.tasks.every(t => t.status === 'completed');
+    if (!allCompleted) {
+      // Process exited successfully but not every task reached real completion.
+      // Do not force it — leave the mission Running so the gap is visible
+      // rather than papered over.
+      return;
     }
+
+    missionState.status = 'AwaitingFinalQA';
+    sendToWindowRef('mission:status', { mission_id: missionState.id, status: 'AwaitingFinalQA' });
+
+    const template = loadPromptTemplate('qa_check.md');
+    const changedFiles = (missionState.file_changes || []).map(f => f.path || f).join(', ');
+    const taskSummaries = missionState.tasks.map(t => `- ${t.title} (owner: ${t.assigned_agent || 'unknown'})`).join('\n');
+    const prompt = fillTemplate(template, {
+      PROJECT_PATH: missionState.project_path,
+      TASK_TITLE: '(whole mission — see scope note)',
+      TASK_WHY: missionState.description || '(not specified)',
+      TASK_DETAIL: taskSummaries,
+      FILES_WRITTEN: changedFiles || '(none reported)',
+      QC_VERDICT_SUMMARY: 'N/A — every task already passed its own QC/QA',
+      RESPONSIBLE_AGENT: '(see REASON — name the specific agent at fault)',
+      SCOPE_NOTE: 'This is the FINAL WHOLE-PICTURE review: judge the mission as an integrated whole, not one task in isolation. Look specifically for cross-task mismatches (e.g. backend and frontend each correct alone but not correctly wired together).',
+    });
+
+    return qcQaRunner({
+      ...qcQaSpawnOpts(), prompt, projectPath: missionState.project_path,
+      model: 'claude-sonnet-5', stage: 'QA', timeoutMs: 240000,
+    }).then((verdict) => {
+      if (verdict.verdict === 'PASS') {
+        missionState.status = 'Completed';
+        missionState.autoResumeCount = 0;
+        sendToWindowRef('mission:status', { mission_id: missionState.id, status: 'Completed' });
+      } else {
+        missionState.status = 'Running';
+        const flagged = missionState.tasks.find(t => t.assigned_agent === verdict.responsibleAgent) || missionState.tasks[0];
+        handleQcQaFailure(flagged, 'qa', verdict.responsibleAgent || flagged.assigned_agent, verdict.reason);
+        sendToWindowRef('mission:status', { mission_id: missionState.id, status: 'Running' });
+      }
+    });
   });
 }
 
@@ -4616,6 +4649,7 @@ if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
   module.exports.__setSendToWindowForTest = (fn) => { sendToWindowRef = fn; };
   module.exports.__fillTemplateForTest = (template, values) => fillTemplate(template, values);
   module.exports.__setQcQaRunnerForTest = (fn) => { qcQaRunner = fn; };
+  module.exports.__setPendingQcQaTimeoutForTest = (ms) => { pendingQcQaTimeoutMs = ms; };
   module.exports.__enqueueQcCheckForTest = (task, agent) => {
     return new Promise((resolve) => {
       const template = loadPromptTemplate('qc_check.md');
