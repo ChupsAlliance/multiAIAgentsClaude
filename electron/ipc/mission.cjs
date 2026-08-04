@@ -22,6 +22,10 @@ const replayEngine    = require('../lib/replayEngine.cjs');
 // ── QC/QA per-task verification pipeline ────────────────────────
 const { runQcQaCheck, nextEscalationTier } = require('../lib/qcqa.cjs');
 
+// ── Incremental mission-index updates (Mission Companion Ask/Debrief) ──
+const { enqueueChunk, scheduleFlush, buildChunksFromLogEntry, buildChunkFromFileChange,
+  buildChunkFromTask, buildChunkFromMessage, flushPending } = require('../lib/missionIndex.cjs');
+
 // ── CLI backend adapters (Claude / Copilot / …) ─────────────────
 // getAdapter(backendId) → adapter object. Falls back to the Claude adapter for
 // undefined/unknown ids so every existing call site behaves exactly as before.
@@ -575,7 +579,12 @@ function handleParsedEvent(event, sendToWindow) {
             backend: (missionState.backend || 'claude'),
           });
         }
-        missionState.log.push(makeLogEntry(ts, 'System', `Agent '${agentName}' spawned (${role})`, 'spawn'));
+        const spawnEntry = makeLogEntry(ts, 'System', `Agent '${agentName}' spawned (${role})`, 'spawn');
+        missionState.log.push(spawnEntry);
+        for (const chunk of buildChunksFromLogEntry(spawnEntry)) {
+          enqueueChunk(missionState.id, chunk);
+        }
+        scheduleFlush(missionState.id);
       }
       sendToWindow('mission:agent-spawned', {
         agent_name: agentName, role, timestamp: ts,
@@ -594,6 +603,10 @@ function handleParsedEvent(event, sendToWindow) {
         }
         const entry = makeLogEntry(ts, agent, message, 'info');
         missionState.log.push(entry);
+        for (const chunk of buildChunksFromLogEntry(entry)) {
+          enqueueChunk(missionState.id, chunk);
+        }
+        scheduleFlush(missionState.id);
         if (missionState.log.length > 2000) missionState.log.splice(0, 500);
         sendToWindow('mission:log', entry);
         if (entry.agent && entry.agent !== 'System' && entry.agent !== 'User') {
@@ -1113,9 +1126,10 @@ function startFileWatcher(projectPath, sendToWindow) {
             knownMsgIds.add(msgId);
             if (missionState) {
               if (!missionState.messages.some(m => m.from === from && m.timestamp === msgTs)) {
-                missionState.messages.push({
-                  timestamp: msgTs, from, to, content, msg_type: 'message',
-                });
+                const messageObj = { timestamp: msgTs, from, to, content, msg_type: 'message' };
+                missionState.messages.push(messageObj);
+                enqueueChunk(missionState.id, buildChunkFromMessage(messageObj));
+                scheduleFlush(missionState.id);
               }
             }
             sendToWindow('mission:agent-message', { from, to, content, timestamp: msgTs, msg_id: msgId });
@@ -1704,6 +1718,8 @@ function upsertFileChange(fc) {
   } else {
     missionState.file_changes.push(fc);
   }
+  enqueueChunk(missionState.id, buildChunkFromFileChange(fc));
+  scheduleFlush(missionState.id);
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -2661,6 +2677,8 @@ function readProcessStdout_deploy(proc, sendToWindow, isContMode, attemptCtx = {
                     if (agentMatch && titleMatch) {
                       task.status = 'completed';
                       task.completed_at = ts;
+                      enqueueChunk(missionState.id, buildChunkFromTask(task));
+                      scheduleFlush(missionState.id);
                     }
                   }
                 }
@@ -2804,10 +2822,13 @@ function readProcessStdout_deploy(proc, sendToWindow, isContMode, attemptCtx = {
                 const content   = (input.content    || '').toString();
                 const msgId     = `${sourceAgent}-${recipient}-${ts}`;
                 if (content) {
-                  missionState.messages.push({
+                  const messageObj = {
                     timestamp: ts, from: sourceAgent, to: recipient,
                     content, msg_type: msgType2,
-                  });
+                  };
+                  missionState.messages.push(messageObj);
+                  enqueueChunk(missionState.id, buildChunkFromMessage(messageObj));
+                  scheduleFlush(missionState.id);
                   sendToWindow('mission:agent-message', {
                     from: sourceAgent, to: recipient, content, timestamp: ts, msg_id: msgId,
                   });
@@ -2849,7 +2870,12 @@ function readProcessStdout_deploy(proc, sendToWindow, isContMode, attemptCtx = {
                   taskAgentLower.includes(lowerName) ||
                   lowerName.includes(taskAgentLower)
                 );
-                if (agentMatch) { task.status = 'completed'; task.completed_at = ts; }
+                if (agentMatch) {
+                  task.status = 'completed';
+                  task.completed_at = ts;
+                  enqueueChunk(missionState.id, buildChunkFromTask(task));
+                  scheduleFlush(missionState.id);
+                }
               }
 
               // Safety timer: if all non-Lead agents are Done and the Lead process
@@ -2919,7 +2945,12 @@ function readProcessStdout_deploy(proc, sendToWindow, isContMode, attemptCtx = {
       const allDone = missionState.agents.every(a => a.status === 'Done' || a.name === 'Lead');
       if (allDone && missionState.status === 'Completed') {
         for (const task of missionState.tasks) {
-          if (task.status !== 'completed') { task.status = 'completed'; task.completed_at = ts; }
+          if (task.status !== 'completed') {
+            task.status = 'completed';
+            task.completed_at = ts;
+            enqueueChunk(missionState.id, buildChunkFromTask(task));
+            scheduleFlush(missionState.id);
+          }
         }
       }
     } catch (_) {}
@@ -3229,6 +3260,7 @@ function finalizeDeployExit(missionId, sendToWindow, ts) {
   };
   saveToHistory(entry);
   saveMissionSnapshot(missionState);
+  flushPending(missionId).catch(() => {});
 
   sendToWindow('mission:status', { mission_id: missionId, status: statusStr });
 }
