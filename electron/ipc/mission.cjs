@@ -1325,8 +1325,9 @@ function spawnAgentProcess(spec = {}) {
 
 // Indirection over spawnAgentProcess so tests can substitute a fake spawn
 // implementation (e.g. for askMissionLive) without touching real subprocess
-// machinery. Production code always calls through spawnAgentProcessRef,
-// which defaults to the real spawnAgentProcess above.
+// machinery. Only askMissionLive calls through spawnAgentProcessRef today —
+// all pre-existing call sites still call spawnAgentProcess directly and are
+// unaffected. Defaults to the real spawnAgentProcess above.
 let spawnAgentProcessRef = spawnAgentProcess;
 
 // runMockupHtml — spawn a one-shot process to generate an HTML mockup.
@@ -3347,65 +3348,77 @@ async function askMissionLive({ question }, sendToWindow) {
     return { answer: null, error: 'No live mission to ask.' };
   }
 
-  const topK = await queryIndex(missionState.id, question, 6);
-  const contextBlock = topK.map(c => `[${c.source.type}] ${c.text}`).join('\n');
-  const summary = buildMissionSummary(missionState);
-  const prompt = [
-    `You are answering a quick question about a mission that is CURRENTLY RUNNING. Answer in 2-4 sentences, based only on the context below. If you don't know, say so — do not guess.`,
-    `## Current mission state\n${JSON.stringify(summary)}`,
-    `## Relevant context\n${contextBlock}`,
-    `## Question\n${question}`,
-  ].join('\n\n');
+  // Everything below (index lookup, prompt building, backend resolution, and
+  // the spawn itself) is wrapped so this function NEVER rejects — a live-Q&A
+  // failure must always resolve as { answer: null, error } rather than
+  // surface as an uncaught IPC rejection in the renderer. queryIndex,
+  // buildMissionSummary, and agentBackendOf are not expected to throw under
+  // normal conditions, but they run before childProcess/childBackend are
+  // saved (they don't touch those variables), so a throw here is caught
+  // before any save/restore bookkeeping would even be needed.
+  try {
+    const topK = await queryIndex(missionState.id, question, 6);
+    const contextBlock = topK.map(c => `[${c.source.type}] ${c.text}`).join('\n');
+    const summary = buildMissionSummary(missionState);
+    const prompt = [
+      `You are answering a quick question about a mission that is CURRENTLY RUNNING. Answer in 2-4 sentences, based only on the context below. If you don't know, say so — do not guess.`,
+      `## Current mission state\n${JSON.stringify(summary)}`,
+      `## Relevant context\n${contextBlock}`,
+      `## Question\n${question}`,
+    ].join('\n\n');
 
-  const leadAgent = (missionState.agents || []).find(a => a.name === 'Lead');
-  const backendId = agentBackendOf(leadAgent);
+    const leadAgent = (missionState.agents || []).find(a => a.name === 'Lead');
+    const backendId = agentBackendOf(leadAgent);
 
-  const savedChildProcess = childProcess;
-  const savedChildBackend = childBackend;
+    const savedChildProcess = childProcess;
+    const savedChildBackend = childBackend;
 
-  return new Promise((resolve) => {
-    let proc;
-    try {
-      // sendToWindow is intentionally omitted from this spec — spawnAgentProcess
-      // uses it internally only for resume-fallback side-channel logging
-      // ('mission:log'), and this secondary spawn must never write into the
-      // mission's own activity log.
-      const spawned = spawnAgentProcessRef({
-        backendId, model: 'sonnet', prompt, resumeSessionId: null, maxTurns: 10,
-        useAgentTeams: false, cwd: missionState.project_path,
-      });
-      proc = spawned.proc;
-    } catch (err) {
+    return await new Promise((resolve) => {
+      let proc;
+      try {
+        // sendToWindow is intentionally omitted from this spec — spawnAgentProcess
+        // uses it internally only for resume-fallback side-channel logging
+        // ('mission:log'), and this secondary spawn must never write into the
+        // mission's own activity log.
+        const spawned = spawnAgentProcessRef({
+          backendId, model: 'sonnet', prompt, resumeSessionId: null, maxTurns: 10,
+          useAgentTeams: false, cwd: missionState.project_path,
+        });
+        proc = spawned.proc;
+      } catch (err) {
+        childProcess = savedChildProcess;
+        childBackend = savedChildBackend;
+        resolve({ answer: null, error: err.message });
+        return;
+      }
+      // Restore immediately — spawnAgentProcessRef (== spawnAgentProcess in
+      // production) sets childProcess/childBackend as a side effect; this call
+      // must never leave the mission's real driving process reference altered.
       childProcess = savedChildProcess;
       childBackend = savedChildBackend;
-      resolve({ answer: null, error: err.message });
-      return;
-    }
-    // Restore immediately — spawnAgentProcessRef (== spawnAgentProcess in
-    // production) sets childProcess/childBackend as a side effect; this call
-    // must never leave the mission's real driving process reference altered.
-    childProcess = savedChildProcess;
-    childBackend = savedChildBackend;
 
-    let stdout = '';
-    const timer = setTimeout(() => {
-      try { proc.kill(); } catch (_) {}
-      resolve({ answer: null, error: 'Live Q&A timed out after 60s' });
-    }, 60000);
+      let stdout = '';
+      const timer = setTimeout(() => {
+        try { proc.kill(); } catch (_) {}
+        resolve({ answer: null, error: 'Live Q&A timed out after 60s' });
+      }, 60000);
 
-    proc.stdout.on('data', d => { stdout += d.toString('utf8'); });
-    proc.on('error', (err) => {
-      clearTimeout(timer);
-      resolve({ answer: null, error: err.message });
+      proc.stdout.on('data', d => { stdout += d.toString('utf8'); });
+      proc.on('error', (err) => {
+        clearTimeout(timer);
+        resolve({ answer: null, error: err.message });
+      });
+      proc.on('close', () => {
+        clearTimeout(timer);
+        const answer = extractAssistantText(stdout);
+        const entry = { question, answer, timestamp: Date.now() };
+        if (sendToWindow) sendToWindow('mission:companion-answer', entry);
+        resolve({ answer });
+      });
     });
-    proc.on('close', () => {
-      clearTimeout(timer);
-      const answer = extractAssistantText(stdout);
-      const entry = { question, answer, timestamp: Date.now() };
-      if (sendToWindow) sendToWindow('mission:companion-answer', entry);
-      resolve({ answer });
-    });
-  });
+  } catch (err) {
+    return { answer: null, error: err.message };
+  }
 }
 
 /** Parse `--output-format stream-json` stdout lines, return the last assistant text. */
