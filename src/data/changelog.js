@@ -10,14 +10,17 @@ export const changelog = [
   {
     version: '0.13.2',
     date: '2026-08-04',
-    title: 'Sửa race condition giữa QC/QA và Final QA sweep',
+    title: 'Sửa 2 bug khiến auto-resume loop 3 lần rồi dừng',
     highlights: [
-      'Final QA sweep giờ đợi per-task QC/QA checks hoàn tất trước khi chạy, tránh bỏ lọt tasks đang pending',
+      'Final QA sweep giờ đợi per-task QC/QA checks hoàn tất trước khi chạy',
+      'Tự động re-verify tasks mà Lead đã sửa nhưng không emit TaskCompleted marker',
       'Kết hợp với auto-resume (0.13.1) tạo thành vòng lặp tự phục hồi hoàn chỉnh',
     ],
     items: [
       { type: 'fixed', badge: 'Agent',
         text: 'Race condition: khi process exit, runFinalQaSweep chạy ngay trong khi per-task QC/QA (async) chưa kịp hoàn tất — task còn ở pending_qc/pending_qa nên sweep bỏ qua, trigger auto-resume lặp lại 3 lần rồi dừng. Giờ sweep đợi mọi pending QC/QA settle trước khi quyết định (poll 500ms, timeout 120s)' },
+      { type: 'fixed', badge: 'Agent',
+        text: 'Stuck retry tasks: khi auto-resumed Lead fix xong và exit mà không emit TaskCompleted marker (vì respond system nudge chứ không đi qua flow bình thường), task kẹt ở in_progress mãi mãi. Giờ tự động promote task có qcRound > 0 (đã qua QC/QA trước đó) sang pending_qc để re-verify trước khi chạy final sweep' },
     ],
   },
   {

@@ -14,7 +14,8 @@ Format dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Sửa lỗi
 
-- **Race condition giữa per-task QC/QA và Final QA sweep**: khi process exit, `runFinalQaSweep` chạy ngay trong khi per-task QC/QA checks (async, subprocess riêng) chưa kịp hoàn tất — task còn ở `pending_qc`/`pending_qa` nên sweep bỏ qua hoàn toàn, trigger auto-resume lặp lại 3 lần rồi dừng dù Lead đã sửa xong. Giờ sweep đợi mọi pending QC/QA settle trước khi quyết định (poll 500ms, timeout 120s).
+- **Race condition giữa per-task QC/QA và Final QA sweep**: khi process exit, `runFinalQaSweep` chạy ngay trong khi per-task QC/QA checks (async, subprocess riêng) chưa kịp hoàn tất — task còn ở `pending_qc`/`pending_qa` nên sweep bỏ qua hoàn toàn. Giờ sweep đợi mọi pending QC/QA settle trước khi quyết định (poll 500ms, timeout 120s).
+- **Stuck retry tasks không emit TaskCompleted**: khi auto-resumed Lead fix xong và exit mà không emit `<<<TASK_COMPLETED>>>` marker (vì respond system nudge chứ không đi qua flow bình thường), task kẹt ở `in_progress` vĩnh viễn, khiến `runFinalQaSweep` skip và đốt hết 3 lần auto-resume. Giờ tự động promote task có `qcRound > 0` (đã qua QC/QA trước đó) sang `pending_qc` để re-verify trước khi chạy final sweep.
 
 ---
 
