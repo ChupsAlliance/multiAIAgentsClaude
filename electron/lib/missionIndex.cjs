@@ -98,6 +98,31 @@ async function flushPending(missionId) {
   return pending.length;
 }
 
+const flushTimers = new Map(); // missionId -> Timeout
+const FLUSH_ITEM_THRESHOLD = 20;
+const FLUSH_IDLE_MS_DEFAULT = 3000;
+
+function scheduleFlush(missionId, opts = {}) {
+  const idleMs = opts.idleMs || FLUSH_IDLE_MS_DEFAULT;
+  const pending = pendingChunks.get(missionId) || [];
+
+  if (flushTimers.has(missionId)) {
+    clearTimeout(flushTimers.get(missionId));
+    flushTimers.delete(missionId);
+  }
+
+  if (pending.length >= FLUSH_ITEM_THRESHOLD) {
+    flushPending(missionId).catch(() => {});
+    return;
+  }
+
+  const timer = setTimeout(() => {
+    flushTimers.delete(missionId);
+    flushPending(missionId).catch(() => {});
+  }, idleMs);
+  flushTimers.set(missionId, timer);
+}
+
 function cosineSimilarity(a, b) {
   let dot = 0, normA = 0, normB = 0;
   for (let i = 0; i < a.length; i++) {
@@ -148,5 +173,6 @@ module.exports = {
   embedText,
   enqueueChunk,
   flushPending,
+  scheduleFlush,
   queryIndex,
 };

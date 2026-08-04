@@ -164,3 +164,32 @@ describe('queryIndex', () => {
     expect(results).toEqual([]);
   });
 });
+
+describe('scheduleFlush', () => {
+  const { enqueueChunk, scheduleFlush, vectorsPathFor } = require('./missionIndex.cjs');
+  const missionId = 'mission-test-schedule-' + Date.now();
+  const filePath = vectorsPathFor(missionId);
+
+  afterEach(() => {
+    try { fs.unlinkSync(filePath); } catch (_) {}
+  });
+
+  test('flushes immediately once 20 items are queued without waiting for idle', async () => {
+    for (let i = 0; i < 20; i++) {
+      enqueueChunk(missionId, { id: `log-${i}`, text: `entry ${i}`, source: { type: 'log', ts: i } });
+      scheduleFlush(missionId);
+    }
+    // give the immediate-flush microtask a tick to complete
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(fs.existsSync(filePath)).toBe(true);
+    const written = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(written.chunks).toHaveLength(20);
+  });
+
+  test('flushes after idle timeout with fewer than 20 items', async () => {
+    enqueueChunk(missionId, { id: 'log-x', text: 'a lone entry', source: { type: 'log', ts: 100 } });
+    scheduleFlush(missionId, { idleMs: 20 });
+    await new Promise(resolve => setTimeout(resolve, 60));
+    expect(fs.existsSync(filePath)).toBe(true);
+  });
+});
