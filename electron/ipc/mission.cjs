@@ -486,6 +486,35 @@ function runFinalQaSweep() {
   // Without this, the process can exit before async QC/QA finishes, leaving
   // tasks at pending_qc/pending_qa and causing the sweep to skip entirely.
   return waitForPendingQcQa().then(() => {
+    // Auto-promote tasks that were pushed back by handleQcQaFailure and worked
+    // on by auto-resume but didn't get a proper TaskCompleted event (Lead exited
+    // without emitting the marker). These tasks have qcRound > 0 (previously
+    // went through QC/QA) and are still in_progress after the process exited.
+    const stuckRetryTasks = missionState.tasks.filter(t =>
+      t.status === 'in_progress' && (t.qcRound || 0) > 0
+    );
+    if (stuckRetryTasks.length > 0) {
+      for (const task of stuckRetryTasks) {
+        task.status = 'pending_qc';
+        task.qc_started_at = now();
+        const agent = task.assigned_agent || 'Lead';
+        sendToWindowRef('mission:task-update', {
+          task_id: task.id, agent, description: task.title,
+          status: 'pending_qc', timestamp: task.qc_started_at,
+        });
+        enqueueQcCheck(task, agent);
+      }
+      // Wait again for the re-enqueued QC/QA checks to settle
+      return waitForPendingQcQa().then(() => runFinalQaSweepCore());
+    }
+
+    return runFinalQaSweepCore();
+  });
+}
+
+// Core logic of runFinalQaSweep, separated so it can be called after
+// auto-promoting stuck retry tasks.
+function runFinalQaSweepCore() {
     const allCompleted = missionState.tasks.every(t => t.status === 'completed');
     if (!allCompleted) {
       // Process exited successfully but not every task reached real completion.
@@ -526,7 +555,6 @@ function runFinalQaSweep() {
         sendToWindowRef('mission:status', { mission_id: missionState.id, status: 'Running' });
       }
     });
-  });
 }
 
 // ─────────────────────────────────────────────────────────────────
