@@ -21,6 +21,7 @@ const ALLOWED_COMMANDS = [
   'update_agent_model', 'update_agent_backend',
   'read_planning_template', 'answer_question', 'read_superpowers_skill', 'mockup_respond', 'retry_agent',
   'save_plan_version', 'get_plan_versions', 'export_plan_markdown', 'export_plan_pdf',
+  'ask_mission_live',
   // recording (ghi lại business events)
   'recording_start', 'recording_stop_and_save', 'recording_discard', 'recording_status',
   'list_recordings', 'get_recording', 'delete_recording', 'rename_recording',
@@ -38,7 +39,7 @@ const ALLOWED_EVENTS = [
   'mission:file-change', 'mission:task-update', 'mission:raw-line',
   'mission:plan-ready', 'mission:agent-message', 'mission:team-event',
   'mission:task-reassigned', 'mission:question', 'mission:answer-sent',
-  'mission:mockup',
+  'mission:mockup', 'mission:companion-answer',
   // replay playback progress (thanh tua thời gian thực)
   'replay:progress',
   'claude-output',

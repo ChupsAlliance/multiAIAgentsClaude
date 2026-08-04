@@ -24,7 +24,7 @@ const { runQcQaCheck, nextEscalationTier } = require('../lib/qcqa.cjs');
 
 // ── Incremental mission-index updates (Mission Companion Ask/Debrief) ──
 const { enqueueChunk, scheduleFlush, buildChunksFromLogEntry, buildChunkFromFileChange,
-  buildChunkFromTask, buildChunkFromMessage, flushPending } = require('../lib/missionIndex.cjs');
+  buildChunkFromTask, buildChunkFromMessage, flushPending, queryIndex } = require('../lib/missionIndex.cjs');
 
 // ── CLI backend adapters (Claude / Copilot / …) ─────────────────
 // getAdapter(backendId) → adapter object. Falls back to the Claude adapter for
@@ -1322,6 +1322,12 @@ function spawnAgentProcess(spec = {}) {
   return { proc, adapter, backendId, resumeDropped, promptViaStdin,
            supportsAgentTeams: adapter.supportsAgentTeams !== false };
 }
+
+// Indirection over spawnAgentProcess so tests can substitute a fake spawn
+// implementation (e.g. for askMissionLive) without touching real subprocess
+// machinery. Production code always calls through spawnAgentProcessRef,
+// which defaults to the real spawnAgentProcess above.
+let spawnAgentProcessRef = spawnAgentProcess;
 
 // runMockupHtml — spawn a one-shot process to generate an HTML mockup.
 // Uses the mission's backend adapter when available, falls back to Claude.
@@ -3326,6 +3332,98 @@ async function savePlanVersionInternal(missionId, trigger, agents, tasks) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────
+// askMissionLive — Mission Companion "Ask" side channel (read-only Q&A
+// about a currently-running mission). Spawns a SECOND, independent process
+// via spawnAgentProcessRef — never touches the mission's real driving
+// process. Because spawnAgentProcess has the side effect of setting the
+// module-level childProcess/childBackend, this handler saves those values
+// immediately before the call and restores them immediately after (both on
+// the success path and the synchronous-throw path), so the Lead's driving
+// process reference is never disturbed by this call.
+// ─────────────────────────────────────────────────────────────────
+async function askMissionLive({ question }, sendToWindow) {
+  if (!missionState || !['Running', 'Deploying', 'Launching'].includes(missionState.status)) {
+    return { answer: null, error: 'No live mission to ask.' };
+  }
+
+  const topK = await queryIndex(missionState.id, question, 6);
+  const contextBlock = topK.map(c => `[${c.source.type}] ${c.text}`).join('\n');
+  const summary = buildMissionSummary(missionState);
+  const prompt = [
+    `You are answering a quick question about a mission that is CURRENTLY RUNNING. Answer in 2-4 sentences, based only on the context below. If you don't know, say so — do not guess.`,
+    `## Current mission state\n${JSON.stringify(summary)}`,
+    `## Relevant context\n${contextBlock}`,
+    `## Question\n${question}`,
+  ].join('\n\n');
+
+  const leadAgent = (missionState.agents || []).find(a => a.name === 'Lead');
+  const backendId = agentBackendOf(leadAgent);
+
+  const savedChildProcess = childProcess;
+  const savedChildBackend = childBackend;
+
+  return new Promise((resolve) => {
+    let proc;
+    try {
+      // sendToWindow is intentionally omitted from this spec — spawnAgentProcess
+      // uses it internally only for resume-fallback side-channel logging
+      // ('mission:log'), and this secondary spawn must never write into the
+      // mission's own activity log.
+      const spawned = spawnAgentProcessRef({
+        backendId, model: 'sonnet', prompt, resumeSessionId: null, maxTurns: 10,
+        useAgentTeams: false, cwd: missionState.project_path,
+      });
+      proc = spawned.proc;
+    } catch (err) {
+      childProcess = savedChildProcess;
+      childBackend = savedChildBackend;
+      resolve({ answer: null, error: err.message });
+      return;
+    }
+    // Restore immediately — spawnAgentProcessRef (== spawnAgentProcess in
+    // production) sets childProcess/childBackend as a side effect; this call
+    // must never leave the mission's real driving process reference altered.
+    childProcess = savedChildProcess;
+    childBackend = savedChildBackend;
+
+    let stdout = '';
+    const timer = setTimeout(() => {
+      try { proc.kill(); } catch (_) {}
+      resolve({ answer: null, error: 'Live Q&A timed out after 60s' });
+    }, 60000);
+
+    proc.stdout.on('data', d => { stdout += d.toString('utf8'); });
+    proc.on('error', (err) => {
+      clearTimeout(timer);
+      resolve({ answer: null, error: err.message });
+    });
+    proc.on('close', () => {
+      clearTimeout(timer);
+      const answer = extractAssistantText(stdout);
+      const entry = { question, answer, timestamp: Date.now() };
+      if (sendToWindow) sendToWindow('mission:companion-answer', entry);
+      resolve({ answer });
+    });
+  });
+}
+
+/** Parse `--output-format stream-json` stdout lines, return the last assistant text. */
+function extractAssistantText(stdoutText) {
+  const lines = stdoutText.split('\n').filter(Boolean);
+  let lastText = null;
+  for (const line of lines) {
+    try {
+      const parsed = JSON.parse(line);
+      if (parsed.type === 'assistant' && parsed.message && Array.isArray(parsed.message.content)) {
+        const textPart = parsed.message.content.find(p => p.type === 'text');
+        if (textPart) lastText = textPart.text;
+      }
+    } catch (_) { /* not a JSON line, skip */ }
+  }
+  return lastText;
+}
+
 // ═════════════════════════════════════════════════════════════════
 // registerMission — main export
 // ═════════════════════════════════════════════════════════════════
@@ -4050,6 +4148,15 @@ module.exports = function registerMission(getMainWindow) {
     return null;
   });
 
+  // ── ask_mission_live ─────────────────────────────────────────
+  // Mission Companion "Ask" tab — quick, read-only Q&A about the currently
+  // running mission via a secondary spawned process. Never touches the
+  // mission's real driving process (see askMissionLive's save/restore of
+  // childProcess/childBackend above).
+  ipcMain.handle('ask_mission_live', async (_event, args) => {
+    return askMissionLive(args, sendToWindow);
+  });
+
   // ── mockup_respond ──────────────────────────────────────────────
   // User approved or sent feedback on a UI mockup. Close the HTTP server
   // and resume Lead with the result injected into stdin.
@@ -4741,4 +4848,8 @@ if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
     autoResumeAfterFinalQaFailure(missionId, sendToWindow, ts);
   module.exports.__spawnResumeOrFreshAttemptForTest = (opts) =>
     spawnResumeOrFreshAttempt(opts);
+  module.exports.__setSpawnAgentProcessForTest = (fn) => { spawnAgentProcessRef = fn; };
+  module.exports.__setChildProcessForTest = (proc) => { childProcess = proc; };
+  module.exports.__getChildProcessForTest = () => childProcess;
+  module.exports.__askMissionLiveForTest = (args) => askMissionLive(args, () => {});
 }
