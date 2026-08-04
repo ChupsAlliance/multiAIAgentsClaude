@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'vitest'
+import { describe, test, expect, afterEach } from 'vitest'
 import { createRequire } from 'module'
 const require = createRequire(import.meta.url)
 const {
@@ -74,4 +74,61 @@ describe('buildChunkFromMessage', () => {
       source: { type: 'message', ts: 9000 },
     });
   });
+});
+
+const os = require('os');
+const path = require('path');
+const fs = require('fs');
+
+describe('vectorsPathFor', () => {
+  test('resolves under ~/.claude/agent-teams-snapshots', () => {
+    const { vectorsPathFor } = require('./missionIndex.cjs');
+    const p = vectorsPathFor('mission-abc');
+    expect(p).toBe(path.join(os.homedir(), '.claude', 'agent-teams-snapshots', 'mission-abc.vectors.json'));
+  });
+});
+
+describe('enqueueChunk / flushPending', () => {
+  const { enqueueChunk, flushPending, vectorsPathFor } = require('./missionIndex.cjs');
+  const missionId = 'mission-test-flush-' + Date.now();
+  const filePath = vectorsPathFor(missionId);
+
+  afterEach(() => {
+    try { fs.unlinkSync(filePath); } catch (_) {}
+  });
+
+  test('flushPending with zero pending chunks does nothing and returns 0', async () => {
+    const count = await flushPending(missionId);
+    expect(count).toBe(0);
+    expect(fs.existsSync(filePath)).toBe(false);
+  });
+
+  test('flushPending writes queued chunks to the vectors file', async () => {
+    enqueueChunk(missionId, { id: 'log-1', text: 'hello world', source: { type: 'log', ts: 1 } });
+    enqueueChunk(missionId, { id: 'log-2', text: 'goodbye world', source: { type: 'log', ts: 2 } });
+
+    const count = await flushPending(missionId);
+    expect(count).toBe(2);
+
+    const written = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(written.missionId).toBe(missionId);
+    expect(written.chunks).toHaveLength(2);
+    expect(written.chunks[0].id).toBe('log-1');
+    expect(written.chunks[0].text).toBe('hello world');
+    expect(written.chunks[0]).toHaveProperty('vector');
+    // First real embedText call in the suite may need to download/load the
+    // model (or fall through the ONNX runtime and latch embedFailed) — allow
+    // more headroom than the 5s default so this doesn't flake in CI/offline.
+  }, 60000);
+
+  test('flushPending appends to an existing file across multiple flushes', async () => {
+    enqueueChunk(missionId, { id: 'log-1', text: 'first', source: { type: 'log', ts: 1 } });
+    await flushPending(missionId);
+
+    enqueueChunk(missionId, { id: 'log-2', text: 'second', source: { type: 'log', ts: 2 } });
+    await flushPending(missionId);
+
+    const written = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(written.chunks.map(c => c.id)).toEqual(['log-1', 'log-2']);
+  }, 60000);
 });
