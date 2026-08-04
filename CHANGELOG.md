@@ -10,6 +10,14 @@ Format dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.13.2] — 2026-08-04
+
+### Sửa lỗi
+
+- **Race condition giữa per-task QC/QA và Final QA sweep**: khi process exit, `runFinalQaSweep` chạy ngay trong khi per-task QC/QA checks (async, subprocess riêng) chưa kịp hoàn tất — task còn ở `pending_qc`/`pending_qa` nên sweep bỏ qua hoàn toàn, trigger auto-resume lặp lại 3 lần rồi dừng dù Lead đã sửa xong. Giờ sweep đợi mọi pending QC/QA settle trước khi quyết định (poll 500ms, timeout 120s).
+
+---
+
 ## [0.13.1] — 2026-08-01
 
 ### Thêm mới

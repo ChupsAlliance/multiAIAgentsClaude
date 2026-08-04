@@ -8,6 +8,19 @@
 
 export const changelog = [
   {
+    version: '0.13.2',
+    date: '2026-08-04',
+    title: 'Sửa race condition giữa QC/QA và Final QA sweep',
+    highlights: [
+      'Final QA sweep giờ đợi per-task QC/QA checks hoàn tất trước khi chạy, tránh bỏ lọt tasks đang pending',
+      'Kết hợp với auto-resume (0.13.1) tạo thành vòng lặp tự phục hồi hoàn chỉnh',
+    ],
+    items: [
+      { type: 'fixed', badge: 'Agent',
+        text: 'Race condition: khi process exit, runFinalQaSweep chạy ngay trong khi per-task QC/QA (async) chưa kịp hoàn tất — task còn ở pending_qc/pending_qa nên sweep bỏ qua, trigger auto-resume lặp lại 3 lần rồi dừng. Giờ sweep đợi mọi pending QC/QA settle trước khi quyết định (poll 500ms, timeout 120s)' },
+    ],
+  },
+  {
     version: '0.13.1',
     date: '2026-08-01',
     title: 'Auto-resume sau khi Final QA sweep fail',
