@@ -10,7 +10,17 @@ export function AskMissionPanel() {
 
   useEffect(() => {
     const unlisten = window.electronAPI?.on('mission:companion-answer', (data) => {
-      setPairs(prev => prev.map(p => p.timestamp === data.timestamp ? { ...p, answer: data.answer, pending: false } : p))
+      // The backend stamps its own fresh `timestamp` at process-close time, which never
+      // matches the client-side `timestamp` we generated at submit time — so match on the
+      // question text instead (shared verbatim between request and event payload), guarded
+      // by `pending === true` so a stale identical past question can't be re-matched. Only
+      // the most recent pending match is updated, in case more than one pending pair with
+      // the same question text somehow exists.
+      setPairs(prev => {
+        const lastPendingIdx = prev.map(p => p.pending && p.question === data.question).lastIndexOf(true)
+        if (lastPendingIdx === -1) return prev
+        return prev.map((p, i) => i === lastPendingIdx ? { ...p, answer: data.answer, pending: false } : p)
+      })
     })
     return () => unlisten && unlisten()
   }, [])
