@@ -802,14 +802,14 @@ function detectVietnamese(text) {
 // Preserves everything needed to fully restore the Dashboard UI at mission-end.
 // raw_output is truncated to last 500 lines to keep file size reasonable.
 // ─────────────────────────────────────────────────────────────────
-function saveMissionSnapshot(state) {
+function saveMissionSnapshot(state, extra = {}) {
   try {
     const snapshotsDir = path.join(os.homedir(), '.claude', 'agent-teams-snapshots');
     fs.mkdirSync(snapshotsDir, { recursive: true });
     const filePath = path.join(snapshotsDir, `${state.id}.json`);
 
     // Clone to avoid mutating live state; truncate raw_output for disk savings
-    const snap = Object.assign({}, state);
+    const snap = Object.assign({}, state, extra);
     if (Array.isArray(snap.raw_output) && snap.raw_output.length > 500) {
       snap.raw_output = snap.raw_output.slice(-500);
     }
@@ -3269,6 +3269,21 @@ function finalizeDeployExit(missionId, sendToWindow, ts) {
   saveMissionSnapshot(missionState);
   flushPending(missionId).catch(() => {});
 
+  // Fire-and-forget: generate the post-mission debrief summary and merge it
+  // onto the snapshot once ready. NOT awaited — finalizeDeployExit must stay
+  // synchronous (mission.autoResume.test.js asserts sendToWindow calls happen
+  // synchronously right after this function returns; making this async, or
+  // awaiting generateDebriefSummary here, would defer those emissions past a
+  // microtask/macrotask boundary and break that test, same constraint Task 4
+  // already hit with flushPending). The snapshot already written above is
+  // valid without debrief_summary; this follow-up write adds it moments
+  // later once the spawned agent responds (or resolves null on failure).
+  generateDebriefSummary().catch(() => null).then((debrief_summary) => {
+    if (missionState && missionState.id === missionId) {
+      saveMissionSnapshot(missionState, { debrief_summary });
+    }
+  });
+
   sendToWindow('mission:status', { mission_id: missionId, status: statusStr });
 }
 
@@ -3435,6 +3450,72 @@ function extractAssistantText(stdoutText) {
     } catch (_) { /* not a JSON line, skip */ }
   }
   return lastText;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// generateDebriefSummary — Mission Companion post-mission debrief.
+// Spawns a SECOND, independent process via spawnAgentProcessRef (same
+// save/restore-childProcess/childBackend pattern as askMissionLive) to
+// produce a structured JSON summary of the just-completed mission. Called
+// from finalizeDeployExit's terminal branch — the driving process has
+// already exited by that point, so there's no real driving process to
+// protect, but the save/restore pattern is kept for consistency and because
+// spawnAgentProcess unconditionally sets childProcess/childBackend as a
+// side effect. Never rejects — resolves null on any failure/timeout.
+// ─────────────────────────────────────────────────────────────────
+async function generateDebriefSummary() {
+  const prompt = [
+    `The mission below has just completed. Produce ONLY a JSON object (no markdown fences, no prose) with this exact shape:`,
+    `{"goal": string, "agents_involved": string[], "key_files": string[], "issues_encountered": string[], "outcome": string}`,
+    `## Mission description\n${missionState.description || ''}`,
+    `## Agents\n${(missionState.agents || []).map(a => a.name).join(', ')}`,
+    `## File changes\n${(missionState.file_changes || []).map(f => `${f.path} (${f.action})`).join('\n')}`,
+    `## Final task list\n${(missionState.tasks || []).map(t => `${t.title}: ${t.status}`).join('\n')}`,
+  ].join('\n\n');
+
+  const leadAgent = (missionState.agents || []).find(a => a.name === 'Lead');
+  const backendId = agentBackendOf(leadAgent);
+
+  const savedChildProcess = childProcess;
+  const savedChildBackend = childBackend;
+
+  return new Promise((resolve) => {
+    let proc;
+    try {
+      const spawned = spawnAgentProcessRef({
+        backendId, model: 'haiku', prompt, resumeSessionId: null, maxTurns: 5,
+        useAgentTeams: false, cwd: missionState.project_path,
+      });
+      proc = spawned.proc;
+    } catch (err) {
+      childProcess = savedChildProcess;
+      childBackend = savedChildBackend;
+      resolve(null);
+      return;
+    }
+    childProcess = savedChildProcess;
+    childBackend = savedChildBackend;
+
+    let stdout = '';
+    const timer = setTimeout(() => {
+      try { proc.kill(); } catch (_) {}
+      resolve(null);
+    }, 60000);
+
+    proc.stdout.on('data', d => { stdout += d.toString('utf8'); });
+    proc.on('error', () => { clearTimeout(timer); resolve(null); });
+    proc.on('close', () => {
+      clearTimeout(timer);
+      const text = extractAssistantText(stdout);
+      if (!text) { resolve(null); return; }
+      try {
+        const cleaned = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+        resolve(JSON.parse(cleaned));
+      } catch (_) {
+        resolve(null);
+      }
+    });
+  });
 }
 
 // ═════════════════════════════════════════════════════════════════
@@ -4865,4 +4946,5 @@ if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
   module.exports.__setChildProcessForTest = (proc) => { childProcess = proc; };
   module.exports.__getChildProcessForTest = () => childProcess;
   module.exports.__askMissionLiveForTest = (args) => askMissionLive(args, () => {});
+  module.exports.__generateDebriefSummaryForTest = generateDebriefSummary;
 }
