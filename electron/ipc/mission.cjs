@@ -4902,6 +4902,10 @@ module.exports.retryMockupGeneration = retryMockupGeneration;
 module.exports.isTransientApiError = isTransientApiError;
 module.exports.retryTransientSpawn = retryTransientSpawn;
 module.exports.tryRecoverDanglingQuestion = tryRecoverDanglingQuestion;
+// Exported unconditionally (not gated behind NODE_ENV/VITEST) so history.cjs's
+// ask_mission_chat handler can spawn a real debrief-chat process in production,
+// not just under test.
+module.exports.spawnAgentProcess = spawnAgentProcess;
 
 if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
   module.exports.__setMissionStateForTest = (state) => { missionState = state; };
