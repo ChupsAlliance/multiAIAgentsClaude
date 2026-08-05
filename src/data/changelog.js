@@ -8,6 +8,29 @@
 
 export const changelog = [
   {
+    version: '0.14.0',
+    date: '2026-08-05',
+    title: 'Mission Companion: hỏi đáp trực tiếp và chat debrief sau khi hoàn tất',
+    highlights: [
+      'Tab "Ask" mới: hỏi mission đang chạy bất cứ lúc nào mà không làm gián đoạn luồng chính',
+      'Tab "Chat" mới trong lịch sử: trò chuyện lại với mission đã hoàn tất để ôn lại bối cảnh',
+      'Tự động sinh bản tóm tắt debrief (mục tiêu, agent tham gia, file liên quan, sự cố, kết quả) khi mission Completed',
+      'Vá lỗi Critical: 3 tính năng trên từng build prompt và spawn process nhưng quên ghi vào stdin, khiến câu trả lời luôn rỗng',
+    ],
+    items: [
+      { type: 'added', badge: 'Agent',
+        text: 'Tab "Ask" (ask_mission_live): cho phép hỏi mission đang chạy 1 câu hỏi side-channel, chỉ đọc — không can thiệp vào luồng chính, câu trả lời lấy từ 1 process claude riêng biệt' },
+      { type: 'added', badge: 'Agent',
+        text: 'Tab "Chat" trong màn hình lịch sử (askMissionChat): mở lại 1 mission đã hoàn tất và đặt câu hỏi để ôn lại những gì đã xảy ra, dựa trên toàn bộ log/task/message đã lưu' },
+      { type: 'added', badge: 'Dashboard',
+        text: 'Tự động sinh và lưu bản tóm tắt debrief (goal, agents_involved, key_files, issues_encountered, outcome) ngay khi mission chuyển "Completed" — hiển thị trong lịch sử mission' },
+      { type: 'fixed', badge: 'Agent',
+        text: 'Bug Critical: askMissionLive, generateDebriefSummary và askMissionChat đều build prompt, spawn process, gắn listener đọc stdout — nhưng chưa từng ghi prompt vào stdin của process con, nên process luôn nhận input rỗng và câu trả lời/tóm tắt luôn trống. Đã bổ sung proc.stdin.write(prompt); proc.stdin.end() ở cả 3 nơi gọi, và thêm test E2E chạy thật (không mock) để đảm bảo lỗi này không tái diễn' },
+      { type: 'fixed', badge: 'Agent',
+        text: 'TaskCompleted có thể tạo task trùng lặp khi 1 "Completed:" từ vòng retry QC/QA đến trước khi task kịp chuyển lại từ failed_qc/failed_qa về in_progress — giờ khớp theo bất kỳ trạng thái nào chưa phải completed, thay vì chỉ khớp in_progress, để nhận đúng là cùng 1 task xuyên suốt vòng đời QC/QA' },
+    ],
+  },
+  {
     version: '0.13.3',
     date: '2026-08-04',
     title: 'Sửa 2 bug khiến auto-resume loop 3 lần rồi dừng',

@@ -10,6 +10,21 @@ Format dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.14.0] — 2026-08-05
+
+### Thêm mới
+
+- **Tab "Ask" — hỏi đáp trực tiếp trong lúc mission đang chạy**: side-channel chỉ đọc, cho phép hỏi mission đang chạy 1 câu hỏi bất kỳ mà không can thiệp vào luồng chính (`ask_mission_live`).
+- **Tab "Chat" trong màn hình lịch sử**: mở lại 1 mission đã hoàn tất và trò chuyện để ôn lại bối cảnh, dựa trên toàn bộ log/task/message đã lưu (`askMissionChat`).
+- **Tự động sinh bản tóm tắt debrief** (`goal`, `agents_involved`, `key_files`, `issues_encountered`, `outcome`) ngay khi mission chuyển `Completed`, lưu kèm mission trong lịch sử.
+
+### Sửa lỗi
+
+- **Bug Critical — stdin không được ghi**: `askMissionLive`, `generateDebriefSummary` (mission.cjs) và `askMissionChat` (history.cjs) đều build prompt, spawn process con và gắn listener đọc stdout, nhưng chưa từng gọi `proc.stdin.write(prompt)` — process con luôn nhận input rỗng nên câu trả lời/tóm tắt luôn trống. Mọi unit test (dùng mock process) vẫn pass vì không phụ thuộc vào việc stdin có được ghi hay không. Đã bổ sung `proc.stdin.write(prompt); proc.stdin.end()` ở cả 3 nơi gọi, và thêm test E2E chạy với process thật (`mission-companion-real-usage.spec.ts`) để lỗi này không thể tái diễn âm thầm.
+- **`TaskCompleted` có thể tạo task trùng lặp trong vòng retry QC/QA**: khi 1 dòng "Completed:" từ vòng retry đến trước khi task kịp chuyển lại từ `failed_qc`/`failed_qa` về `in_progress` (do độ trễ hiển thị `QC_QA_FAILURE_VISIBILITY_DELAY_MS`), hệ thống match nhầm là task mới thay vì nhận ra đây là cùng 1 task — giờ khớp theo bất kỳ trạng thái nào chưa phải `completed`.
+
+---
+
 ## [0.13.3] — 2026-08-04
 
 ### Sửa lỗi
