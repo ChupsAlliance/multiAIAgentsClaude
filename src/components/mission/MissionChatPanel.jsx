@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Plus, Trash2, Send } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 
@@ -8,6 +8,9 @@ export function MissionChatPanel({ missionId }) {
   const [messages, setMessages] = useState([])
   const [question, setQuestion] = useState('')
   const [asking, setAsking] = useState(false)
+  // Tracks the most recently requested chat id so slow, superseded fetches
+  // (from openChat or handleAsk) don't clobber the UI once a newer chat is active.
+  const activeChatIdRef = useRef(null)
 
   const refreshList = async () => {
     const list = await invoke('list_mission_chats', { missionId })
@@ -18,25 +21,33 @@ export function MissionChatPanel({ missionId }) {
 
   const openChat = async (chatId) => {
     setActiveChatId(chatId)
+    activeChatIdRef.current = chatId
     const chat = await invoke('get_mission_chat', { missionId, chatId })
-    setMessages(chat?.messages || [])
+    if (activeChatIdRef.current === chatId) {
+      setMessages(chat?.messages || [])
+    }
   }
 
   const startNewChat = () => {
     setActiveChatId(null)
+    activeChatIdRef.current = null
     setMessages([])
   }
 
   const handleAsk = async () => {
     const trimmed = question.trim()
     if (!trimmed || asking) return
+    const askedForChatId = activeChatIdRef.current
     setAsking(true)
     setMessages(prev => [...prev, { role: 'user', content: trimmed, timestamp: Date.now() }])
     setQuestion('')
     try {
-      const result = await invoke('ask_mission_chat', { missionId, chatId: activeChatId, question: trimmed })
-      setActiveChatId(result.chatId)
-      setMessages(prev => [...prev, { role: 'assistant', content: result.answer || `⚠ ${result.error}`, timestamp: Date.now() }])
+      const result = await invoke('ask_mission_chat', { missionId, chatId: askedForChatId, question: trimmed })
+      if (activeChatIdRef.current === askedForChatId) {
+        activeChatIdRef.current = result.chatId
+        setActiveChatId(result.chatId)
+        setMessages(prev => [...prev, { role: 'assistant', content: result.answer || `⚠ ${result.error}`, timestamp: Date.now() }])
+      }
       await refreshList()
     } finally {
       setAsking(false)
