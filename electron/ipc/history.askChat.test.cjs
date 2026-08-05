@@ -1,5 +1,5 @@
 // electron/ipc/history.askChat.test.cjs
-import { describe, test, expect, afterEach } from 'vitest';
+import { describe, test, expect, afterEach, vi } from 'vitest';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const { EventEmitter } = require('events');
@@ -12,7 +12,7 @@ function makeFakeProc() {
   const proc = new EventEmitter();
   proc.stdout = new EventEmitter();
   proc.stderr = new EventEmitter();
-  proc.stdin = { write: () => {}, end: () => {} };
+  proc.stdin = { write: vi.fn(), end: vi.fn() };
   proc.kill = () => {};
   return proc;
 }
@@ -56,6 +56,13 @@ describe('ask_mission_chat', () => {
     expect(saved.messages[0]).toMatchObject({ role: 'user', content: 'Why was React chosen?' });
     expect(saved.messages[1]).toMatchObject({ role: 'assistant', content: 'React was chosen for its ecosystem.' });
     expect(saved.title).toBe('Why was React chosen?');
+    // Regression guard: the prompt must actually be delivered to the spawned
+    // process's stdin (previously missing — the process would receive no
+    // input and every call would time out against a real backend).
+    expect(fakeProc.stdin.write).toHaveBeenCalledWith(
+      expect.stringContaining('Why was React chosen?'), 'utf8'
+    );
+    expect(fakeProc.stdin.end).toHaveBeenCalled();
   });
 
   test('appends to an existing chat when chatId is provided', async () => {
@@ -85,5 +92,9 @@ describe('ask_mission_chat', () => {
     const saved = await historyModule.__getMissionChatForTest({ missionId, chatId: 'chat-existing' });
     expect(saved.messages).toHaveLength(4);
     expect(saved.title).toBe('first question');
+    expect(fakeProc.stdin.write).toHaveBeenCalledWith(
+      expect.stringContaining('follow-up question'), 'utf8'
+    );
+    expect(fakeProc.stdin.end).toHaveBeenCalled();
   });
 });

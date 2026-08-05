@@ -1,5 +1,5 @@
 // electron/ipc/mission.askLive.test.cjs
-import { describe, test, expect, beforeEach } from 'vitest';
+import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { createRequire } from 'module';
 import { EventEmitter } from 'events';
 const require = createRequire(import.meta.url);
@@ -8,7 +8,7 @@ function makeFakeProc() {
   const proc = new EventEmitter();
   proc.stdout = new EventEmitter();
   proc.stderr = new EventEmitter();
-  proc.stdin = { write: () => {}, end: () => {} };
+  proc.stdin = { write: vi.fn(), end: vi.fn() };
   proc.kill = () => { proc.killed = true; };
   return proc;
 }
@@ -53,6 +53,13 @@ describe('ask_mission_live', () => {
     const result = await answerPromise;
     expect(result.answer).toMatch(/writing tests/);
     expect(missionModule.__getChildProcessForTest()).toBe(drivingProc);
+    // Regression guard: the prompt must actually be delivered to the spawned
+    // process's stdin (previously missing — the process would receive no
+    // input and every call would time out against a real backend).
+    expect(fakeRealProc.stdin.write).toHaveBeenCalledWith(
+      expect.stringContaining('what is the Lead doing right now?'), 'utf8'
+    );
+    expect(fakeRealProc.stdin.end).toHaveBeenCalled();
   });
 
   test('resolves with a null answer instead of throwing on process error', async () => {

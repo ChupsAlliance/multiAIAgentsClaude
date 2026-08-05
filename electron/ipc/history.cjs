@@ -103,6 +103,10 @@ async function askMissionChat({ missionId, chatId, question }) {
         useAgentTeams: false, cwd: undefined,
       });
       proc = spawned.proc;
+      try {
+        if (spawned.promptViaStdin) proc.stdin.write(prompt, 'utf8');
+        proc.stdin.end();
+      } catch (_) {}
     } catch (err) {
       resolve({ chatId: chat.id, answer: null, error: err.message });
       return;

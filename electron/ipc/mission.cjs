@@ -3400,6 +3400,10 @@ async function askMissionLive({ question }, sendToWindow) {
           useAgentTeams: false, cwd: missionState.project_path,
         });
         proc = spawned.proc;
+        try {
+          if (spawned.promptViaStdin) proc.stdin.write(prompt, 'utf8');
+          proc.stdin.end();
+        } catch (_) {}
       } catch (err) {
         childProcess = savedChildProcess;
         childBackend = savedChildBackend;
@@ -3487,6 +3491,10 @@ async function generateDebriefSummary() {
         useAgentTeams: false, cwd: missionState.project_path,
       });
       proc = spawned.proc;
+      try {
+        if (spawned.promptViaStdin) proc.stdin.write(prompt, 'utf8');
+        proc.stdin.end();
+      } catch (_) {}
     } catch (err) {
       childProcess = savedChildProcess;
       childBackend = savedChildBackend;

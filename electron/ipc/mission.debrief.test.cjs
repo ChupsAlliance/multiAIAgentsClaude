@@ -1,5 +1,5 @@
 // electron/ipc/mission.debrief.test.cjs
-import { describe, test, expect, beforeEach, afterEach } from 'vitest';
+import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createRequire } from 'module';
 import { EventEmitter } from 'events';
 const require = createRequire(import.meta.url);
@@ -12,7 +12,7 @@ function makeFakeProc() {
   const proc = new EventEmitter();
   proc.stdout = new EventEmitter();
   proc.stderr = new EventEmitter();
-  proc.stdin = { write: () => {}, end: () => {} };
+  proc.stdin = { write: vi.fn(), end: vi.fn() };
   proc.kill = () => {};
   return proc;
 }
@@ -51,6 +51,13 @@ describe('generateDebriefSummary', () => {
     const debrief = await debriefPromise;
     expect(debrief.goal).toBe('Add login feature');
     expect(debrief.outcome).toBe('Completed successfully');
+    // Regression guard: the prompt must actually be delivered to the spawned
+    // process's stdin (previously missing — the process would receive no
+    // input and every call would time out against a real backend).
+    expect(fakeProc.stdin.write).toHaveBeenCalledWith(
+      expect.stringContaining('Add login feature'), 'utf8'
+    );
+    expect(fakeProc.stdin.end).toHaveBeenCalled();
   });
 });
 
