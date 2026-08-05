@@ -129,10 +129,19 @@ async function askMissionChat({ missionId, chatId, question }) {
   });
 }
 
+// ─── get_mission_detail ─────────────────────────────────────────────
+async function getMissionDetail(args) {
+  const missionId = args.missionId || args.mission_id || args;
+  const snapshotPath = path.join(snapshotsDirPath, `${missionId}.json`);
+  if (!fs.existsSync(snapshotPath)) {
+    throw new Error(`Snapshot not found for mission ${missionId}`);
+  }
+  return JSON.parse(fs.readFileSync(snapshotPath, 'utf-8'));
+}
+
 module.exports = function registerHistory(getMainWindow) {
   const userprofile = os.homedir();
   const historyPath = path.join(userprofile, '.claude', 'agent-teams-history.json');
-  const snapshotsDir = snapshotsDirPath;
 
   function readHistory() {
     if (!fs.existsSync(historyPath)) return [];
@@ -178,14 +187,7 @@ module.exports = function registerHistory(getMainWindow) {
   });
 
   // ─── get_mission_detail ─────────────────────────────────────────
-  ipcMain.handle('get_mission_detail', async (_event, args) => {
-    const missionId = args.missionId || args.mission_id || args;
-    const snapshotPath = path.join(snapshotsDir, `${missionId}.json`);
-    if (!fs.existsSync(snapshotPath)) {
-      throw new Error(`Snapshot not found for mission ${missionId}`);
-    }
-    return JSON.parse(fs.readFileSync(snapshotPath, 'utf-8'));
-  });
+  ipcMain.handle('get_mission_detail', async (_event, args) => getMissionDetail(args));
 
   // ─── mission chat sessions ──────────────────────────────────────
   ipcMain.handle('list_mission_chats', async (_event, args) => listMissionChats(args));
@@ -197,6 +199,7 @@ module.exports = function registerHistory(getMainWindow) {
 };
 
 if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
+  module.exports.__getMissionDetailForTest = getMissionDetail;
   module.exports.__listMissionChatsForTest = listMissionChats;
   module.exports.__getMissionChatForTest = getMissionChat;
   module.exports.__deleteMissionChatForTest = deleteMissionChat;
