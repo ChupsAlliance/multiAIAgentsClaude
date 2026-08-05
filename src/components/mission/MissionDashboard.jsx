@@ -10,13 +10,15 @@ import { ThinkingIndicator } from './ThinkingIndicator'
 import { InterventionPanel } from './InterventionPanel'
 import { QuestionCard } from './QuestionCard'
 import { AskMissionPanel } from './AskMissionPanel'
-import { ListTodo, Activity, FolderOpen, User, MessageSquare, GitFork, MessageCircleQuestion } from 'lucide-react'
+import { MissionChatPanel } from './MissionChatPanel'
+import { ListTodo, Activity, FolderOpen, User, MessageSquare, GitFork, MessageCircleQuestion, MessageCircle } from 'lucide-react'
 import { PlanDependencyGraph } from './PlanDependencyGraph'
 // import { VirtualOffice } from '../office/VirtualOffice'
 
 const baseTabs = [
   { id: 'tasks',    label: 'Tasks',    icon: ListTodo },
   { id: 'ask',      label: 'Ask',      icon: MessageCircleQuestion },
+  { id: 'chat',     label: 'Chat',     icon: MessageCircle },
   { id: 'activity', label: 'Activity', icon: Activity },
   { id: 'messages', label: 'Messages', icon: MessageSquare },
   { id: 'files',    label: 'Files',    icon: FolderOpen },
@@ -112,9 +114,12 @@ export const MissionDashboard = memo(function MissionDashboard({ state, isRunnin
   const hasMessages = messages.length > 0
   // Only show Ask tab while the mission is actively running (not a history/replay view)
   const showAskTab = !isHistoryView && isRunning
+  // Only show Chat tab in history view (post-mission debrief chat)
+  const showChatTab = isHistoryView
   const visibleBaseTabs = baseTabs
     .filter(t => t.id !== 'messages' || hasMessages)
     .filter(t => t.id !== 'ask' || showAskTab)
+    .filter(t => t.id !== 'chat' || showChatTab)
 
   // Reset to tasks tab if messages tab gets hidden
   useEffect(() => {
@@ -129,6 +134,13 @@ export const MissionDashboard = memo(function MissionDashboard({ state, isRunnin
       setActiveTab('tasks')
     }
   }, [showAskTab, activeTab])
+
+  // Reset to tasks tab if Chat tab gets hidden (navigated away from history view)
+  useEffect(() => {
+    if (activeTab === 'chat' && !showChatTab) {
+      setActiveTab('tasks')
+    }
+  }, [showChatTab, activeTab])
 
   // Build dynamic tabs — add agent tab when one is selected
   const tabs = selectedAgent
@@ -252,6 +264,7 @@ export const MissionDashboard = memo(function MissionDashboard({ state, isRunnin
                 <div className={`flex-1 overflow-x-hidden min-h-0 ${activeTab === 'graph' ? 'overflow-hidden flex flex-col' : 'overflow-y-auto p-3 scrollbar-thin'}`}>
                   {activeTab === 'tasks' && <TaskList tasks={tasks} logs={logs} />}
                   {activeTab === 'ask' && <AskMissionPanel />}
+                  {activeTab === 'chat' && <MissionChatPanel missionId={state?.id} />}
                   {activeTab === 'activity' && <ActivityLog log={logs} />}
                   {activeTab === 'messages' && <MessagesPanel messages={messages} />}
                   {activeTab === 'files' && <FileChangesPanel changes={fileChanges} />}
