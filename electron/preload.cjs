@@ -15,6 +15,7 @@ const ALLOWED_COMMANDS = [
   // history
   'save_to_history', 'load_history', 'get_mission_history',
   'delete_history_entry', 'get_mission_detail',
+  'list_mission_chats', 'get_mission_chat', 'delete_mission_chat',
   // mission
   'launch_mission', 'deploy_mission', 'continue_mission', 'replan_mission',
   'stop_mission', 'reset_mission', 'get_mission_state', 'get_incomplete_missions',
