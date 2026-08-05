@@ -646,9 +646,17 @@ function handleParsedEvent(event, sendToWindow) {
     case 'TaskCompleted': {
       const { agent, description } = event;
       if (missionState) {
-        // Find matching in-progress task for this agent
+        // Find this agent's task still in flight. Matching only 'in_progress'
+        // misses the case where a QC/QA retry's "Completed:" line arrives
+        // before handleQcQaFailure's QC_QA_FAILURE_VISIBILITY_DELAY_MS timer
+        // has flipped the task back from 'failed_qc'/'failed_qa' to
+        // 'in_progress' — that race pushed a brand-new duplicate task row
+        // (and a second, concurrent QC check) for the same task instead of
+        // recognizing it as the retry. Match any status short of the
+        // terminal 'completed' so the same task is reused across its whole
+        // QC/QA lifecycle.
         const t = missionState.tasks.find(x =>
-          x.assigned_agent === agent && x.status === 'in_progress');
+          x.assigned_agent === agent && x.status !== 'completed');
         let targetTask;
         if (t) {
           t.status = 'pending_qc';
