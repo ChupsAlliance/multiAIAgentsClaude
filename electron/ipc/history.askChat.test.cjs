@@ -20,9 +20,11 @@ function makeFakeProc() {
 describe('ask_mission_chat', () => {
   const missionId = 'mission-chat-ask-' + Date.now();
   const chatsDir = path.join(os.homedir(), '.claude', 'agent-teams-snapshots', `${missionId}.chats`);
+  const snapshotPath = path.join(os.homedir(), '.claude', 'agent-teams-snapshots', `${missionId}.json`);
 
   afterEach(() => {
     try { fs.rmSync(chatsDir, { recursive: true, force: true }); } catch (_) {}
+    try { fs.unlinkSync(snapshotPath); } catch (_) {}
   });
 
   test('creates a new chat when chatId is null and persists both messages', async () => {
@@ -96,5 +98,33 @@ describe('ask_mission_chat', () => {
       expect.stringContaining('follow-up question'), 'utf8'
     );
     expect(fakeProc.stdin.end).toHaveBeenCalled();
+  });
+
+  test('resolves the mission\'s real backend from its snapshot instead of hardcoding claude', async () => {
+    fs.mkdirSync(path.dirname(snapshotPath), { recursive: true });
+    fs.writeFileSync(snapshotPath, JSON.stringify({
+      id: missionId, status: 'Completed', tasks: [], log: [],
+      agents: [{ name: 'Lead', model: 'sonnet', backend: 'copilot' }],
+    }), 'utf-8');
+
+    const fakeProc = makeFakeProc();
+    const spawnedPromise = new Promise((resolve) => {
+      historyModule.__setSpawnAgentProcessForTest((spec) => {
+        resolve(spec);
+        return { proc: fakeProc, adapter: null, backendId: spec.backendId, resumeDropped: false, promptViaStdin: true };
+      });
+    });
+
+    const answerPromise = historyModule.__askMissionChatForTest({ missionId, chatId: null, question: 'What backend ran this?' });
+
+    const spec = await spawnedPromise;
+    expect(spec.backendId).toBe('copilot');
+
+    fakeProc.stdout.emit('data', Buffer.from(JSON.stringify({
+      type: 'assistant', message: { content: [{ type: 'text', text: 'It ran on copilot.' }] },
+    }) + '\n'));
+    fakeProc.emit('close', 0);
+
+    await answerPromise;
   });
 });

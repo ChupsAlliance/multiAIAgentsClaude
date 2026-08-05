@@ -191,4 +191,72 @@ describe('finalizeDeployExit with auto-resume', () => {
     const statusEmits = sendToWindow.mock.calls.filter(c => c[0] === 'mission:status')
     expect(statusEmits.some(c => c[1].status === 'completed')).toBe(true)
   })
+
+  test('does not write a stale debrief snapshot if the mission resumed (status back to Running) before generateDebriefSummary resolves', async () => {
+    const { EventEmitter } = require('events')
+    const fs = require('fs')
+    const os = require('os')
+    const path = require('path')
+
+    function makeFakeProc() {
+      const proc = new EventEmitter()
+      proc.stdout = new EventEmitter()
+      proc.stderr = new EventEmitter()
+      proc.stdin = { write: vi.fn(), end: vi.fn() }
+      proc.kill = () => {}
+      return proc
+    }
+
+    const missionId = 'm-resume-race-' + Date.now()
+    const snapshotPath = path.join(os.homedir(), '.claude', 'agent-teams-snapshots', `${missionId}.json`)
+    try { fs.unlinkSync(snapshotPath) } catch (_) {}
+
+    const sendToWindow = vi.fn()
+    mission.__setMissionStateForTest({
+      id: missionId, status: 'Completed', phase: 'Done',
+      description: 'Test mission',
+      project_path: '/tmp/proj',
+      tasks: [{ id: 't1', title: 'A', status: 'completed', completed_at: Date.now() }],
+      agents: [{ name: 'Lead', status: 'Done', model: 'sonnet', backend: 'claude' }],
+      log: [], file_changes: [],
+      started_at: Date.now(),
+    })
+    mission.__setSendToWindowForTest(sendToWindow)
+
+    const fakeProc = makeFakeProc()
+    mission.__setSpawnAgentProcessForTest(() => ({ proc: fakeProc, adapter: null, backendId: 'claude', resumeDropped: false, promptViaStdin: true }))
+
+    // finalizeDeployExit writes the initial (debrief-less) snapshot synchronously,
+    // then fires off generateDebriefSummary() in the background.
+    mission.__finalizeDeployExitForTest(missionId, sendToWindow, Date.now())
+
+    // Simulate the mission being resumed (continue_mission) while the debrief
+    // generation is still in flight — status flips back to Running.
+    const state = mission.__getMissionStateForTest()
+    expect(state.status).toBe('Completed')
+    state.status = 'Running'
+
+    // Now let generateDebriefSummary resolve.
+    fakeProc.stdout.emit('data', Buffer.from(JSON.stringify({
+      type: 'assistant',
+      message: { content: [{ type: 'text', text: JSON.stringify({
+        goal: 'Test mission', agents_involved: ['Lead'], key_files: [],
+        issues_encountered: [], outcome: 'Completed successfully',
+      }) }] },
+    }) + '\n'))
+    fakeProc.emit('close', 0)
+
+    // Flush the microtask queue so the .then() callback in finalizeDeployExit runs.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    // The snapshot on disk must NOT have a debrief_summary written after the
+    // resume — the guard should have skipped the write since status is no
+    // longer terminal.
+    const saved = JSON.parse(fs.readFileSync(snapshotPath, 'utf-8'))
+    expect(saved.debrief_summary).toBeUndefined()
+    expect(saved.status).toBe('Completed') // snapshot from the synchronous write, not overwritten
+
+    try { fs.unlinkSync(snapshotPath) } catch (_) {}
+  })
 })

@@ -4,7 +4,7 @@ const { ipcMain } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { spawnAgentProcess } = require('./mission.cjs');
+const { spawnAgentProcess, agentBackendOf } = require('./mission.cjs');
 const { queryIndex } = require('../lib/missionIndex.cjs');
 
 // ── Module-level snapshots dir (shared by get_mission_detail and the
@@ -95,11 +95,23 @@ async function askMissionChat({ missionId, chatId, question }) {
     `## New question\n${question}`,
   ].join('\n\n');
 
+  // Resolve the mission's actual backend from its on-disk snapshot (history.cjs
+  // doesn't share mission.cjs's in-memory missionState singleton), mirroring
+  // the agentBackendOf(leadAgent) pattern used by askMissionLive/generateDebriefSummary
+  // in mission.cjs. Falls back to 'claude' if the snapshot can't be read or has
+  // no Lead agent — same default agentBackendOf itself applies for a missing agent.
+  let backendId = 'claude';
+  try {
+    const snapshot = await getMissionDetail({ missionId });
+    const leadAgent = (snapshot.agents || []).find(a => a.name === 'Lead');
+    backendId = agentBackendOf(leadAgent);
+  } catch (_) { /* snapshot missing/unreadable — keep default 'claude' */ }
+
   return new Promise((resolve) => {
     let proc;
     try {
       const spawned = spawnAgentProcessRefHistory({
-        backendId: 'claude', model: 'sonnet', prompt, resumeSessionId: null, maxTurns: 20,
+        backendId, model: 'sonnet', prompt, resumeSessionId: null, maxTurns: 20,
         useAgentTeams: false, cwd: undefined,
       });
       proc = spawned.proc;

@@ -3279,7 +3279,7 @@ function finalizeDeployExit(missionId, sendToWindow, ts) {
   // valid without debrief_summary; this follow-up write adds it moments
   // later once the spawned agent responds (or resolves null on failure).
   generateDebriefSummary().catch(() => null).then((debrief_summary) => {
-    if (missionState && missionState.id === missionId) {
+    if (missionState && missionState.id === missionId && ['Completed', 'Failed'].includes(missionState.status)) {
       saveMissionSnapshot(missionState, { debrief_summary });
     }
   });
@@ -4914,6 +4914,9 @@ module.exports.tryRecoverDanglingQuestion = tryRecoverDanglingQuestion;
 // ask_mission_chat handler can spawn a real debrief-chat process in production,
 // not just under test.
 module.exports.spawnAgentProcess = spawnAgentProcess;
+// Exported unconditionally for the same reason: history.cjs's ask_mission_chat
+// handler needs to resolve the mission's actual backend (not hardcode 'claude').
+module.exports.agentBackendOf = agentBackendOf;
 
 if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
   module.exports.__setMissionStateForTest = (state) => { missionState = state; };
