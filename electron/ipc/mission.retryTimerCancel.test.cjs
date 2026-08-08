@@ -179,4 +179,40 @@ describe('retry-pending wrapping — readProcessStdout_launch dangling-question 
   });
 });
 
+describe('retry-pending wrapping — watchProcessExit_launch transient-error retry (line 2390)', () => {
+  let mission;
+
+  beforeEach(() => {
+    mission = freshMission();
+  });
+
+  test('schedules a cancellable pendingRetryTimer on a transient-error exit and cancels it via stop_mission', async () => {
+    const proc = makeFakeProc();
+    nextFakeProc = proc;
+
+    await ipcHandlers.get('launch_mission')(null, {
+      projectPath: '/tmp/proj', prompt: 'Build a thing', description: 'demo',
+      model: 'sonnet', executionMode: 'standard',
+    });
+
+    emitErrLine(proc, '429 rate limit exceeded');
+    await flush();
+    closeProc(proc, 1);
+    await flush();
+
+    expect(mission.__getPendingRetryTimerForTest()).not.toBeNull();
+    expect(windowSendCalls.some(([ch, data]) =>
+      ch === 'mission:retry-pending' && data.pending === true && data.attempt === 2 && data.delayMs === 30000
+    )).toBe(true);
+
+    const spawnCountBeforeStop = spawnCalls.length;
+    await ipcHandlers.get('stop_mission')();
+
+    expect(mission.__getPendingRetryTimerForTest()).toBeNull();
+    // clearTimeout on the stored handle guarantees retrySpawn cannot fire later —
+    // no further spawn() call is made as a direct result of stopping.
+    expect(spawnCalls.length).toBe(spawnCountBeforeStop);
+  });
+});
+
 export { freshMission, makeFakeProc, emitLine, emitErrLine, closeProc, flush, ipcHandlers, windowSendCalls, spawnCalls };
