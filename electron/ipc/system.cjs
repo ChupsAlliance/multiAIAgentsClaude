@@ -220,21 +220,27 @@ module.exports = function registerSystem(getMainWindow) {
   });
 
   // ─── launch_in_terminal ─────────────────────────────────────────
+  // projectPath and prompt are both free-text, user-controlled values
+  // (see src/pages/PlaygroundPage.jsx) — neither is ever embedded into a
+  // cmd.exe-parsed string. buildLaunchTerminalPlan() validates projectPath
+  // and routes it through spawn()'s `cwd` option (a structured Win32 param,
+  // not shell-parsed text), and routes prompt through a code-generated temp
+  // file redirected into `claude -p`'s stdin. See
+  // docs/superpowers/specs/2026-08-08-launch-terminal-command-injection-design.md.
   ipcMain.handle('launch_in_terminal', async (_event, args) => {
     const { projectPath, prompt } = args;
-    const safePrompt = prompt
-      .replace(/\\/g, '\\\\')
-      .replace(/"/g, '\\"')
-      .replace(/\n/g, ' ')
-      .replace(/\r/g, '');
+    const plan = buildLaunchTerminalPlan(projectPath, prompt);
 
-    const claudeCmd = `cd /d "${projectPath}" && set CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 && claude "${safePrompt}"`;
+    fs.writeFileSync(plan.tempFilePath, plan.tempFileContent, 'utf-8');
+    setTimeout(() => {
+      try { fs.unlinkSync(plan.tempFilePath); } catch {}
+    }, 30_000);
 
     // Try Windows Terminal first, fallback to cmd
     try {
-      spawn('cmd', ['/C', 'wt', 'cmd', '/K', claudeCmd], { detached: true, stdio: 'ignore' });
+      spawn('cmd', plan.wtArgs, { cwd: plan.cwd, detached: true, stdio: 'ignore' });
     } catch {
-      spawn('cmd', ['/C', 'start', 'cmd', '/K', claudeCmd], { detached: true, stdio: 'ignore' });
+      spawn('cmd', plan.fallbackArgs, { cwd: plan.cwd, detached: true, stdio: 'ignore' });
     }
   });
 

@@ -12,7 +12,7 @@ Found via a 5-agent parallel review (Electron main/IPC/security, electron/lib, R
 - **Where:** `electron/ipc/system.cjs:191-207` (`launch_in_terminal`)
 - **Bug:** `projectPath` is concatenated unescaped into a shell command string (`cd /d "${projectPath}" && ... && claude "${safePrompt}"`), then passed through `cmd /C wt cmd /K ...`. Only `prompt` is partially escaped; `projectPath` is not, and it comes from a free-text `<input>` in `src/pages/PlaygroundPage.jsx:294-296`.
 - **Repro:** User types/pastes `C:\proj" & calc.exe & "` as the project path → arbitrary command execution via cmd.exe injection.
-- [ ] Fixed
+- [x] Fixed
 
 ## 3. QC/QA verdict parsing likely never matches real output
 - **Where:** `electron/lib/qcqa.cjs:99-105` (`parseQcQaVerdict`) vs. `claudeAdapter.buildLaunchArgs` (always appends `--output-format stream-json --verbose`)
