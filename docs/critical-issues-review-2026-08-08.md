@@ -6,7 +6,7 @@ Found via a 5-agent parallel review (Electron main/IPC/security, electron/lib, R
 - **Where:** `electron/ipc/mission.cjs:2390`, `:2994`, `:3047`
 - **Bug:** Retry backoff timers (`setTimeout(() => retrySpawn(...), delay)`, up to 120s) scheduled after a transient API error / dangling-question detection are never stored or cancelled. `stop_mission`/`reset_mission` (`mission.cjs:4487-4538`) clear other intervals but have no reference to these timers.
 - **Repro:** Mission hits a transient API error → retry scheduled 30-120s out → user clicks Stop or Reset before it fires → timer still fires → calls `attemptSpawnDeploy`/`attemptSpawnLaunch` which write to `missionState` with no null-guard (unlike `attemptSpawnContinue`, which does guard) → either an uncaught `TypeError` crashes the main process (if `missionState` was nulled by reset), or a `claude` child process is silently respawned after the user believed the mission was stopped.
-- [ ] Fixed
+- [x] Fixed
 
 ## 2. Command injection in "launch in terminal"
 - **Where:** `electron/ipc/system.cjs:191-207` (`launch_in_terminal`)
