@@ -571,3 +571,43 @@ describe('Claude regression guard — no behavioral change for backend=claude', 
     closeProc(proc, 0);
   });
 });
+
+describe('qcQaSpawnOpts — parseLine wiring (Given/When/Then)', () => {
+  let mission;
+
+  beforeEach(() => {
+    mission = freshMission();
+  });
+
+  afterEach(() => {
+    mission.__setMissionStateForTest(null);
+  });
+
+  test('Given backend=claude, When qcQaSpawnOpts is built, Then parseLine matches claudeAdapter.parseLine output', () => {
+    mission.__setMissionStateForTest({ backend: 'claude' });
+    const opts = mission.__qcQaSpawnOptsForTest();
+
+    expect(typeof opts.parseLine).toBe('function');
+    const claudeAdapter = require('../lib/cliAdapters/claudeAdapter.cjs');
+    const line = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'hello' }] } });
+    expect(opts.parseLine(line)).toEqual(claudeAdapter.parseLine(line));
+  });
+
+  test('Given backend=copilot, When qcQaSpawnOpts is built, Then parseLine matches copilotAdapter.parseLine output', () => {
+    mission.__setMissionStateForTest({ backend: 'copilot' });
+    const opts = mission.__qcQaSpawnOptsForTest();
+
+    expect(typeof opts.parseLine).toBe('function');
+    const copilotAdapter = require('../lib/cliAdapters/copilotAdapter.cjs');
+    const line = JSON.stringify({ type: 'assistant.message', data: { content: 'hello' } });
+    expect(opts.parseLine(line)).toEqual(copilotAdapter.parseLine(line));
+  });
+
+  test('Given no missionState, When qcQaSpawnOpts is built, Then it defaults to backend=claude with a working parseLine', () => {
+    mission.__setMissionStateForTest(null);
+    const opts = mission.__qcQaSpawnOptsForTest();
+
+    expect(opts.backend).toBe('claude');
+    expect(typeof opts.parseLine).toBe('function');
+  });
+});

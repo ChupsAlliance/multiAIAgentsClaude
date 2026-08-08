@@ -61,10 +61,13 @@ function qcQaSpawnOpts() {
       spawnFn: adapter.spawn.bind(adapter),
       buildArgs: adapter.buildLaunchArgs.bind(adapter),
       promptViaStdin: adapter.promptViaStdin !== false,
+      parseLine: adapter.parseLine.bind(adapter),
       backend: backendId,
     };
   }
   // Fallback: legacy Claude path via spawnClaude
+  // (runQcQaCheck defaults its own parseLine to claudeAdapter.parseLine when omitted,
+  // which is correct here since this path's argv is always Claude's stream-json format.)
   return { spawnClaude, backend: backendId };
 }
 
@@ -4969,6 +4972,7 @@ if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
   module.exports.__setSendToWindowForTest = (fn) => { sendToWindowRef = fn; };
   module.exports.__fillTemplateForTest = (template, values) => fillTemplate(template, values);
   module.exports.__setQcQaRunnerForTest = (fn) => { qcQaRunner = fn; };
+  module.exports.__qcQaSpawnOptsForTest = () => qcQaSpawnOpts();
   module.exports.__setPendingQcQaTimeoutForTest = (ms) => { pendingQcQaTimeoutMs = ms; };
   module.exports.__enqueueQcCheckForTest = (task, agent) => {
     return new Promise((resolve) => {
