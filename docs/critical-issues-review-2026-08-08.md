@@ -27,7 +27,8 @@ Found via a 5-agent parallel review (Electron main/IPC/security, electron/lib, R
 - **Where:** `electron/lib/qcqa.cjs:56-107` (`runQcQaCheck`)
 - **Bug:** No `proc.on('error', ...)` registered on the spawned child process. If the `claude`/adapter binary is missing from PATH or fails to spawn (EACCES etc.), Node's unhandled `'error'` event throws synchronously with nothing to catch it.
 - **Effect:** Can crash the entire Electron main process mid-mission.
-- [ ] Fixed
+- **Fix (design doc `docs/superpowers/specs/2026-08-08-qcqa-error-listener-design.md`, plan `docs/superpowers/plans/2026-08-08-qcqa-error-listener.md`):** `runQcQaCheck` now registers `proc.on('error', ...)`, mirroring the existing spawn-error pattern already used elsewhere in the codebase (`electron/ipc/history.cjs:134`, `electron/ipc/mission.cjs:3471,3559,4457`). It clears the timeout, guards against double-resolution with the function's existing `settled` flag, and resolves (never rejects) `{ verdict: 'FAIL', responsibleAgent: null, reason: 'QC/QA process error: <message>' }` — same shape as the existing timeout branch. Verified with unit tests covering both a bare spawn-error and an error emitted after `close` (no double-resolve).
+- [x] Fixed
 
 ## 5. Export / plan version history completely broken
 - **Where:** `src/components/mission/ExportDropdown.jsx:61,96`, `src/components/mission/PlanVersionHistory.jsx:15,34`, `src/components/mission/PlanDocument.jsx:454`
