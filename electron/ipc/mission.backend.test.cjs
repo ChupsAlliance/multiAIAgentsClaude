@@ -609,5 +609,8 @@ describe('qcQaSpawnOpts — parseLine wiring (Given/When/Then)', () => {
 
     expect(opts.backend).toBe('claude');
     expect(typeof opts.parseLine).toBe('function');
+    const claudeAdapter = require('../lib/cliAdapters/claudeAdapter.cjs');
+    const line = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'hello' }] } });
+    expect(opts.parseLine(line)).toEqual(claudeAdapter.parseLine(line));
   });
 });
