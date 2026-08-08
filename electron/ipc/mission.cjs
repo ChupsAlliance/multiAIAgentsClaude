@@ -91,6 +91,7 @@ let childBackend  = 'claude'; // backend id of the currently running childProces
 let watcherInterval = null; // setInterval for file watcher
 let autosaveInterval = null; // setInterval for periodic snapshot saves
 let agentTeamsCompletionTimer = null; // safety auto-complete timer for agent_teams mode
+let pendingRetryTimer = null; // handle for a scheduled retrySpawn() call, if any (see docs/superpowers/specs/2026-08-08-retry-timer-cancel-on-stop-design.md)
 const mockupServers = {};  // missionId → http.Server (cleanup on stop/reset)
 
 // ── Recording capture state ──
@@ -945,6 +946,19 @@ function clearAgentTeamsTimer() {
   if (agentTeamsCompletionTimer !== null) {
     clearTimeout(agentTeamsCompletionTimer);
     agentTeamsCompletionTimer = null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Pending cross-phase retry timer (transient API error / dangling-question
+// safety net). Only one mission (and therefore at most one in-flight retry)
+// can be active at a time — childProcess is a single module-level variable,
+// not a collection — so a single scalar handle is sufficient.
+// ─────────────────────────────────────────────────────────────────
+function clearPendingRetryTimer() {
+  if (pendingRetryTimer !== null) {
+    clearTimeout(pendingRetryTimer);
+    pendingRetryTimer = null;
   }
 }
 
@@ -4492,6 +4506,7 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
     stopAutosave();
     stopStuckChecker();
     clearAgentTeamsTimer();
+    clearPendingRetryTimer();
     killChild();
 
     // Close any open mockup HTTP servers
@@ -4524,6 +4539,7 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
     stopAutosave();
     stopStuckChecker();
     clearAgentTeamsTimer();
+    clearPendingRetryTimer();
     killChild();
 
     // Close any open mockup HTTP servers
@@ -4968,6 +4984,8 @@ if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
   module.exports.__setSpawnAgentProcessForTest = (fn) => { spawnAgentProcessRef = fn; };
   module.exports.__setChildProcessForTest = (proc) => { childProcess = proc; };
   module.exports.__getChildProcessForTest = () => childProcess;
+  module.exports.__setPendingRetryTimerForTest = (handle) => { pendingRetryTimer = handle; };
+  module.exports.__getPendingRetryTimerForTest = () => pendingRetryTimer;
   module.exports.__askMissionLiveForTest = (args) => askMissionLive(args, () => {});
   module.exports.__generateDebriefSummaryForTest = generateDebriefSummary;
 }
