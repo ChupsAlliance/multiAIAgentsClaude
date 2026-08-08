@@ -215,4 +215,50 @@ describe('retry-pending wrapping — watchProcessExit_launch transient-error ret
   });
 });
 
+describe('retry-pending wrapping — readProcessStdout_deploy dangling-question retry (line 2994)', () => {
+  let mission;
+
+  beforeEach(() => {
+    mission = freshMission();
+  });
+
+  function seedReviewPlanState() {
+    mission.__setMissionStateForTest({
+      id: 'm1', status: 'ReviewPlan', phase: 'ReviewPlan',
+      execution_mode: 'standard', backend: 'claude', permission_mode: 'auto',
+      project_path: '/tmp/proj',
+      agents: [{ name: 'Lead', status: 'Idle', model: 'sonnet' }],
+      tasks: [], log: [], file_changes: [], raw_output: [],
+    });
+  }
+
+  test('schedules a cancellable pendingRetryTimer when Lead is cut off mid-question during deploy', async () => {
+    seedReviewPlanState();
+    const proc = makeFakeProc();
+    nextFakeProc = proc;
+
+    await ipcHandlers.get('deploy_mission')(null, {
+      agents: [{ name: 'Lead', model: 'sonnet' }], tasks: [], agentPrompts: {},
+    });
+
+    emitLine(proc, JSON.stringify({
+      type: 'assistant', session_id: 'sess-1',
+      message: { content: [{ type: 'text', text: '<<<QUESTION>>>\n{"from":"Lead","question":"Which appro' }] },
+    }));
+    await flush();
+    proc.stdout.push(null); // end stdout -> readline emits 'close', driving the dangling-question check
+    await flush();
+
+    expect(mission.__getMissionStateForTest().status).toBe('RetryingDanglingQuestion');
+    expect(mission.__getPendingRetryTimerForTest()).not.toBeNull();
+    expect(windowSendCalls.some(([ch, data]) =>
+      ch === 'mission:retry-pending' && data.pending === true && data.attempt === 2
+    )).toBe(true);
+
+    await ipcHandlers.get('stop_mission')();
+
+    expect(mission.__getPendingRetryTimerForTest()).toBeNull();
+  });
+});
+
 export { freshMission, makeFakeProc, emitLine, emitErrLine, closeProc, flush, ipcHandlers, windowSendCalls, spawnCalls };

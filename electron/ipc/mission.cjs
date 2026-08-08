@@ -3015,7 +3015,12 @@ function readProcessStdout_deploy(proc, sendToWindow, isContMode, attemptCtx = {
           missionState.log.push(entry);
           sendToWindow('mission:log', entry);
           missionState.status = 'RetryingDanglingQuestion'; // watchProcessExit_deploy's close handler must not mark Completed/Failed for this status
-          setTimeout(() => retrySpawn(attempt + 1, attemptCtx.sessionId || null), delay);
+          sendToWindow('mission:retry-pending', { pending: true, attempt: attempt + 1, maxAttempts, delayMs: delay });
+          pendingRetryTimer = setTimeout(() => {
+            pendingRetryTimer = null;
+            sendToWindow('mission:retry-pending', { pending: false });
+            retrySpawn(attempt + 1, attemptCtx.sessionId || null);
+          }, delay);
         }
       }
     }
