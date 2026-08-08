@@ -190,3 +190,79 @@ Because cmd.exe's parser has known quirks that string-level review can't fully r
 - A `prompt` containing `&`, `|`, `<`, `>`, `^`, `(`, `)`, `"`, and backslash-quote sequences never results in injected command execution — proven by both the unit tests and the real-execution proof test above.
 - The one documented, accepted exception: a `prompt` containing a substring exactly matching `%<existing-env-var-name>%` may have that substring expanded to the variable's value by cmd.exe before `claude` sees it (information disclosure only, never code execution).
 - No temp file is created for `prompt` delivery.
+
+## Addendum 2 (correction): `win32QuoteArg` alone is not sufficient — add a second, cmd.exe-level caret-escaping layer
+
+**Trigger:** the scoped re-review of Addendum 1's implementation (commit `92520cf`) empirically reproduced real command execution (a marker file created on disk) using the attack prompt `x" & echo pwned>marker &rem `. Root cause: Addendum 1's reasoning ("quoting via `win32QuoteArg` means the attacker can never place an unescaped `"` that closes the quoted region early") is **false**. `win32QuoteArg` encodes an embedded `"` as `\"` — a convention `CommandLineToArgvW` (used by the *receiving* program, `claude`, to parse its own argv) understands, but `cmd.exe`'s own command-line grammar does **not**. `cmd.exe` tracks its quote state by toggling on **every literal `"` character it scans, unconditionally** — it has no concept of a backslash "escaping" a quote. So the `"` inside `win32QuoteArg`'s `\"` output still closes cmd.exe's quoted span early, from cmd.exe's point of view, re-exposing everything after it (`&`, `|`, `<`, `>`) as live operators. Addendum 1's own real-execution proof test passed anyway only because every attack payload in it wrapped its injection target in quotes (e.g. `... > "marker"`), so the corrupted escaping mangled the target path and the injected command failed for an unrelated reason (bad filename syntax) — a false-green, not a real defense.
+
+### The corrected, two-layer escaping function
+
+`win32QuoteArg` (Layer 1, unchanged — still needed so `claude`'s own argv parser reconstructs the exact original string) is no longer sufficient on its own. Add Layer 2: after producing the Layer-1 quoted string, caret-escape every character `cmd.exe`'s own parser treats as significant — including the `"` characters Layer 1 just added:
+
+```js
+// Layer 1 (unchanged from Addendum 1): Win32 CommandLineToArgvW-compatible
+// quoting, for claude's own argv parser.
+function win32QuoteArg(arg) {
+  let result = '"';
+  let backslashes = 0;
+  for (const ch of arg) {
+    if (ch === '\\') {
+      backslashes++;
+      continue;
+    }
+    if (ch === '"') {
+      result += '\\'.repeat(backslashes * 2 + 1) + '"';
+      backslashes = 0;
+      continue;
+    }
+    result += '\\'.repeat(backslashes) + ch;
+    backslashes = 0;
+  }
+  result += '\\'.repeat(backslashes * 2) + '"';
+  return result;
+}
+
+// Layer 2 (NEW): neutralize every cmd.exe-significant character in the
+// ALREADY Layer-1-quoted string, so cmd.exe's own (backslash-unaware)
+// quote-toggle scan never sees a raw operator or quote character at all —
+// it only ever sees `^X` sequences, which cmd.exe's single left-to-right
+// parse pass treats as "emit X literally into the current token, do not
+// evaluate X for special meaning," then strips the caret. This is a
+// lossless round-trip: after cmd.exe strips the carets, the string handed
+// to CreateProcess for the child process is exactly Layer 1's output,
+// which claude's own CommandLineToArgvW then parses correctly. Because
+// every `"` from Layer 1 is now caret-prefixed too, cmd.exe's quote-toggle
+// scan never fires at all for this token — there is no quote state to
+// break out of.
+function escapeForCmdExe(argvQuoted) {
+  return argvQuoted.replace(/[\^"&|<>()%!]/g, (c) => '^' + c);
+}
+
+function escapePromptForCmdExe(prompt) {
+  const singleLine = prompt.replace(/\r\n|\r|\n/g, ' ');
+  return escapeForCmdExe(win32QuoteArg(singleLine));
+}
+```
+
+This also **improves** on Addendum 1's accepted `%VAR%`-expansion residual risk: `%` and `!` (delayed-expansion) are now caret-escaped too (`^%`, `^!`), which suppresses cmd.exe's environment-variable expansion rather than accepting it as a known gap. This must be confirmed by the unit tests below, not assumed.
+
+### Empirical verification performed before this correction was written
+
+Before drafting this correction, the two-layer scheme was verified directly against the real `cmd.exe` and a real Node child process on the development machine (not just reasoned about), to avoid repeating Addendum 1's mistake of trusting unverified reasoning about cmd.exe's parser:
+
+1. Three hand-written `.cmd` probes run via `cmd.exe` directly, confirming caret-escaping neutralizes `&` as an operator even when combined with a `\"`-encoded embedded quote (the exact shape Layer 1 produces).
+2. A Node harness (`spawnSync('cmd.exe', ['/d', '/c', innerCmd], { windowsVerbatimArguments: true })`) spawning a real Node child process as a stand-in for `claude`'s own argv parsing, round-tripping 12 attack/edge-case payloads (quote-breakout, pipe, redirect-in, redirect-out, bare/doubled carets, `%VAR%`, trailing backslash, embedded `\"`, embedded `\\"`, parens, the classic `done" & calc.exe & "` breakout, embedded newlines/CRLF) — **all 12 round-tripped byte-for-byte and none triggered a side effect**.
+3. A dedicated side-effect test using **unquoted** injection targets (`... > markerfile & rem`, no quotes around `markerfile`) — the exact false-green vector that let Addendum 1's flawed test pass — across five operator variants (`&`, single `&` with tight `&rem`, `|`, `&&`, and parenthesized `& (...)  &`). **None created the marker file; all round-tripped correctly.**
+
+### Required verification (implementation task)
+
+1. **Unit tests of `win32QuoteArg`/`escapeForCmdExe`/`escapePromptForCmdExe`** — same coverage as Addendum 1 required, plus: assert `%VAR%`-shaped substrings round-trip literally (Layer 2 must prevent expansion now, not just document it as accepted risk), assert bare `^` and doubled `^^` round-trip correctly, assert `!` round-trips literally under delayed expansion.
+2. **A real-execution proof test that uses UNQUOTED injection targets**, not quoted ones — this is the specific defect that made Addendum 1's proof test a false green. At minimum: an attack payload shaped like `x" & type nul > <marker-path-with-no-surrounding-quotes> & rem ` (and the `|`, `&&`, and `(...)` operator variants) must, after being escaped and passed through the real inner-command construction and spawned via real `cmd.exe`, leave the marker file **absent**. Assert absence, not merely that the test "passed" — the previous proof test's fatal flaw was asserting success without checking whether the injected side effect actually occurred.
+3. Re-verify the manual QA checklist bullets from the original Testing & Verification section still hold (interactive session preserved, normal prompts unaffected).
+
+### Acceptance criteria (supersedes Addendum 1's escaping-specific bullets)
+
+- Both `win32QuoteArg` (Layer 1) and `escapeForCmdExe` (Layer 2) are applied — `escapePromptForCmdExe` is the single exported entry point used by `buildLaunchTerminalPlan`.
+- A `prompt` containing `&`, `|`, `<`, `>`, `^`, `(`, `)`, `"`, `%`, `!`, and backslash-quote sequences never results in injected command execution — proven against **unquoted** injection targets, not just quoted ones.
+- A `prompt` containing a substring shaped like `%<env-var-name>%` round-trips to `claude` literally (no expansion) — Layer 2 closes the residual risk Addendum 1 had accepted; no exception is documented anymore.
+- All other acceptance criteria from Addendum 1 remain in force unchanged (interactive `claude`, no `-p`, no temp file for prompt, `projectPath`/`cwd` handling unaffected).
