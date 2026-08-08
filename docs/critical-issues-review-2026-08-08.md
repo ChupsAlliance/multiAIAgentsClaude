@@ -20,7 +20,8 @@ Found via a 5-agent parallel review (Electron main/IPC/security, electron/lib, R
 - **Where:** `electron/lib/qcqa.cjs:99-105` (`parseQcQaVerdict`) vs. `claudeAdapter.buildLaunchArgs` (always appends `--output-format stream-json --verbose`)
 - **Bug:** `parseQcQaVerdict` regex `^[QC] VERDICT: PASS$` is matched against raw concatenated stdout. In production, stdout is newline-delimited JSON, so the verdict line is embedded as an escaped string inside a JSON blob, never at the true start/end of a physical line — the anchors never match. Falls through to default `FAIL`. Unit tests don't catch this because they emit plain unwrapped text instead of a real stream-json envelope.
 - **Effect:** QC/QA gating reports FAIL on essentially every real check, driving spurious retries/escalation regardless of actual agent output.
-- [ ] Fixed
+- **Fix (design doc `docs/superpowers/specs/2026-08-08-qcqa-verdict-parsing-design.md`, plan `docs/superpowers/plans/2026-08-08-qcqa-verdict-parsing.md`):** `runQcQaCheck` now extracts the agent's last real assistant text via the backend adapter's own `parseLine()` (already used elsewhere for the same purpose) before handing it to the unchanged `parseQcQaVerdict` regex. Wired into production via `mission.cjs::qcQaSpawnOpts()`. Verified with rewritten unit tests using real stream-json/Copilot fixtures plus a real end-to-end test spawning the actual `claude` CLI.
+- [x] Fixed
 
 ## 4. QC/QA spawn has no `error` listener
 - **Where:** `electron/lib/qcqa.cjs:56-107` (`runQcQaCheck`)
