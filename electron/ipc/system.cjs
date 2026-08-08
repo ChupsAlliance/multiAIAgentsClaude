@@ -5,6 +5,7 @@ const { execSync, spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 const { compareSemver } = require('../lib/compareSemver.cjs');
 
 const RELEASES_URL = 'https://api.github.com/repos/ChupsAlliance/multiAIAgentsClaude/releases/latest';
@@ -48,6 +49,37 @@ async function checkForUpdates(currentVersion) {
   } catch {
     return { hasUpdate: false, error: true };
   }
+}
+
+// ─── buildLaunchTerminalPlan ────────────────────────────────────────
+// Pure planning function for launch_in_terminal — validates projectPath
+// and returns everything the handler needs to spawn a terminal, with
+// zero user-controlled text embedded in any cmd.exe-parsed string.
+// projectPath reaches the terminal only via the `cwd` field (a structured
+// spawn() option, never shell-parsed); prompt reaches `claude` only via
+// tempFileContent, written to a code-generated temp file and redirected
+// into `claude -p`'s stdin.
+function buildLaunchTerminalPlan(projectPath, prompt) {
+  if (typeof projectPath !== 'string' || !projectPath.trim()) {
+    throw new Error('projectPath is required');
+  }
+
+  const resolvedPath = path.resolve(projectPath);
+  const exists = fs.existsSync(resolvedPath);
+  if (!exists || !fs.statSync(resolvedPath).isDirectory()) {
+    throw new Error(`Directory not found: ${projectPath}`);
+  }
+
+  const tempFilePath = path.join(os.tmpdir(), `agent-teams-launch-${crypto.randomUUID()}.txt`);
+  const innerCmd = `set CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 && claude -p < "${tempFilePath}"`;
+
+  return {
+    cwd: resolvedPath,
+    tempFilePath,
+    tempFileContent: prompt,
+    wtArgs: ['/C', 'wt', '-d', '.', 'cmd', '/K', innerCmd],
+    fallbackArgs: ['/C', 'start', 'cmd', '/K', innerCmd],
+  };
 }
 
 module.exports = function registerSystem(getMainWindow) {
@@ -236,3 +268,4 @@ module.exports = function registerSystem(getMainWindow) {
 };
 
 module.exports.checkForUpdates = checkForUpdates;
+module.exports.buildLaunchTerminalPlan = buildLaunchTerminalPlan;
