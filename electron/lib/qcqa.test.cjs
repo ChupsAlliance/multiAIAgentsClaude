@@ -75,63 +75,129 @@ describe('nextEscalationTier', () => {
   })
 })
 
-const { EventEmitter } = require('events')
-const { runQcQaCheck } = require('./qcqa.cjs')
+const { EventEmitter } = require('events');
+const { runQcQaCheck } = require('./qcqa.cjs');
+const claudeAdapter = require('./cliAdapters/claudeAdapter.cjs');
+const copilotAdapter = require('./cliAdapters/copilotAdapter.cjs');
 
 function makeFakeProc() {
-  const proc = new EventEmitter()
-  proc.stdout = new EventEmitter()
-  proc.stderr = new EventEmitter()
-  proc.kill = () => { proc.killed = true }
-  return proc
+  const proc = new EventEmitter();
+  proc.stdout = new EventEmitter();
+  proc.stderr = new EventEmitter();
+  proc.kill = () => { proc.killed = true; };
+  return proc;
+}
+
+/** One real-shaped Claude stream-json JSONL line carrying `text` as the assistant's message. */
+function claudeTextLine(text) {
+  return JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
 }
 
 describe('runQcQaCheck', () => {
-  test('resolves PASS when the subprocess prints a PASS verdict', async () => {
-    const fakeProc = makeFakeProc()
-    const spawnClaude = () => fakeProc
+  test('resolves PASS from a real stream-json PASS verdict line', async () => {
+    const fakeProc = makeFakeProc();
+    const spawnClaude = () => fakeProc;
 
     const resultPromise = runQcQaCheck({
-      spawnClaude, prompt: 'check task X', projectPath: '/tmp/proj',
+      spawnClaude, parseLine: claudeAdapter.parseLine,
+      prompt: 'check task X', projectPath: '/tmp/proj',
       model: 'claude-sonnet-5', stage: 'QC', timeoutMs: 5000,
-    })
+    });
 
-    fakeProc.stdout.emit('data', Buffer.from('[QC] VERDICT: PASS\n'))
-    fakeProc.emit('close', 0)
+    fakeProc.stdout.emit('data', Buffer.from(claudeTextLine('[QC] VERDICT: PASS') + '\n'));
+    fakeProc.emit('close', 0);
 
-    await expect(resultPromise).resolves.toEqual({ verdict: 'PASS' })
-  })
+    await expect(resultPromise).resolves.toEqual({ verdict: 'PASS' });
+  });
 
-  test('resolves FAIL with responsible agent when the subprocess prints a FAIL verdict', async () => {
-    const fakeProc = makeFakeProc()
-    const spawnClaude = () => fakeProc
+  test('resolves FAIL with responsible agent and reason from a real stream-json FAIL verdict', async () => {
+    const fakeProc = makeFakeProc();
+    const spawnClaude = () => fakeProc;
 
     const resultPromise = runQcQaCheck({
-      spawnClaude, prompt: 'check task X', projectPath: '/tmp/proj',
+      spawnClaude, parseLine: claudeAdapter.parseLine,
+      prompt: 'check task X', projectPath: '/tmp/proj',
       model: 'claude-sonnet-5', stage: 'QC', timeoutMs: 5000,
-    })
+    });
 
-    fakeProc.stdout.emit('data', Buffer.from(
-      '[QC] VERDICT: FAIL\n[QC] RESPONSIBLE_AGENT: Dev\n[QC] REASON: build broken\n'))
-    fakeProc.emit('close', 0)
+    const text = '[QC] VERDICT: FAIL\n[QC] RESPONSIBLE_AGENT: Dev\n[QC] REASON: build broken';
+    fakeProc.stdout.emit('data', Buffer.from(claudeTextLine(text) + '\n'));
+    fakeProc.emit('close', 0);
 
     await expect(resultPromise).resolves.toEqual({
       verdict: 'FAIL', responsibleAgent: 'Dev', reason: 'build broken',
-    })
-  })
+    });
+  });
 
   test('resolves FAIL on timeout without waiting for close', async () => {
-    const fakeProc = makeFakeProc()
-    const spawnClaude = () => fakeProc
+    const fakeProc = makeFakeProc();
+    const spawnClaude = () => fakeProc;
 
     const resultPromise = runQcQaCheck({
-      spawnClaude, prompt: 'check task X', projectPath: '/tmp/proj',
+      spawnClaude, parseLine: claudeAdapter.parseLine,
+      prompt: 'check task X', projectPath: '/tmp/proj',
       model: 'claude-sonnet-5', stage: 'QC', timeoutMs: 10,
-    })
+    });
 
-    const result = await resultPromise
-    expect(result.verdict).toBe('FAIL')
-    expect(result.reason).toMatch(/timed out/i)
-    expect(fakeProc.killed).toBe(true)
-  })
-})
+    const result = await resultPromise;
+    expect(result.verdict).toBe('FAIL');
+    expect(result.reason).toMatch(/timed out/i);
+    expect(fakeProc.killed).toBe(true);
+  });
+
+  test('a tool_use turn before the verdict text does not clobber the extracted verdict', async () => {
+    const fakeProc = makeFakeProc();
+    const spawnClaude = () => fakeProc;
+
+    const resultPromise = runQcQaCheck({
+      spawnClaude, parseLine: claudeAdapter.parseLine,
+      prompt: 'check task X', projectPath: '/tmp/proj',
+      model: 'claude-sonnet-5', stage: 'QC', timeoutMs: 5000,
+    });
+
+    const toolUseLine = JSON.stringify({
+      type: 'assistant',
+      message: { content: [{ type: 'tool_use', name: 'Bash', input: { command: 'npm test' } }] },
+    });
+    fakeProc.stdout.emit('data', Buffer.from(toolUseLine + '\n'));
+    fakeProc.stdout.emit('data', Buffer.from(claudeTextLine('[QC] VERDICT: PASS') + '\n'));
+    fakeProc.emit('close', 0);
+
+    await expect(resultPromise).resolves.toEqual({ verdict: 'PASS' });
+  });
+
+  test('extracts the verdict from real Copilot stream-json shape (delta then full message)', async () => {
+    const fakeProc = makeFakeProc();
+    const spawnClaude = () => fakeProc;
+
+    const resultPromise = runQcQaCheck({
+      spawnClaude, parseLine: copilotAdapter.parseLine,
+      prompt: 'check task X', projectPath: '/tmp/proj',
+      model: 'claude-sonnet-5', stage: 'QA', timeoutMs: 5000,
+    });
+
+    const deltaLine = JSON.stringify({
+      type: 'assistant.message_delta',
+      data: { messageId: 'm1', deltaContent: '[QA] VERDICT: P' },
+    });
+    const fullLine = JSON.stringify({
+      type: 'assistant.message',
+      data: { messageId: 'm1', model: 'claude-sonnet-4.6', content: '[QA] VERDICT: PASS', toolRequests: [], turnId: '0' },
+    });
+    fakeProc.stdout.emit('data', Buffer.from(deltaLine + '\n'));
+    fakeProc.stdout.emit('data', Buffer.from(fullLine + '\n'));
+    fakeProc.emit('close', 0);
+
+    await expect(resultPromise).resolves.toEqual({ verdict: 'PASS' });
+  });
+
+  test('resolves FAIL with default reason when no spawn function is provided', async () => {
+    const result = await runQcQaCheck({
+      prompt: 'check task X', projectPath: '/tmp/proj',
+      model: 'claude-sonnet-5', stage: 'QC', timeoutMs: 5000,
+    });
+    expect(result).toEqual({
+      verdict: 'FAIL', responsibleAgent: null, reason: 'No spawn function provided for QC/QA',
+    });
+  });
+});

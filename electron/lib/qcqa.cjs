@@ -28,6 +28,25 @@ function parseQcQaVerdict(stdoutText, stage) {
   };
 }
 
+/**
+ * extractLastAssistantText — turn `--output-format stream-json` JSONL stdout
+ * into the agent's actual last plain-text answer, backend-agnostically.
+ *
+ * Runs each line through the given adapter `parseLine` and keeps the LAST
+ * `kind:'text'` event's `.text`. Tool-use/system/result events never
+ * overwrite the tracked text, so a tool call between the agent's reasoning
+ * and its final verdict line does not clobber the real answer.
+ */
+function extractLastAssistantText(stdoutText, parseLine) {
+  const lines = (stdoutText || '').split('\n').filter(Boolean);
+  let lastText = null;
+  for (const line of lines) {
+    const ev = parseLine(line);
+    if (ev && ev.kind === 'text' && ev.text) lastText = ev.text;
+  }
+  return lastText || '';
+}
+
 function nextEscalationTier(qcRound) {
   if (qcRound <= 2) return { tier: 'retry-same' };
   if (qcRound <= 8) return { tier: 'retry-fresh' };
@@ -53,7 +72,7 @@ function nextEscalationTier(qcRound) {
  *   log?: Function,              // optional (message) => void
  * }} opts
  */
-function runQcQaCheck({ spawnFn, buildArgs, promptViaStdin, spawnClaude, prompt, projectPath, model, stage, timeoutMs = 180000, backend, log }) {
+function runQcQaCheck({ spawnFn, buildArgs, promptViaStdin, parseLine, spawnClaude, prompt, projectPath, model, stage, timeoutMs = 180000, backend, log }) {
   return new Promise((resolve) => {
     let proc;
 
@@ -102,7 +121,9 @@ function runQcQaCheck({ spawnFn, buildArgs, promptViaStdin, spawnClaude, prompt,
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      resolve(parseQcQaVerdict(stdoutText, stage));
+      const resolvedParseLine = parseLine || require('./cliAdapters/claudeAdapter.cjs').parseLine;
+      const assistantText = extractLastAssistantText(stdoutText, resolvedParseLine);
+      resolve(parseQcQaVerdict(assistantText, stage));
     });
   });
 }
