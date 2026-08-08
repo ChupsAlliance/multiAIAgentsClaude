@@ -102,3 +102,91 @@ Windows filenames/paths cannot literally contain `"` (it's a reserved character)
 - Normal launches (valid path, ordinary prompt) behave the same as before from the user's perspective: a terminal opens in the right directory, `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set, `claude` runs with the given prompt, the window stays open afterward.
 - `wt`-then-`start cmd /K`-fallback behavior is preserved.
 - `scaffold_project` is confirmed safe and left unchanged.
+
+## Addendum (post-implementation): reverting `-p`/stdin prompt delivery — interactive escaping instead
+
+**Trigger:** the final whole-branch review of the implementation (Tasks 1-2, commits `2a875a4..9afd644`) found that routing `prompt` through `claude -p < "<tempfile>"` — while injection-safe — silently converts `launch_in_terminal` from an interactive Claude Code session into a one-shot print-and-exit invocation. Confirmed against the real installed `claude` binary (`claude --help`): interactive mode is the default; `--input-format`/stdin prompt delivery "only works with `--print`." `src/pages/PlaygroundPage.jsx`'s post-launch UI text ("Nhấn Enter trong terminal để gửi prompt", "Dùng Shift+↓ để switch giữa agents") depends on the session staying interactive — a real regression against the plan's own "preserve existing user-visible behavior" constraint, not something a fix subagent should resolve by picking a side unilaterally. Escalated to the human partner; **resolution: keep the interactive `claude "<prompt>"` invocation, and replace the original (pre-fix) naive escaping — which only handled `\` and `"` — with a correct, complete cmd.exe-safe quoting function.**
+
+### What changes
+
+- `buildLaunchTerminalPlan`'s `tempFilePath`/`tempFileContent`/`-p`/stdin-redirect machinery for **prompt** is removed entirely. `prompt` goes back to being embedded directly in `innerCmd` as `claude "<escaped prompt>"` — but through a correct escaping function instead of the original vulnerable one.
+- `projectPath`'s fix (validate existence/directory, pass via `spawn`'s `cwd` option, `wt -d .`) is **unchanged** — it never relied on string escaping and isn't affected by this addendum.
+- No temp file is created for `prompt` anymore, so the 30s `setTimeout`/cleanup code for it is removed (the Important finding about its unref/race is moot — the mechanism it applied to no longer exists).
+
+### The escaping function
+
+Two independent problems must both be solved, because two different parsers see this text: (1) `claude`'s own argv parsing (Windows programs receive argv via `CommandLineToArgvW`, which every Node-based CLI, including `claude`, goes through), and (2) `cmd.exe`'s command-line grammar, which parses the *entire* `/K <command>` string for `&`, `|`, `<`, `>`, `^`, `%` before ever launching `claude`.
+
+```js
+// Win32 CommandLineToArgvW-compatible quoting: wraps `arg` in a double-quoted
+// token that claude's own argv parser reconstructs back to the exact
+// original string, byte for byte. Same algorithm as Python's
+// subprocess.list2cmdline / MSDN's documented CommandLineToArgvW rules:
+// N backslashes immediately before a quote become 2N backslashes + an
+// escaped quote; N backslashes NOT before a quote are left as-is; the
+// quote character itself is always escaped by doubling its preceding
+// backslash count and adding one more.
+function win32QuoteArg(arg) {
+  let result = '"';
+  let backslashes = 0;
+  for (const ch of arg) {
+    if (ch === '\\') {
+      backslashes++;
+      continue;
+    }
+    if (ch === '"') {
+      result += '\\'.repeat(backslashes * 2 + 1) + '"';
+      backslashes = 0;
+      continue;
+    }
+    result += '\\'.repeat(backslashes) + ch;
+    backslashes = 0;
+  }
+  result += '\\'.repeat(backslashes * 2) + '"';
+  return result;
+}
+
+// Wraps `prompt` for safe embedding in a cmd.exe command line, as the
+// argument to `claude`. Strategy: quote via win32QuoteArg so the attacker
+// can never place an unescaped `"` that closes the quoted region early —
+// without an early close, `&`, `|`, `<`, `>`, `(`, `)` all stay inert
+// (cmd.exe does not treat them as operators inside a quoted span). `%` is
+// the one exception: cmd.exe expands `%VAR%` even inside quotes, so a
+// prompt containing e.g. `%USERNAME%` verbatim would have that substring
+// replaced with the real environment variable's value before `claude`
+// ever sees it. There is no character-level escape for `%` in cmd.exe
+// that doesn't corrupt the argument text itself (see docs.microsoft.com
+// cmd.exe behavior notes) — this is a known, industry-accepted residual
+// limitation (e.g. Python's list2cmdline has the same gap). It is an
+// information-disclosure risk (an env var's value leaks into the prompt
+// text claude receives), never code execution, so it does not block this
+// fix. Newlines are still stripped/collapsed to spaces beforehand, same
+// as the pre-fix code, since a literal newline would terminate the
+// single-line command early regardless of quoting.
+function escapePromptForCmdExe(prompt) {
+  const singleLine = prompt.replace(/\r\n|\r|\n/g, ' ');
+  return win32QuoteArg(singleLine);
+}
+```
+
+`buildLaunchTerminalPlan`'s `innerCmd` becomes:
+
+```js
+const innerCmd = `set CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 && claude ${escapePromptForCmdExe(prompt)}`;
+```
+
+Note `innerCmd` still starts with `set`, not with a bare `"`  — this matters because `cmd /K`/`/C` has a documented special case (`cmd /?`) where, if its *entire* remaining argument is bounded by exactly two quote characters at the very start and end, cmd.exe strips that outer quote pair and re-parses the inside unquoted. Since `innerCmd` never starts with `"`, that quote-stripping special case does not apply to it.
+
+### Required verification (higher bar than a plain unit test)
+
+Because cmd.exe's parser has known quirks that string-level review can't fully rule out, correctness must be proven by two layers, not one:
+
+1. **Unit tests of `win32QuoteArg`/`escapePromptForCmdExe`** — round-trip and edge-case coverage: empty string, trailing backslash before the closing quote, embedded `"`, embedded `\"`, embedded `\\"`, multiple consecutive backslashes, `&`/`|`/`<`/`>`/`^`/`(`/`)` characters, a `%VAR%`-shaped substring (documented as expanding — assert it is *not* further corrupted, i.e. the function doesn't try and fail to neutralize it), newlines.
+2. **A real-execution proof test** — spawns the actual `cmd.exe` on the machine with a constructed command line using an attack-style prompt (e.g. containing `& fsutil file createnew <marker> 0` or `&& type nul > <marker>`, using a temp marker file path unique to the test run instead of `calc.exe`), waits for it to finish, and asserts the marker file does **not** exist — i.e. proof the injected command never ran, not just proof the string looked escaped. This closes the gap that pure code review of a hand-rolled cmd.exe escaper cannot close on its own.
+
+### Acceptance criteria (supersedes the equivalent bullets above for `prompt` only)
+
+- `prompt` is delivered to an **interactive** `claude` process (no `-p`), preserving the existing UX (auto-filled prompt, Enter-to-send, live multi-agent session, `Shift+Down` switching) exactly as before this feature's fix work began.
+- A `prompt` containing `&`, `|`, `<`, `>`, `^`, `(`, `)`, `"`, and backslash-quote sequences never results in injected command execution — proven by both the unit tests and the real-execution proof test above.
+- The one documented, accepted exception: a `prompt` containing a substring exactly matching `%<existing-env-var-name>%` may have that substring expanded to the variable's value by cmd.exe before `claude` sees it (information disclosure only, never code execution).
+- No temp file is created for `prompt` delivery.
