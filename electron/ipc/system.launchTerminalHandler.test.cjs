@@ -113,7 +113,9 @@ describe('launch_in_terminal handler', () => {
     const innerCmd = args[args.length - 1];
 
     // Interactive claude, not the old temp-file/-p/stdin-redirect approach.
-    expect(innerCmd).toContain('claude "');
+    // Note: the escaped argument now starts with `^"`, not a bare `"` —
+    // Layer 2 (escapeForCmdExe) caret-escapes every quote Layer 1 added.
+    expect(innerCmd).toContain('claude ^"');
     expect(innerCmd).not.toContain('claude -p');
     expect(innerCmd).not.toMatch(/<\s*"/);
 
@@ -121,8 +123,12 @@ describe('launch_in_terminal handler', () => {
     const { escapePromptForCmdExe } = require('./system.cjs');
     expect(innerCmd).toContain(`claude ${escapePromptForCmdExe(dangerousPrompt)}`);
 
-    // Injection safety: the raw operator sequence is never left exposed
-    // outside the quoted span (the `"` before `& calc.exe` is escaped).
+    // Injection safety: the raw operator sequence is never left exposed —
+    // neither as a bare `"` quote-close-then-operator (Addendum 1's now-
+    // disproven assumption) nor even in Layer-1-only `\"`-escaped form,
+    // since Layer 2 caret-escapes every `"` and every `&` too.
     expect(innerCmd).not.toContain('done" & calc.exe');
+    expect(innerCmd).not.toContain('done\\" & calc.exe');
+    expect(innerCmd).toContain('^&');
   });
 });

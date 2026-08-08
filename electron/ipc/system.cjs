@@ -52,9 +52,17 @@ async function checkForUpdates(currentVersion) {
 
 // ─── prompt escaping for cmd.exe ────────────────────────────────────
 // Two parsers see the embedded prompt: claude's own argv reconstruction
-// (CommandLineToArgvW) and cmd.exe's /K command-line grammar. win32QuoteArg
-// solves the former; wrapping in that quote pair also keeps &|<>()^ inert to
-// cmd.exe, which only treats them as operators outside a quoted span.
+// (CommandLineToArgvW) and cmd.exe's /K command-line grammar. Two
+// escaping layers are required, one per parser: win32QuoteArg (Layer 1)
+// solves the former; escapeForCmdExe (Layer 2), applied on top of Layer
+// 1's output, solves the latter by caret-escaping every character —
+// including the `"` characters Layer 1 introduces — that cmd.exe's own
+// (backslash-unaware) quote-toggle scanner treats as significant. Layer 1
+// alone is NOT sufficient: cmd.exe does not understand `\"` as an escaped
+// quote, so a bare Layer-1 `\"` still closes cmd.exe's quoted span early,
+// letting `&`/`|`/`<`/`>` after it act as live operators. See
+// docs/superpowers/specs/2026-08-08-launch-terminal-command-injection-design.md
+// "Addendum 2 (correction)" for the empirical proof and full rationale.
 
 // Win32 CommandLineToArgvW-compatible quoting: wraps `arg` in a double-quoted
 // token that claude's own argv parser reconstructs back to the exact
@@ -84,25 +92,46 @@ function win32QuoteArg(arg) {
   return result;
 }
 
+// Layer 2: neutralize every cmd.exe-significant character in the ALREADY
+// Layer-1-quoted string, so cmd.exe's own (backslash-unaware) quote-toggle
+// scan never sees a raw operator or quote character at all — it only ever
+// sees `^X` sequences, which cmd.exe's single left-to-right parse pass
+// treats as "emit X literally into the current token, do not evaluate X for
+// special meaning," then strips the caret. This is required because
+// win32QuoteArg (Layer 1) alone is NOT sufficient: it encodes an embedded
+// `"` as `\"`, a convention CommandLineToArgvW (the *receiving* program's
+// argv parser) understands, but cmd.exe's own command-line grammar does
+// not — cmd.exe toggles its "am I inside quotes" state on every literal `"`
+// character it scans, unconditionally, regardless of preceding backslashes.
+// So a Layer-1-only `\"` still closes cmd.exe's quoted span early, from
+// cmd.exe's point of view, re-exposing `&`, `|`, `<`, `>` after it as live
+// operators (empirically reproduced: the attack prompt
+// `x" & echo pwned>marker &rem ` created a real marker file through
+// Layer-1-only escaping). Caret-escaping every `"` Layer 1 produced closes
+// that gap: cmd.exe's quote-toggle scan never fires for this token at all,
+// so there is no quote state to break out of. This is a lossless
+// round-trip — after cmd.exe strips the carets, the string handed to
+// CreateProcess for the child process is exactly Layer 1's output, which
+// claude's own CommandLineToArgvW then parses correctly.
+function escapeForCmdExe(argvQuoted) {
+  return argvQuoted.replace(/[\^"&|<>()%!]/g, (c) => '^' + c);
+}
+
 // Wraps `prompt` for safe embedding in a cmd.exe command line, as the
-// argument to `claude`. Strategy: quote via win32QuoteArg so the attacker
-// can never place an unescaped `"` that closes the quoted region early —
-// without an early close, `&`, `|`, `<`, `>`, `(`, `)` all stay inert
-// (cmd.exe does not treat them as operators inside a quoted span). `%` is
-// the one exception: cmd.exe expands `%VAR%` even inside quotes, so a
-// prompt containing e.g. `%USERNAME%` verbatim would have that substring
-// replaced with the real environment variable's value before `claude`
-// ever sees it. There is no character-level escape for `%` in cmd.exe
-// that doesn't corrupt the argument text itself — this is a known,
-// industry-accepted residual limitation (e.g. Python's list2cmdline has
-// the same gap). It is an information-disclosure risk (an env var's value
-// leaks into the prompt text claude receives), never code execution, so it
-// does not block this fix. Newlines are collapsed to spaces beforehand,
-// same as the pre-fix code, since a literal newline would terminate the
-// single-line command early regardless of quoting.
+// argument to `claude`. Two independent parsers see this text: (1)
+// claude's own argv parsing (CommandLineToArgvW), solved by win32QuoteArg
+// (Layer 1); (2) cmd.exe's own command-line grammar, which scans the
+// entire /K <command> string for `&`, `|`, `<`, `>`, `^`, `%`, `!`, `(`,
+// `)`, and `"` before claude ever runs — solved by escapeForCmdExe
+// (Layer 2) applied on top of Layer 1's output. Layer 2 also caret-escapes
+// `%` and `!`, which suppresses cmd.exe's %VAR%/delayed-expansion variable
+// substitution rather than accepting it as a known residual risk. Newlines
+// are collapsed to spaces beforehand, same as before, since a literal
+// newline would terminate the single-line command early regardless of
+// quoting.
 function escapePromptForCmdExe(prompt) {
   const singleLine = prompt.replace(/\r\n|\r|\n/g, ' ');
-  return win32QuoteArg(singleLine);
+  return escapeForCmdExe(win32QuoteArg(singleLine));
 }
 
 // ─── buildLaunchTerminalPlan ────────────────────────────────────────
@@ -323,4 +352,5 @@ module.exports = function registerSystem(getMainWindow) {
 module.exports.checkForUpdates = checkForUpdates;
 module.exports.buildLaunchTerminalPlan = buildLaunchTerminalPlan;
 module.exports.win32QuoteArg = win32QuoteArg;
+module.exports.escapeForCmdExe = escapeForCmdExe;
 module.exports.escapePromptForCmdExe = escapePromptForCmdExe;
