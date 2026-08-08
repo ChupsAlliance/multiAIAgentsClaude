@@ -5,7 +5,6 @@ const { execSync, spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const crypto = require('crypto');
 const { compareSemver } = require('../lib/compareSemver.cjs');
 
 const RELEASES_URL = 'https://api.github.com/repos/ChupsAlliance/multiAIAgentsClaude/releases/latest';
@@ -51,14 +50,70 @@ async function checkForUpdates(currentVersion) {
   }
 }
 
+// ─── prompt escaping for cmd.exe ────────────────────────────────────
+// Two parsers see the embedded prompt: claude's own argv reconstruction
+// (CommandLineToArgvW) and cmd.exe's /K command-line grammar. win32QuoteArg
+// solves the former; wrapping in that quote pair also keeps &|<>()^ inert to
+// cmd.exe, which only treats them as operators outside a quoted span.
+
+// Win32 CommandLineToArgvW-compatible quoting: wraps `arg` in a double-quoted
+// token that claude's own argv parser reconstructs back to the exact
+// original string, byte for byte. Same algorithm as Python's
+// subprocess.list2cmdline / MSDN's documented CommandLineToArgvW rules:
+// N backslashes immediately before a quote become 2N backslashes + an
+// escaped quote; N backslashes NOT before a quote are left as-is; the
+// quote character itself is always escaped by doubling its preceding
+// backslash count and adding one more.
+function win32QuoteArg(arg) {
+  let result = '"';
+  let backslashes = 0;
+  for (const ch of arg) {
+    if (ch === '\\') {
+      backslashes++;
+      continue;
+    }
+    if (ch === '"') {
+      result += '\\'.repeat(backslashes * 2 + 1) + '"';
+      backslashes = 0;
+      continue;
+    }
+    result += '\\'.repeat(backslashes) + ch;
+    backslashes = 0;
+  }
+  result += '\\'.repeat(backslashes * 2) + '"';
+  return result;
+}
+
+// Wraps `prompt` for safe embedding in a cmd.exe command line, as the
+// argument to `claude`. Strategy: quote via win32QuoteArg so the attacker
+// can never place an unescaped `"` that closes the quoted region early —
+// without an early close, `&`, `|`, `<`, `>`, `(`, `)` all stay inert
+// (cmd.exe does not treat them as operators inside a quoted span). `%` is
+// the one exception: cmd.exe expands `%VAR%` even inside quotes, so a
+// prompt containing e.g. `%USERNAME%` verbatim would have that substring
+// replaced with the real environment variable's value before `claude`
+// ever sees it. There is no character-level escape for `%` in cmd.exe
+// that doesn't corrupt the argument text itself — this is a known,
+// industry-accepted residual limitation (e.g. Python's list2cmdline has
+// the same gap). It is an information-disclosure risk (an env var's value
+// leaks into the prompt text claude receives), never code execution, so it
+// does not block this fix. Newlines are collapsed to spaces beforehand,
+// same as the pre-fix code, since a literal newline would terminate the
+// single-line command early regardless of quoting.
+function escapePromptForCmdExe(prompt) {
+  const singleLine = prompt.replace(/\r\n|\r|\n/g, ' ');
+  return win32QuoteArg(singleLine);
+}
+
 // ─── buildLaunchTerminalPlan ────────────────────────────────────────
 // Pure planning function for launch_in_terminal — validates projectPath
-// and returns everything the handler needs to spawn a terminal, with
-// zero user-controlled text embedded in any cmd.exe-parsed string.
+// and returns everything the handler needs to spawn a terminal.
 // projectPath reaches the terminal only via the `cwd` field (a structured
-// spawn() option, never shell-parsed); prompt reaches `claude` only via
-// tempFileContent, written to a code-generated temp file and redirected
-// into `claude -p`'s stdin.
+// spawn() option, never shell-parsed); prompt is embedded in innerCmd for
+// an interactive `claude "<prompt>"` session, made injection-safe by
+// escapePromptForCmdExe rather than by avoiding string embedding. innerCmd
+// deliberately starts with `set` (not a bare `"`) to dodge cmd /K's
+// outer-quote-stripping special case.
 function buildLaunchTerminalPlan(projectPath, prompt) {
   if (typeof projectPath !== 'string' || !projectPath.trim()) {
     throw new Error('projectPath is required');
@@ -70,13 +125,10 @@ function buildLaunchTerminalPlan(projectPath, prompt) {
     throw new Error(`Directory not found: ${projectPath}`);
   }
 
-  const tempFilePath = path.join(os.tmpdir(), `agent-teams-launch-${crypto.randomUUID()}.txt`);
-  const innerCmd = `set CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 && claude -p < "${tempFilePath}"`;
+  const innerCmd = `set CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 && claude ${escapePromptForCmdExe(prompt)}`;
 
   return {
     cwd: resolvedPath,
-    tempFilePath,
-    tempFileContent: prompt,
     wtArgs: ['/C', 'wt', '-d', '.', 'cmd', '/K', innerCmd],
     fallbackArgs: ['/C', 'start', 'cmd', '/K', innerCmd],
   };
@@ -221,20 +273,15 @@ module.exports = function registerSystem(getMainWindow) {
 
   // ─── launch_in_terminal ─────────────────────────────────────────
   // projectPath and prompt are both free-text, user-controlled values
-  // (see src/pages/PlaygroundPage.jsx) — neither is ever embedded into a
-  // cmd.exe-parsed string. buildLaunchTerminalPlan() validates projectPath
-  // and routes it through spawn()'s `cwd` option (a structured Win32 param,
-  // not shell-parsed text), and routes prompt through a code-generated temp
-  // file redirected into `claude -p`'s stdin. See
+  // (see src/pages/PlaygroundPage.jsx). projectPath reaches the terminal
+  // only via spawn()'s `cwd` option (a structured Win32 param, never
+  // shell-parsed); prompt is embedded as the argument to an interactive
+  // `claude "<prompt>"` session, made injection-safe by escapePromptForCmdExe
+  // inside buildLaunchTerminalPlan. See
   // docs/superpowers/specs/2026-08-08-launch-terminal-command-injection-design.md.
   ipcMain.handle('launch_in_terminal', async (_event, args) => {
     const { projectPath, prompt } = args;
     const plan = buildLaunchTerminalPlan(projectPath, prompt);
-
-    fs.writeFileSync(plan.tempFilePath, plan.tempFileContent, 'utf-8');
-    setTimeout(() => {
-      try { fs.unlinkSync(plan.tempFilePath); } catch {}
-    }, 30_000);
 
     // Try Windows Terminal first, fallback to cmd
     try {
@@ -275,3 +322,5 @@ module.exports = function registerSystem(getMainWindow) {
 
 module.exports.checkForUpdates = checkForUpdates;
 module.exports.buildLaunchTerminalPlan = buildLaunchTerminalPlan;
+module.exports.win32QuoteArg = win32QuoteArg;
+module.exports.escapePromptForCmdExe = escapePromptForCmdExe;

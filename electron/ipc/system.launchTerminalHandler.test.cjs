@@ -2,10 +2,12 @@
 //
 // Integration test for the launch_in_terminal ipcMain.handle wiring
 // (Critical issue #2, docs/critical-issues-review-2026-08-08.md). Confirms
-// the handler actually calls buildLaunchTerminalPlan (Task 1), writes the
-// prompt to the planned temp file, and spawns with the planned cwd/args —
-// i.e. that the safe plan is the thing that actually runs, not just that
-// the pure helper is correct in isolation.
+// the handler actually calls buildLaunchTerminalPlan and spawns with the
+// planned cwd/args — i.e. that the safe plan is the thing that actually
+// runs, not just that the pure helper is correct in isolation. The prompt
+// is now delivered inline as the argument to an interactive `claude
+// "<prompt>"` session (no temp file, no `-p`), made injection-safe by
+// escapePromptForCmdExe.
 //
 // Harness: fakes `electron`'s ipcMain.handle to record handlers into a Map
 // via the same require.cache-injection technique used in
@@ -97,7 +99,7 @@ describe('launch_in_terminal handler', () => {
     expect(spawnCalls.length).toBe(0);
   });
 
-  test('spawns with cwd set to the resolved projectPath and writes the prompt to the redirected temp file', async () => {
+  test('spawns with cwd set to the resolved projectPath and an interactive claude invocation — no temp file, injection-safe', async () => {
     const handler = freshSystem();
     const dangerousPrompt = 'build X & calc.exe & echo "done"';
 
@@ -109,14 +111,18 @@ describe('launch_in_terminal handler', () => {
     expect(opts.cwd).toBe(path.resolve(tmpDir));
 
     const innerCmd = args[args.length - 1];
-    const match = innerCmd.match(/< "([^"]+)"/);
-    expect(match).not.toBeNull();
-    const tempFilePath = match[1];
 
-    expect(fs.existsSync(tempFilePath)).toBe(true);
-    expect(fs.readFileSync(tempFilePath, 'utf-8')).toBe(dangerousPrompt);
-    expect(innerCmd).not.toContain('calc.exe');
+    // Interactive claude, not the old temp-file/-p/stdin-redirect approach.
+    expect(innerCmd).toContain('claude "');
+    expect(innerCmd).not.toContain('claude -p');
+    expect(innerCmd).not.toMatch(/<\s*"/);
 
-    fs.unlinkSync(tempFilePath);
+    // No temp file is written any more — handler no longer touches the fs.
+    const { escapePromptForCmdExe } = require('./system.cjs');
+    expect(innerCmd).toContain(`claude ${escapePromptForCmdExe(dangerousPrompt)}`);
+
+    // Injection safety: the raw operator sequence is never left exposed
+    // outside the quoted span (the `"` before `& calc.exe` is escaped).
+    expect(innerCmd).not.toContain('done" & calc.exe');
   });
 });
