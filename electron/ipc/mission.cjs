@@ -2256,7 +2256,12 @@ function readProcessStdout_launch(proc, missionId, sendToWindow, attemptCtx = {}
                 }
                 sendToWindow('mission:log', entry);
                 killClaudeProcess(proc);
-                setTimeout(() => retrySpawn(attempt + 1, attemptCtx.sessionId || null), delay);
+                sendToWindow('mission:retry-pending', { pending: true, attempt: attempt + 1, maxAttempts, delayMs: delay });
+                pendingRetryTimer = setTimeout(() => {
+                  pendingRetryTimer = null;
+                  sendToWindow('mission:retry-pending', { pending: false });
+                  retrySpawn(attempt + 1, attemptCtx.sessionId || null);
+                }, delay);
                 break;
               }
             }

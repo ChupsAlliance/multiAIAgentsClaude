@@ -143,4 +143,40 @@ describe('pendingRetryTimer — core wiring (Task 1)', () => {
   });
 });
 
+describe('retry-pending wrapping — readProcessStdout_launch dangling-question retry (line 2245)', () => {
+  let mission;
+
+  beforeEach(() => {
+    mission = freshMission();
+  });
+
+  test('schedules a cancellable pendingRetryTimer and emits mission:retry-pending when Lead is cut off mid-question', async () => {
+    const proc = makeFakeProc();
+    nextFakeProc = proc;
+
+    await ipcHandlers.get('launch_mission')(null, {
+      projectPath: '/tmp/proj', prompt: 'Build a thing', description: 'demo',
+      model: 'sonnet', executionMode: 'standard',
+    });
+
+    emitLine(proc, JSON.stringify({
+      type: 'assistant', session_id: 'sess-1',
+      message: { content: [{ type: 'text', text: '<<<QUESTION>>>\n{"from":"Lead","question":"Which appro' }] },
+    }));
+    await flush();
+    emitLine(proc, JSON.stringify({ type: 'result', result: '' }));
+    await flush();
+
+    expect(mission.__getMissionStateForTest().status).toBe('RetryingDanglingQuestion');
+    expect(mission.__getPendingRetryTimerForTest()).not.toBeNull();
+    expect(windowSendCalls.some(([ch, data]) =>
+      ch === 'mission:retry-pending' && data.pending === true && data.attempt === 2 && data.maxAttempts === 3
+    )).toBe(true);
+
+    await ipcHandlers.get('stop_mission')();
+
+    expect(mission.__getPendingRetryTimerForTest()).toBeNull();
+  });
+});
+
 export { freshMission, makeFakeProc, emitLine, emitErrLine, closeProc, flush, ipcHandlers, windowSendCalls, spawnCalls };
