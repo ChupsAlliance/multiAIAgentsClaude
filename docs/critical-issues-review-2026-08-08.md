@@ -9,10 +9,12 @@ Found via a 5-agent parallel review (Electron main/IPC/security, electron/lib, R
 - [x] Fixed
 
 ## 2. Command injection in "launch in terminal"
-- **Where:** `electron/ipc/system.cjs:191-207` (`launch_in_terminal`)
+- **Where:** `electron/ipc/system.cjs` (`launch_in_terminal`)
 - **Bug:** `projectPath` is concatenated unescaped into a shell command string (`cd /d "${projectPath}" && ... && claude "${safePrompt}"`), then passed through `cmd /C wt cmd /K ...`. Only `prompt` is partially escaped; `projectPath` is not, and it comes from a free-text `<input>` in `src/pages/PlaygroundPage.jsx:294-296`.
 - **Repro:** User types/pastes `C:\proj" & calc.exe & "` as the project path → arbitrary command execution via cmd.exe injection.
-- [x] Fixed
+- **Fix (commits `2a875a4..5771176`, design doc `docs/superpowers/specs/2026-08-08-launch-terminal-command-injection-design.md`):** `projectPath` now goes through `spawn`'s structured `cwd` option (never shell-parsed) with existence/directory validation. `prompt` is escaped with a two-layer scheme (`win32QuoteArg` for `claude`'s own argv parsing + `escapeForCmdExe` caret-escaping for `cmd.exe`'s own parser) — empirically verified against the real `cmd.exe` with dozens of attack payloads including unquoted injection targets.
+- **Known residual risk (accepted 2026-08-08):** if `claude` resolves via `PATH` to an npm-installed `.cmd`/`.bat` shim (e.g. `npm install -g @anthropic-ai/claude-code`, a common Windows install method) rather than a native `.exe`, the shim's `%*`-forwarding causes a second `cmd.exe` parse pass that strips the caret-escaping layer, re-exposing the injection. This is a structural limitation (same class as Node.js CVE-2024-27980 "BatBadBut") — no string-escaping scheme can survive an unknown number of `cmd.exe` parse passes. Not exploitable when `claude` is a native binary. Human partner reviewed and explicitly accepted this residual risk rather than implementing shim-detection; see `.superpowers/sdd/2026-08-08-launch-terminal-command-injection/progress.md` for the full decision trail.
+- [x] Fixed (substantially mitigated; npm-shim residual risk accepted, not eliminated)
 
 ## 3. QC/QA verdict parsing likely never matches real output
 - **Where:** `electron/lib/qcqa.cjs:99-105` (`parseQcQaVerdict`) vs. `claudeAdapter.buildLaunchArgs` (always appends `--output-format stream-json --verbose`)
