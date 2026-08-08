@@ -33,16 +33,25 @@ function parseQcQaVerdict(stdoutText, stage) {
  * into the agent's actual last plain-text answer, backend-agnostically.
  *
  * Runs each line through the given adapter `parseLine` and keeps the LAST
- * `kind:'text'` event's `.text`. Tool-use/system/result events never
- * overwrite the tracked text, so a tool call between the agent's reasoning
- * and its final verdict line does not clobber the real answer.
+ * `kind:'text'` event's `.text` ONLY from complete assistant messages
+ * (raw.type === 'assistant' for Claude, raw.type === 'assistant.message'
+ * for Copilot), NOT delta fragments. This avoids truncated verdicts when
+ * streaming text across multiple content_block_delta lines — the verdict
+ * text must come from the complete, full message event. Tool-use/system/
+ * result events never overwrite the tracked text, so a tool call between
+ * the agent's reasoning and its final verdict line does not clobber the
+ * real answer. Mirrors mission.cjs::extractAssistantText approach, which
+ * restricts to type === 'assistant' for the same reason.
  */
 function extractLastAssistantText(stdoutText, parseLine) {
   const lines = (stdoutText || '').split('\n').filter(Boolean);
   let lastText = null;
   for (const line of lines) {
     const ev = parseLine(line);
-    if (ev && ev.kind === 'text' && ev.text) lastText = ev.text;
+    if (ev && ev.kind === 'text' && ev.text && ev.raw &&
+        (ev.raw.type === 'assistant' || ev.raw.type === 'assistant.message')) {
+      lastText = ev.text;
+    }
   }
   return lastText || '';
 }

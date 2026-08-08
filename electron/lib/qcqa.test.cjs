@@ -166,6 +166,34 @@ describe('runQcQaCheck', () => {
     await expect(resultPromise).resolves.toEqual({ verdict: 'PASS' });
   });
 
+  test('ignores content_block_delta fragments appearing after the complete assistant message', async () => {
+    const fakeProc = makeFakeProc();
+    const spawnClaude = () => fakeProc;
+
+    const resultPromise = runQcQaCheck({
+      spawnClaude, parseLine: claudeAdapter.parseLine,
+      prompt: 'check task X', projectPath: '/tmp/proj',
+      model: 'claude-sonnet-5', stage: 'QC', timeoutMs: 5000,
+    });
+
+    // Complete assistant message with the verdict.
+    const completeLine = claudeTextLine('[QC] VERDICT: PASS');
+    // A trailing delta fragment that does NOT contain the verdict (simulating
+    // a message stream that was interrupted or incomplete). If the old logic
+    // were in place (tracking ANY kind:'text'), this would clobber the verdict.
+    const deltaLine = JSON.stringify({
+      type: 'content_block_delta',
+      delta: { text: 'some trailing text' },
+    });
+    fakeProc.stdout.emit('data', Buffer.from(completeLine + '\n'));
+    fakeProc.stdout.emit('data', Buffer.from(deltaLine + '\n'));
+    fakeProc.emit('close', 0);
+
+    // Should resolve PASS because the extraction correctly restricted
+    // to the complete message, not the trailing delta.
+    await expect(resultPromise).resolves.toEqual({ verdict: 'PASS' });
+  });
+
   test('extracts the verdict from real Copilot stream-json shape (delta then full message)', async () => {
     const fakeProc = makeFakeProc();
     const spawnClaude = () => fakeProc;
