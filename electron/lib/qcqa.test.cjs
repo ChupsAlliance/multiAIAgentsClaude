@@ -145,6 +145,43 @@ describe('runQcQaCheck', () => {
     expect(fakeProc.killed).toBe(true);
   });
 
+  test('resolves FAIL when the subprocess emits an error instead of closing', async () => {
+    const fakeProc = makeFakeProc();
+    const spawnClaude = () => fakeProc;
+
+    const resultPromise = runQcQaCheck({
+      spawnClaude, parseLine: claudeAdapter.parseLine,
+      prompt: 'check task X', projectPath: '/tmp/proj',
+      model: 'claude-sonnet-5', stage: 'QC', timeoutMs: 5000,
+    });
+
+    fakeProc.emit('error', new Error('spawn ENOENT'));
+
+    await expect(resultPromise).resolves.toEqual({
+      verdict: 'FAIL',
+      responsibleAgent: null,
+      reason: 'QC/QA process error: spawn ENOENT',
+    });
+  });
+
+  test('an error emitted after close is ignored (no double-resolve)', async () => {
+    const fakeProc = makeFakeProc();
+    const spawnClaude = () => fakeProc;
+
+    const resultPromise = runQcQaCheck({
+      spawnClaude, parseLine: claudeAdapter.parseLine,
+      prompt: 'check task X', projectPath: '/tmp/proj',
+      model: 'claude-sonnet-5', stage: 'QC', timeoutMs: 5000,
+    });
+
+    fakeProc.stdout.emit('data', Buffer.from(claudeTextLine('[QC] VERDICT: PASS') + '\n'));
+    fakeProc.emit('close', 0);
+    // Emitting 'error' after 'close' must not throw or change the already-resolved result.
+    expect(() => fakeProc.emit('error', new Error('late error'))).not.toThrow();
+
+    await expect(resultPromise).resolves.toEqual({ verdict: 'PASS' });
+  });
+
   test('a tool_use turn before the verdict text does not clobber the extracted verdict', async () => {
     const fakeProc = makeFakeProc();
     const spawnClaude = () => fakeProc;

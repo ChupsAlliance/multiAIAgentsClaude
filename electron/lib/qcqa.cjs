@@ -126,6 +126,17 @@ function runQcQaCheck({ spawnFn, buildArgs, promptViaStdin, parseLine, spawnClau
 
     proc.stdout.on('data', (chunk) => { stdoutText += chunk.toString('utf8'); });
 
+    proc.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({
+        verdict: 'FAIL',
+        responsibleAgent: null,
+        reason: `QC/QA process error: ${err.message}`,
+      });
+    });
+
     proc.on('close', () => {
       if (settled) return;
       settled = true;
