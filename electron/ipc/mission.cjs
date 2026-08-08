@@ -3073,7 +3073,12 @@ function watchProcessExit_deploy(proc, missionId, sendToWindow, retryInfo = null
           `⚠ Gặp lỗi tạm thời (rate limit/API), đang thử lại lần ${attempt}/${maxAttempts} sau ${delay / 1000}s...`, 'info');
         missionState.log.push(entry);
         sendToWindow('mission:log', entry);
-        setTimeout(() => retrySpawn(attempt + 1, attemptCtx.sessionId || null), delay);
+        sendToWindow('mission:retry-pending', { pending: true, attempt: attempt + 1, maxAttempts, delayMs: delay });
+        pendingRetryTimer = setTimeout(() => {
+          pendingRetryTimer = null;
+          sendToWindow('mission:retry-pending', { pending: false });
+          retrySpawn(attempt + 1, attemptCtx.sessionId || null);
+        }, delay);
         return;
       }
       if (attempt >= maxAttempts && isTransientApiError(combinedText)) {

@@ -261,4 +261,47 @@ describe('retry-pending wrapping — readProcessStdout_deploy dangling-question 
   });
 });
 
+describe('retry-pending wrapping — watchProcessExit_deploy transient-error retry (line 3047)', () => {
+  let mission;
+
+  beforeEach(() => {
+    mission = freshMission();
+  });
+
+  function seedReviewPlanState() {
+    mission.__setMissionStateForTest({
+      id: 'm1', status: 'ReviewPlan', phase: 'ReviewPlan',
+      execution_mode: 'standard', backend: 'claude', permission_mode: 'auto',
+      project_path: '/tmp/proj',
+      agents: [{ name: 'Lead', status: 'Idle', model: 'sonnet' }],
+      tasks: [], log: [], file_changes: [], raw_output: [],
+    });
+  }
+
+  test('schedules a cancellable pendingRetryTimer on a transient-error exit during deploy and cancels it via reset_mission', async () => {
+    seedReviewPlanState();
+    const proc = makeFakeProc();
+    nextFakeProc = proc;
+
+    await ipcHandlers.get('deploy_mission')(null, {
+      agents: [{ name: 'Lead', model: 'sonnet' }], tasks: [], agentPrompts: {},
+    });
+
+    emitErrLine(proc, '503 service unavailable');
+    await flush();
+    closeProc(proc, 1);
+    await flush();
+
+    expect(mission.__getPendingRetryTimerForTest()).not.toBeNull();
+    expect(windowSendCalls.some(([ch, data]) =>
+      ch === 'mission:retry-pending' && data.pending === true && data.attempt === 2 && data.delayMs === 30000
+    )).toBe(true);
+
+    await ipcHandlers.get('reset_mission')();
+
+    expect(mission.__getPendingRetryTimerForTest()).toBeNull();
+    expect(mission.__getMissionStateForTest()).toBeNull();
+  });
+});
+
 export { freshMission, makeFakeProc, emitLine, emitErrLine, closeProc, flush, ipcHandlers, windowSendCalls, spawnCalls };
