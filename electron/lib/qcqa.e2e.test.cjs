@@ -30,7 +30,12 @@ const CLI_TIMEOUT_MS = 60_000;
 function isClaudeCliAvailable() {
   try {
     const useShell = process.platform === 'win32';
-    execFileSync('claude', ['--version'], { stdio: 'ignore', shell: useShell });
+    execFileSync('claude', ['--version'], {
+      stdio: 'ignore',
+      shell: useShell,
+      timeout: 15_000,
+      windowsHide: true,
+    });
     return true;
   } catch (_) {
     return false;
