@@ -110,3 +110,92 @@ test('a completed update with no description still matches a pending_qa task via
   expect(result.current.missionState.tasks).toHaveLength(1)
   expect(result.current.missionState.tasks[0].status).toBe('completed')
 })
+
+test('stop() shows a confirm dialog and does not call stop_mission when a retry is pending and the user cancels', async () => {
+  const { invoke } = await import('@tauri-apps/api/core')
+  invoke.mockClear()
+  const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+
+  const { result } = renderHook(() => useMission())
+  await act(async () => { await Promise.resolve() })
+
+  act(() => {
+    emit('mission:retry-pending', { pending: true, attempt: 2, maxAttempts: 3, delayMs: 60000 })
+  })
+
+  await act(async () => {
+    await result.current.stop()
+  })
+
+  expect(confirmSpy).toHaveBeenCalledWith(
+    'Mission đang tự động thử lại lần 2/3 sau lỗi tạm thời. Nếu dừng ngay bây giờ, lần thử lại sẽ bị huỷ. Bạn có chắc chắn muốn dừng mission?'
+  )
+  expect(invoke).not.toHaveBeenCalledWith('stop_mission')
+
+  confirmSpy.mockRestore()
+})
+
+test('stop() calls stop_mission after the user confirms, when a retry is pending', async () => {
+  const { invoke } = await import('@tauri-apps/api/core')
+  invoke.mockClear()
+  const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+  const { result } = renderHook(() => useMission())
+  await act(async () => { await Promise.resolve() })
+
+  act(() => {
+    emit('mission:retry-pending', { pending: true, attempt: 1, maxAttempts: 3, delayMs: 30000 })
+  })
+
+  await act(async () => {
+    await result.current.stop()
+  })
+
+  expect(confirmSpy).toHaveBeenCalled()
+  expect(invoke).toHaveBeenCalledWith('stop_mission')
+
+  confirmSpy.mockRestore()
+})
+
+test('stop() does not show a confirm dialog when no retry is pending', async () => {
+  const { invoke } = await import('@tauri-apps/api/core')
+  invoke.mockClear()
+  const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+  const { result } = renderHook(() => useMission())
+  await act(async () => { await Promise.resolve() })
+
+  await act(async () => {
+    await result.current.stop()
+  })
+
+  expect(confirmSpy).not.toHaveBeenCalled()
+  expect(invoke).toHaveBeenCalledWith('stop_mission')
+
+  confirmSpy.mockRestore()
+})
+
+test('a mission:status event clears a pending-retry flag, so a later stop() does not prompt', async () => {
+  const { invoke } = await import('@tauri-apps/api/core')
+  invoke.mockClear()
+  const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+  const { result } = renderHook(() => useMission())
+  await act(async () => { await Promise.resolve() })
+
+  act(() => {
+    emit('mission:retry-pending', { pending: true, attempt: 1, maxAttempts: 3, delayMs: 30000 })
+  })
+  act(() => {
+    emit('mission:status', { status: 'running' })
+  })
+
+  await act(async () => {
+    await result.current.stop()
+  })
+
+  expect(confirmSpy).not.toHaveBeenCalled()
+  expect(invoke).toHaveBeenCalledWith('stop_mission')
+
+  confirmSpy.mockRestore()
+})

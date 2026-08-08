@@ -24,6 +24,8 @@ export function useMission() {
   const [mockupInfo, setMockupInfo] = useState(null)
   const [recoverableMission, setRecoverableMission] = useState(null)
   const [isRecording, setIsRecording] = useState(false)
+  const [isRetryPending, setIsRetryPending] = useState(false)
+  const [retryInfo, setRetryInfo] = useState(null) // { attempt, maxAttempts } | null
   const unlistenersRef = useRef([])
   const { toast } = useToast()
 
@@ -171,6 +173,9 @@ export function useMission() {
       const unlisteners = await Promise.all([
         // ── Status events (low frequency — apply immediately) ──
         listen('mission:status', (e) => {
+          // Any status transition supersedes a pending-retry signal — safety
+          // net against ever missing a cancel and showing a stale flag.
+          setIsRetryPending(false)
           const { status } = e.payload
 
           if (status === 'reset') {
@@ -566,6 +571,13 @@ export function useMission() {
             }
           })
         }),
+
+        // ── Retry-pending signal (backend timer scheduled/fired) ──
+        listen('mission:retry-pending', (e) => {
+          const { pending, attempt, maxAttempts } = e.payload
+          setIsRetryPending(!!pending)
+          setRetryInfo(pending ? { attempt, maxAttempts } : null)
+        }),
       ])
 
       unlistenersRef.current = unlisteners
@@ -778,6 +790,15 @@ export function useMission() {
   }, [toast])
 
   const stop = useCallback(async () => {
+    if (isRetryPending) {
+      const attempt = retryInfo?.attempt ?? '?'
+      const maxAttempts = retryInfo?.maxAttempts ?? '?'
+      const confirmed = window.confirm(
+        `Mission đang tự động thử lại lần ${attempt}/${maxAttempts} sau lỗi tạm thời. Nếu dừng ngay bây giờ, lần thử lại sẽ bị huỷ. Bạn có chắc chắn muốn dừng mission?`
+      )
+      if (!confirmed) return
+    }
+
     // Recording phải trọn vẹn từ đầu đến cuối — nếu Stop giữa chừng khi đang ghi,
     // tự động huỷ bản ghi (không lưu bản ghi dang dở) và báo cho user.
     if (isRecording) {
@@ -798,7 +819,7 @@ export function useMission() {
     setIsRunning(false)
     setPlanReady(null)
     setMockupInfo(null)
-  }, [toast, clearPlanningTimer, isRecording])
+  }, [toast, clearPlanningTimer, isRecording, isRetryPending, retryInfo])
 
   const reset = useCallback(async () => {
     await invoke('reset_mission').catch(() => {})
