@@ -51,10 +51,10 @@ test('mission:question followed by mission:answer-sent produces one qa_events en
   await waitFor(() => expect(result.current.loading).toBe(false))
 
   act(() => {
-    emit('mission:question', { questions: [{ question: 'Dùng React hay Vue?' }] })
+    emit('replay:mission:question', { questions: [{ question: 'Dùng React hay Vue?' }] })
   })
   act(() => {
-    emit('mission:answer-sent', { answers: [{ question_index: 0, answer: 'React' }] })
+    emit('replay:mission:answer-sent', { answers: [{ question_index: 0, answer: 'React' }] })
   })
 
   await waitFor(() => expect(result.current.replayMissionState.qa_events).toHaveLength(1))
@@ -69,7 +69,7 @@ test('mission:answer-sent without a prior mission:question still produces an ent
   await waitFor(() => expect(result.current.loading).toBe(false))
 
   act(() => {
-    emit('mission:answer-sent', { answers: [{ question_index: 0, answer: 'OK' }] })
+    emit('replay:mission:answer-sent', { answers: [{ question_index: 0, answer: 'OK' }] })
   })
 
   await waitFor(() => expect(result.current.replayMissionState.qa_events).toHaveLength(1))
@@ -84,7 +84,7 @@ test('mission:mockup produces one mockup_events entry with title', async () => {
   await waitFor(() => expect(result.current.loading).toBe(false))
 
   act(() => {
-    emit('mission:mockup', { title: 'Trang đăng nhập v2', spec: '...', url: 'http://localhost:1', port: 1 })
+    emit('replay:mission:mockup', { title: 'Trang đăng nhập v2', spec: '...', url: 'http://localhost:1', port: 1 })
   })
 
   await waitFor(() => expect(result.current.replayMissionState.mockup_events).toHaveLength(1))

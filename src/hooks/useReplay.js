@@ -7,8 +7,8 @@ import { useToast } from './useToast'
 // Quản lý toàn bộ vòng đời phát lại (replay) một bản ghi mission.
 // Gọi replay_start/pause/resume/seek/stop, lắng nghe replay:progress
 // để cập nhật currentMs/eventIndex, và lắng nghe lại các kênh mission
-// gốc (mission:log, mission:agent-spawned, ...) để dựng lại một bản
-// `replayMissionState` riêng biệt — cùng format với missionState thật
+// gốc (replay:mission:log, replay:mission:agent-spawned, ...) để dựng lại
+// một bản `replayMissionState` riêng biệt — cùng format với missionState thật
 // để có thể tái sử dụng MissionDashboard/PlanningStream.
 //
 // IPC contract (electron/ipc backend — recordingStore.cjs/replayEngine.cjs):
@@ -18,8 +18,10 @@ import { useToast } from './useToast'
 //   invoke('replay_seek', { positionMs })
 //   invoke('replay_stop')
 //   listen('replay:progress', { currentMs, totalMs, eventIndex })
-//   + replayed original channels: mission:log, mission:agent-spawned, mission:task-update,
-//     mission:file-change, mission:agent-message, mission:status, mission:agent-stuck
+//   + replayed business events on prefixed channels: replay:mission:log, replay:mission:agent-spawned,
+//     replay:mission:task-update, replay:mission:file-change, replay:mission:agent-message,
+//     replay:mission:status, replay:mission:agent-stuck, etc. — distinct from live mission:* namespace
+//     listened to by useMission, preventing replay events from leaking into live mission state.
 // ─────────────────────────────────────────────────────────────────
 
 const EMPTY_STATE = () => ({
@@ -269,7 +271,7 @@ export function useReplay(recordingId) {
         'mission:question', 'mission:answer-sent', 'mission:mockup', 'mission:plan-ready',
       ]
       const unlisteners = await Promise.all([
-        ...channels.map(ch => listen(ch, (e) => applyEvent(ch, e.payload))),
+        ...channels.map(ch => listen(`replay:${ch}`, (e) => applyEvent(ch, e.payload))),
         listen('replay:progress', (e) => {
           const { currentMs: cur, totalMs: tot, eventIndex } = e.payload || {}
           if (typeof cur === 'number') setCurrentMs(cur)

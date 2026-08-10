@@ -43,7 +43,7 @@ test('agent-spawned reset sets phase to Planning', async () => {
   await waitFor(() => expect(result.current.loading).toBe(false))
 
   act(() => {
-    emit('mission:agent-spawned', { agent_name: 'Lead', role: 'Coordinator', reset: true, timestamp: 1 })
+    emit('replay:mission:agent-spawned', { agent_name: 'Lead', role: 'Coordinator', reset: true, timestamp: 1 })
   })
 
   await waitFor(() => expect(result.current.replayMissionState.phase).toBe('Planning'))
@@ -54,10 +54,10 @@ test('plan-ready sets phase to ReviewPlan and populates replayPlanReady', async 
   await waitFor(() => expect(result.current.loading).toBe(false))
 
   act(() => {
-    emit('mission:agent-spawned', { agent_name: 'Lead', role: 'Coordinator', reset: true, timestamp: 1 })
+    emit('replay:mission:agent-spawned', { agent_name: 'Lead', role: 'Coordinator', reset: true, timestamp: 1 })
   })
   act(() => {
-    emit('mission:plan-ready', {
+    emit('replay:mission:plan-ready', {
       agents: [{ name: 'Dev', role: 'Developer' }],
       tasks: [{ id: 't1', title: 'Build it', agent: 'Dev' }],
       mission_context: 'ctx',
@@ -77,12 +77,12 @@ test('plan-ready clears any pending mockupInfo', async () => {
   await waitFor(() => expect(result.current.loading).toBe(false))
 
   act(() => {
-    emit('mission:mockup', { title: 'Login v2', url: 'http://localhost:1' })
+    emit('replay:mission:mockup', { title: 'Login v2', url: 'http://localhost:1' })
   })
   await waitFor(() => expect(result.current.mockupInfo).toEqual({ title: 'Login v2', url: 'http://localhost:1' }))
 
   act(() => {
-    emit('mission:plan-ready', { agents: [], tasks: [], mission_context: null })
+    emit('replay:mission:plan-ready', { agents: [], tasks: [], mission_context: null })
   })
 
   await waitFor(() => expect(result.current.mockupInfo).toBe(null))
@@ -93,12 +93,12 @@ test('completed status while ReviewPlan does not change phase', async () => {
   await waitFor(() => expect(result.current.loading).toBe(false))
 
   act(() => {
-    emit('mission:plan-ready', { agents: [], tasks: [], mission_context: null })
+    emit('replay:mission:plan-ready', { agents: [], tasks: [], mission_context: null })
   })
   await waitFor(() => expect(result.current.replayMissionState.phase).toBe('ReviewPlan'))
 
   act(() => {
-    emit('mission:status', { status: 'completed' })
+    emit('replay:mission:status', { status: 'completed' })
   })
 
   expect(result.current.replayMissionState.phase).toBe('ReviewPlan')
@@ -109,12 +109,12 @@ test('stopped status while ReviewPlan moves phase to Done', async () => {
   await waitFor(() => expect(result.current.loading).toBe(false))
 
   act(() => {
-    emit('mission:plan-ready', { agents: [], tasks: [], mission_context: null })
+    emit('replay:mission:plan-ready', { agents: [], tasks: [], mission_context: null })
   })
   await waitFor(() => expect(result.current.replayMissionState.phase).toBe('ReviewPlan'))
 
   act(() => {
-    emit('mission:status', { status: 'stopped' })
+    emit('replay:mission:status', { status: 'stopped' })
   })
 
   await waitFor(() => expect(result.current.replayMissionState.phase).toBe('Done'))
@@ -125,12 +125,12 @@ test('first task-update after ReviewPlan moves phase to Executing', async () => 
   await waitFor(() => expect(result.current.loading).toBe(false))
 
   act(() => {
-    emit('mission:plan-ready', { agents: [], tasks: [], mission_context: null })
+    emit('replay:mission:plan-ready', { agents: [], tasks: [], mission_context: null })
   })
   await waitFor(() => expect(result.current.replayMissionState.phase).toBe('ReviewPlan'))
 
   act(() => {
-    emit('mission:task-update', { agent: 'Dev', description: 'Build it', status: 'in_progress', timestamp: 5 })
+    emit('replay:mission:task-update', { agent: 'Dev', description: 'Build it', status: 'in_progress', timestamp: 5 })
   })
 
   await waitFor(() => expect(result.current.replayMissionState.phase).toBe('Executing'))
@@ -141,15 +141,15 @@ test('completed status while Executing moves phase to Done', async () => {
   await waitFor(() => expect(result.current.loading).toBe(false))
 
   act(() => {
-    emit('mission:plan-ready', { agents: [], tasks: [], mission_context: null })
+    emit('replay:mission:plan-ready', { agents: [], tasks: [], mission_context: null })
   })
   act(() => {
-    emit('mission:task-update', { agent: 'Dev', description: 'Build it', status: 'in_progress', timestamp: 5 })
+    emit('replay:mission:task-update', { agent: 'Dev', description: 'Build it', status: 'in_progress', timestamp: 5 })
   })
   await waitFor(() => expect(result.current.replayMissionState.phase).toBe('Executing'))
 
   act(() => {
-    emit('mission:status', { status: 'completed' })
+    emit('replay:mission:status', { status: 'completed' })
   })
 
   await waitFor(() => expect(result.current.replayMissionState.phase).toBe('Done'))
@@ -160,13 +160,13 @@ test('pendingQuestion is set by mission:question and cleared by mission:answer-s
   await waitFor(() => expect(result.current.loading).toBe(false))
 
   act(() => {
-    emit('mission:question', { questions: [{ question: 'Dùng React hay Vue?' }] })
+    emit('replay:mission:question', { questions: [{ question: 'Dùng React hay Vue?' }] })
   })
   await waitFor(() => expect(result.current.pendingQuestion).not.toBe(null))
   expect(result.current.pendingQuestion.questions).toEqual([{ question: 'Dùng React hay Vue?' }])
 
   act(() => {
-    emit('mission:answer-sent', { answers: [{ question_index: 0, answer: 'React' }] })
+    emit('replay:mission:answer-sent', { answers: [{ question_index: 0, answer: 'React' }] })
   })
 
   await waitFor(() => expect(result.current.pendingQuestion).toBe(null))
@@ -179,7 +179,7 @@ test('mockupInfo is set by mission:mockup and mockup_events history still accumu
   await waitFor(() => expect(result.current.loading).toBe(false))
 
   act(() => {
-    emit('mission:mockup', { title: 'Trang đăng nhập v2', url: 'http://localhost:1' })
+    emit('replay:mission:mockup', { title: 'Trang đăng nhập v2', url: 'http://localhost:1' })
   })
 
   await waitFor(() => expect(result.current.mockupInfo).toEqual({ title: 'Trang đăng nhập v2', url: 'http://localhost:1' }))
