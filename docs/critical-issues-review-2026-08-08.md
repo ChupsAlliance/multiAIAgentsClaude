@@ -34,7 +34,8 @@ Found via a 5-agent parallel review (Electron main/IPC/security, electron/lib, R
 - **Where:** `src/components/mission/ExportDropdown.jsx:61,96`, `src/components/mission/PlanVersionHistory.jsx:15,34`, `src/components/mission/PlanDocument.jsx:454`
 - **Bug:** These call `window.electron.ipcRenderer.invoke(...)`, but the preload script (`electron/preload.cjs:49`) only exposes `window.electronAPI` (`.invoke`/`.on`). `window.electron` is never defined.
 - **Effect:** "Export Markdown/PDF" always fails (caught, shows a failure toast). Plan version history (`PlanVersionHistory.jsx`) silently renders an always-empty list — rollback is impossible. `PlanDocument.jsx:454` uses optional chaining, so manual-edit versions are silently never persisted (no error shown at all). Backend IPC handlers (`save_plan_version`, `get_plan_versions`, `export_plan_markdown`, `export_plan_pdf`) are correctly whitelisted — this is a pure frontend wiring bug.
-- [ ] Fixed
+- **Fix (design doc `docs/superpowers/specs/2026-08-10-export-plan-version-wiring-design.md`, plan `docs/superpowers/plans/2026-08-10-export-plan-version-wiring.md`):** All three call sites now use the `invoke()` helper from `@tauri-apps/api/core` (`src/lib/tauri-shim/core.js`), matching the dominant IPC convention already used by 15+ other files in this codebase, instead of the nonexistent `window.electron.ipcRenderer.invoke(...)` global. `PlanDocument.jsx:454` also dropped its now-unnecessary `?.`/`?.` optional chaining, since `invoke()` is a plain always-callable function. No backend, preload, or shim changes. Verified with new component tests: `ExportDropdown.test.jsx`, `PlanVersionHistory.test.jsx`, `PlanDocument.test.jsx`.
+- [x] Fixed
 
 ## 6. Replay events leak into the live mission hook
 - **Where:** `src/hooks/useMission.js` (whole file) + `src/hooks/useReplay.js:11-23,271`
