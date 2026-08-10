@@ -176,7 +176,7 @@ module.exports = function registerSystem(_getMainWindow) {
       });
       return output.trim();
     } catch (e) {
-      throw new Error(e.stderr || 'Claude CLI not found. Please install Claude Code first.');
+      throw new Error(e.stderr || 'Claude CLI not found. Please install Claude Code first.', { cause: e });
     }
   });
 
@@ -342,7 +342,7 @@ module.exports = function registerSystem(_getMainWindow) {
       const parsed = JSON.parse(json);
       fs.writeFileSync(LAYOUT_FILE, JSON.stringify(parsed), 'utf-8');
     } catch (err) {
-      throw new Error(`Failed to save office layout: ${err.message}`);
+      throw new Error(`Failed to save office layout: ${err.message}`, { cause: err });
     }
   });
 

@@ -78,7 +78,7 @@ function removeIndexEntry(recordingId) {
 // ─────────────────────────────────────────────────────────────────
 function rebuildIndex() {
   const dir = getRecordingsDir();
-  let files = [];
+  let files;
   try {
     files = fs.readdirSync(dir).filter(f => f.endsWith('.json') && f !== 'index.json');
   } catch {
@@ -150,7 +150,7 @@ function getRecording(recordingId) {
 // ─────────────────────────────────────────────────────────────────
 function deleteRecording(recordingId) {
   const filePath = getRecordingPath(recordingId);
-  let existed = false;
+  let existed;
   try {
     fs.unlinkSync(filePath);
     existed = true;

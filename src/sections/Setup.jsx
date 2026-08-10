@@ -9,7 +9,7 @@ const settingsJson = `{
 }`
 
 const settingsPath = `# Windows
-%USERPROFILE%\.claude\settings.json
+%USERPROFILE%\\.claude\\settings.json
 
 # macOS / Linux
 ~/.claude/settings.json`

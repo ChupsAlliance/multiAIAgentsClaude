@@ -127,6 +127,7 @@ function now() {
 // strip_ansi — remove ANSI escape sequences
 // ─────────────────────────────────────────────────────────────────
 function stripAnsi(s) {
+  // eslint-disable-next-line no-control-regex -- \x1b deliberately matches the ANSI escape control character to strip terminal color codes
   return s.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
 }
 
@@ -4596,7 +4597,7 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
     );
 
     // Find all semver-formatted subdirectories (e.g. "5.0.7")
-    let versions = [];
+    let versions;
     try {
       versions = fs.readdirSync(superpowersBase)
         .filter(d => /^\d+\.\d+\.\d+$/.test(d))
