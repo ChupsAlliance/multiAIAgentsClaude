@@ -27,7 +27,7 @@ export default function App() {
   const location = useLocation()
   const [checked, setChecked] = useState(false)
   const [appVersion, setAppVersion] = useState(null)
-  const { showChangelog, shouldAutoShow, openChangelog, closeChangelog, markSeen, updateInfo } = useChangelog(appVersion)
+  const { showChangelog, shouldAutoShow, openChangelog, closeChangelog, updateInfo } = useChangelog(appVersion)
 
   // Auto-show changelog on first visit after version update
   useEffect(() => {

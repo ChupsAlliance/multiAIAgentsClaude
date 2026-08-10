@@ -163,7 +163,7 @@ function buildLaunchTerminalPlan(projectPath, prompt) {
   };
 }
 
-module.exports = function registerSystem(getMainWindow) {
+module.exports = function registerSystem(_getMainWindow) {
   const userprofile = os.homedir();
 
   // ─── check_claude_available ─────────────────────────────────────

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Eye, Edit3, ChevronDown, ChevronRight, Play, ArrowLeft, Save, FolderOpen } from 'lucide-react'
 import { buildAgentPrompt } from '../../utils/planMarkdown'
 
-function PromptCard({ agent, prompt, onEdit, onSave }) {
+function PromptCard({ agent, prompt, onEdit: _onEdit, onSave }) {
   const [expanded, setExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState(prompt)

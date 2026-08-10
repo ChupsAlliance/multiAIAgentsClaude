@@ -9,7 +9,7 @@
  *   const { isDragging } = useTauriFileDrop(handleDrop)
  *   // handleDrop receives string[] of file paths
  */
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 
 export function useTauriFileDrop(onDrop) {

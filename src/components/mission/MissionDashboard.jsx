@@ -41,21 +41,13 @@ export const MissionDashboard = memo(function MissionDashboard({ state, isRunnin
     document.body.style.userSelect = 'none'
   }, [sidebarWidth])
 
-  const [officePanelWidth, setOfficePanelWidth] = useState(() => {
+  const [_officePanelWidth, setOfficePanelWidth] = useState(() => {
     const saved = localStorage.getItem('office-panel-ratio')
     return saved ? parseInt(saved, 10) : 420
   })
   const isOfficeDragging = useRef(false)
   const officeStartX = useRef(0)
   const officeStartWidth = useRef(0)
-
-  const onOfficeDragStart = useCallback((e) => {
-    isOfficeDragging.current = true
-    officeStartX.current = e.clientX
-    officeStartWidth.current = officePanelWidth
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
-  }, [officePanelWidth])
 
   useEffect(() => {
     const onMove = (e) => {

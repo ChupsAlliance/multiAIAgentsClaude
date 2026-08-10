@@ -6,9 +6,9 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-
 import { CSS } from '@dnd-kit/utilities'
 import {
   Cpu, Rocket, ChevronDown, ChevronUp, Zap, Brain, Coins,
-  Wrench, MessageSquare, Info, Plus, Trash2, X, GripVertical,
+  MessageSquare, Info, Plus, Trash2, X, GripVertical,
   UserPlus, PackagePlus, FileText, Upload, Layers, Check, FolderOpen,
-  RefreshCw, ListTodo, Edit3, AlertCircle, GitFork
+  RefreshCw, ListTodo, AlertCircle, GitFork
 } from 'lucide-react'
 import { SYSTEM_INFO } from '../../data/promptWrapper'
 import { PlanDependencyGraph } from './PlanDependencyGraph'
@@ -995,7 +995,6 @@ export function PlanReview({ agents = [], tasks = [], onDeploy, onCancel, onRepl
   const draggedTask = activeId ? localTasks.find(t => t.id === activeId) : null
   const canDeploy = localAgents.length > 0 && localTasks.some(t => t.assigned_agent)
   const tasksWithoutDetail = localTasks.filter(t => !t.detail?.trim())
-  const editingTask = editingDetailId ? localTasks.find(t => t.id === editingDetailId) : null
 
   useAppHotkeys({
     scope: 'plan-review',

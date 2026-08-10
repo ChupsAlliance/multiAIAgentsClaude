@@ -902,7 +902,7 @@ export function useMission() {
         console.error('[answerQuestion] Error:', result)
       }
       setPendingQuestions(null)
-    } catch (err) {
+    } catch {
       toast.warn('Không gửi được câu trả lời', 'Thử lại hoặc reload trang')
     }
   }, [toast])

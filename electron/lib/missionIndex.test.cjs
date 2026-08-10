@@ -134,7 +134,7 @@ describe('enqueueChunk / flushPending', () => {
 });
 
 describe('queryIndex', () => {
-  const { enqueueChunk, flushPending, queryIndex, vectorsPathFor } = require('./missionIndex.cjs');
+  const { queryIndex, vectorsPathFor } = require('./missionIndex.cjs');
   const missionId = 'mission-test-query-' + Date.now();
   const filePath = vectorsPathFor(missionId);
 

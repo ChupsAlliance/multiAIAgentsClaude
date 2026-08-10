@@ -155,7 +155,7 @@ async function getMissionDetail(args) {
   return JSON.parse(fs.readFileSync(snapshotPath, 'utf-8'));
 }
 
-module.exports = function registerHistory(getMainWindow) {
+module.exports = function registerHistory(_getMainWindow) {
   const userprofile = os.homedir();
   const historyPath = path.join(userprofile, '.claude', 'agent-teams-history.json');
 

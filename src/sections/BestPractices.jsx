@@ -27,13 +27,6 @@ each adds their feature to the same file"
 
 # Kết quả: Merge conflicts, mất code, behavior không đoán được`
 
-const hookConfig = `# src-tauri hooks (nếu cần gate quality)
-# TeammateIdle hook: chạy khi teammate sắp idle
-# Exit code 2 = yêu cầu teammate tiếp tục làm việc
-
-# TaskCompleted hook: chạy khi task được mark complete  
-# Exit code 2 = ngăn task được mark complete`
-
 export function BestPractices() {
   return (
     <div className="space-y-6">

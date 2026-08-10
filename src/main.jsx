@@ -6,7 +6,7 @@ import App from './App.jsx'
 import { ToastProvider } from './components/ui/ToastProvider'
 
 // Prism.js language support
-import Prism from 'prismjs'
+import 'prismjs'
 import 'prismjs/components/prism-bash'
 import 'prismjs/components/prism-json'
 import 'prismjs/components/prism-javascript'
