@@ -148,7 +148,7 @@ export function DashboardGuide() {
                   ['Run tests sau khi build xong', 'Lead thêm bước verification cuối'],
                 ].map(([cmd, effect]) => (
                   <tr key={cmd} className="hover:bg-vs-overlay/5">
-                    <td className="px-4 py-2 text-vs-string">"{cmd}"</td>
+                    <td className="px-4 py-2 text-vs-string">&quot;{cmd}&quot;</td>
                     <td className="px-4 py-2 text-vs-text">{effect}</td>
                   </tr>
                 ))}
@@ -168,7 +168,7 @@ export function DashboardGuide() {
             Custom Agent Config (nâng cao)
           </h3>
           <p className="text-vs-text ml-3 mb-3">
-            Trong Intervention Panel, nút <strong>"+ Agent"</strong> cho phép define agent tùy chỉnh:
+            Trong Intervention Panel, nút <strong>&quot;+ Agent&quot;</strong> cho phép define agent tùy chỉnh:
           </p>
           <div className="space-y-2 ml-3">
             {[

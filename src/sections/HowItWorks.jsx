@@ -127,7 +127,7 @@ claude -p --model opus --output-format stream-json --verbose
               <p className="text-vs-keyword text-xs font-mono mb-1">System Prompt (Mission Prompt)</p>
               <p className="text-vs-text text-xs">
                 Được build bởi <code className="text-vs-string">buildMissionPrompt()</code> trong app.
-                Bạn có thể xem trước trong Launcher bằng nút "Xem System Prompt".
+                Bạn có thể xem trước trong Launcher bằng nút &quot;Xem System Prompt&quot;.
               </p>
             </div>
             <div className="bg-vs-panel/50 border border-vs-border rounded-lg p-4">
@@ -141,7 +141,7 @@ claude -p --model opus --output-format stream-json --verbose
               <p className="text-vs-keyword text-xs font-mono mb-1">Subagent Prompt</p>
               <p className="text-vs-text text-xs">
                 Lead agent tự viết prompt cho từng subagent khi spawn qua Agent tool.
-                Nếu bạn thêm "Custom Instructions" trong Plan Review, nó sẽ được include vào prompt của subagent đó.
+                Nếu bạn thêm &quot;Custom Instructions&quot; trong Plan Review, nó sẽ được include vào prompt của subagent đó.
               </p>
             </div>
           </div>

@@ -27,8 +27,8 @@ export function LauncherGuide() {
               <span className="text-vs-heading font-medium text-sm">Ví dụ yêu cầu tốt</span>
             </div>
             <div className="p-4 space-y-2 text-xs text-vs-text font-mono">
-              <p className="text-vs-string">"Tạo ứng dụng React quản lý bài kiểm tra. Hỗ trợ single choice A,B,C,D.
-              Có form tạo câu hỏi, xem danh sách, và chạy bài kiểm tra."</p>
+              <p className="text-vs-string">&quot;Tạo ứng dụng React quản lý bài kiểm tra. Hỗ trợ single choice A,B,C,D.
+              Có form tạo câu hỏi, xem danh sách, và chạy bài kiểm tra.&quot;</p>
               <p className="text-vs-muted mt-2">→ Cụ thể, rõ ràng, nêu đủ features cần có</p>
             </div>
           </div>
@@ -204,7 +204,7 @@ export function LauncherGuide() {
                 <span className="text-vs-heading font-medium">Project Path</span>
                 <p className="text-vs-muted text-xs mt-0.5">
                   Chọn thư mục project. Agents sẽ cd vào đây để đọc/viết code.
-                  Nút "Browse" mở folder picker. Bỏ trống = agents tự tạo project mới.
+                  Nút &quot;Browse&quot; mở folder picker. Bỏ trống = agents tự tạo project mới.
                 </p>
               </div>
             </div>
@@ -228,7 +228,7 @@ export function LauncherGuide() {
             Xem System Prompt trước khi launch
           </h3>
           <p className="text-vs-text ml-3">
-            Nút <strong>"Xem System Prompt"</strong> (icon mắt 👁) ở Launcher cho phép
+            Nút <strong>&quot;Xem System Prompt&quot;</strong> (icon mắt 👁) ở Launcher cho phép
             xem toàn bộ prompt sẽ gửi cho Lead agent. Hữu ích để debug hoặc verify
             references đã được inject đúng.
           </p>

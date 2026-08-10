@@ -474,7 +474,7 @@ export function MissionControlPage() {
                 <div className="max-w-2xl mx-auto mb-4 p-3 rounded-lg border border-amber-500/40 bg-amber-500/10 text-sm">
                   <div className="font-medium text-amber-300 mb-1">Mission interrupted</div>
                   <div className="text-vs-muted mb-2">
-                    "{recoverableMission.description?.slice(0, 80) || 'Unnamed mission'}" was interrupted ({recoverableMission.phase}, {recoverableMission.log_count} log entries).
+                    &quot;{recoverableMission.description?.slice(0, 80) || 'Unnamed mission'}&quot; was interrupted ({recoverableMission.phase}, {recoverableMission.log_count} log entries).
                   </div>
                   <div className="flex gap-2">
                     <button
