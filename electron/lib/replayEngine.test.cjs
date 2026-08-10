@@ -95,7 +95,7 @@ describe('replayEngine.cjs', () => {
 
       const businessEvents = sentEvents.filter(e => e.channel !== 'replay:progress');
       expect(businessEvents.map(e => e.channel)).toEqual(
-        recording.events.map(e => e.channel)
+        recording.events.map(e => `replay:${e.channel}`)
       );
       expect(businessEvents.map(e => e.payload)).toEqual(
         recording.events.map(e => e.payload)

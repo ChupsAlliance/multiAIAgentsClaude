@@ -68,7 +68,7 @@ function clearTimer() {
 // ─────────────────────────────────────────────────────────────────
 function emitEvent(event) {
   if (!event) return;
-  deps.sendToWindow(event.channel, event.payload);
+  deps.sendToWindow(`replay:${event.channel}`, event.payload);
   deps.sendToWindow('replay:progress', {
     currentMs: event.relativeTimestamp,
     totalMs: session ? session.totalMs : 0,
