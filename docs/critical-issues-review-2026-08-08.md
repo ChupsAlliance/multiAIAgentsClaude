@@ -48,5 +48,12 @@ Found via a 5-agent parallel review (Electron main/IPC/security, electron/lib, R
 - **Effect:** All of the above bugs (and future ones) can land on `main` with no automated check catching them.
 - [ ] Fixed
 
+## 8. Vitest runner fails to load, all test files fail
+- **Where:** repo-wide — `npx vitest run` (vitest v4.1.8)
+- **Bug:** Every test file fails at the `describe(...)` call site with `TypeError: Cannot read properties of undefined (reading 'config')`, before any test body runs. Confirmed on `electron/lib/qcqa.test.cjs` and, per the final-review agent for issue #4, on unrelated files too (e.g. `OfficeLayoutStore.test.ts`, `pixelAgentsProtocol.test.js`) — so it's a framework/config-load failure, not specific to one file or suite.
+- **Discovered:** during the final whole-branch review of issue #4's fix (2026-08-10). Not introduced by that fix — no vitest-related files (`package.json`, `vitest.config.*`, `vite.config.*`) changed in issue #4's commits, confirmed via `git log`/`git diff` on those paths.
+- **Effect:** No test in the repo can currently be run or verified via `npx vitest run`. Every "tests passing" claim made during recent issue fixes (including issues #3 and #4) relied on the implementer/reviewer's own prior run rather than a reproducible `npx vitest run` in this environment — the actual root cause (vitest/vite version mismatch, corrupted `node_modules`, config resolution bug, etc.) has not yet been diagnosed.
+- [ ] Fixed
+
 ---
 *Important/Minor findings from the same review (path traversal in `read_superpowers_skill`/`files.cjs`, non-atomic index writes in `recordingStore.cjs`/`missionIndex.cjs`, `compareSemver` pre-release handling, prompt injection in `promptWrapper.js`, broken drag-and-drop, missing ErrorBoundary, outdated Electron version, unpinned third-party clone in `build-pixel-agents.cjs`, etc.) were reported in conversation but not tracked here — revisit after the Critical list is cleared.*
