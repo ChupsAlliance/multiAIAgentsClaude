@@ -11,6 +11,7 @@ import { useAppHotkeys } from '../../hooks/useAppHotkeys'
 import { PlanVersionHistory } from './PlanVersionHistory'
 import { ExportDropdown } from './ExportDropdown'
 import { BusinessSummary } from './BusinessSummary'
+import { invoke } from '@tauri-apps/api/core'
 
 // ─── Markdown Preview Renderer ─────────────────────────────────────────────
 
@@ -451,7 +452,7 @@ export function PlanDocument({ agents, tasks, missionContext, projectPath, requi
 
     // Save manual_edit version after successful apply
     if (missionId) {
-      window.electron?.ipcRenderer?.invoke('save_plan_version', {
+      invoke('save_plan_version', {
         missionId,
         trigger: 'manual_edit',
         agents: newAgents,
