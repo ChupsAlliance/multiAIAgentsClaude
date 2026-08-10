@@ -63,8 +63,8 @@ function clearTimer() {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// emitEvent — gửi 1 event ra renderer qua đúng channel gốc + phát
-// kèm replay:progress để frontend cập nhật thanh tua.
+// emitEvent — gửi 1 event ra renderer với channel prefixed `replay:`
+// + phát kèm replay:progress để frontend cập nhật thanh tua.
 // ─────────────────────────────────────────────────────────────────
 function emitEvent(event) {
   if (!event) return;
