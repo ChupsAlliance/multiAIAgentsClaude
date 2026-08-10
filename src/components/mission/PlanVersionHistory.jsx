@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Clock, ChevronLeft, RotateCcw } from 'lucide-react'
 import { diffPlanChanges } from '../../utils/planMarkdown'
+import { invoke } from '@tauri-apps/api/core'
 
 export function PlanVersionHistory({ missionId, currentAgents, currentTasks, onRollback }) {
   const [versions, setVersions] = useState([])
@@ -12,7 +13,7 @@ export function PlanVersionHistory({ missionId, currentAgents, currentTasks, onR
 
   const loadVersions = useCallback(async () => {
     try {
-      const result = await window.electron.ipcRenderer.invoke('get_plan_versions', { missionId })
+      const result = await invoke('get_plan_versions', { missionId })
       setVersions(result || [])
     } catch (err) {
       console.error('Failed to load plan versions:', err)
@@ -31,7 +32,7 @@ export function PlanVersionHistory({ missionId, currentAgents, currentTasks, onR
     if (!confirmRollback) return
     setLoading(true)
     try {
-      await window.electron.ipcRenderer.invoke('save_plan_version', {
+      await invoke('save_plan_version', {
         missionId,
         trigger: 'rollback',
         agents: confirmRollback.agents,
