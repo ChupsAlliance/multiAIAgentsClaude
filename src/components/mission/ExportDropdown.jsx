@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Download, ChevronDown, Loader2 } from 'lucide-react'
 import { downloadJSON, downloadHTML, generateHTML, generateFilename } from '../../utils/exportPlan'
 import { planToMarkdown } from '../../utils/planMarkdown'
+import { invoke } from '@tauri-apps/api/core'
 
 /**
  * ExportDropdown — a toolbar button that reveals 4 export options:
@@ -58,7 +59,7 @@ export function ExportDropdown({ missionState, projectPath, onToast, externalOpe
         requirement,
         mission_context,
       })
-      await window.electron.ipcRenderer.invoke('export_plan_markdown', {
+      await invoke('export_plan_markdown', {
         markdown,
         projectPath: project_path || projectPath,
       })
@@ -93,7 +94,7 @@ export function ExportDropdown({ missionState, projectPath, onToast, externalOpe
     setPdfLoading(true)
     try {
       const htmlContent = generateHTML(missionState)
-      const result = await window.electron.ipcRenderer.invoke('export_plan_pdf', {
+      const result = await invoke('export_plan_pdf', {
         htmlContent,
         description: missionState?.description,
       })
