@@ -234,6 +234,18 @@ function seek({ positionMs }) {
   // Đặt lại con trỏ về đầu để phát dồn nhất quán từ 0 → target.
   // (Đảm bảo state luôn đúng dù seek tiến hay lùi.)
   session.index = 0;
+
+  // replayMissionState ở renderer là 1 reducer build tích luỹ từ các event
+  // đã phát — nếu playback đã tiến xa hơn `target` trước khi seek này chạy
+  // (VD: auto-play đua với lệnh pause() của UI, hoặc seek lùi sau khi đã
+  // xem tới cuối), phát lại chỉ events[0..target] chồng lên state cũ sẽ
+  // không kéo các field một-chiều-về-phía-trước (như `phase`) lùi lại được
+  // — reducer không có case nào hạ phase từ ReviewPlan/Executing/Done về
+  // lại Planning. Gửi 1 event reset trước để renderer luôn dựng lại state
+  // từ đầu, đảm bảo mọi lần seek đều tất định theo đúng events[0..target],
+  // bất kể trạng thái trước đó.
+  emitEvent({ channel: 'mission:status', payload: { status: 'reset' }, relativeTimestamp: 0 });
+
   while (session.index < session.events.length &&
          session.events[session.index].relativeTimestamp <= target) {
     emitEvent(session.events[session.index]);

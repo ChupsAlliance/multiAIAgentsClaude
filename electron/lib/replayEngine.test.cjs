@@ -235,11 +235,16 @@ describe('replayEngine.cjs', () => {
       expect(seekResult.currentMs).toBe(1500);
       expect(seekResult.eventIndex).toBe(3); // events[0..2] are <= 1500ms
 
+      // Every seek leads with a synthetic mission:status reset so the
+      // renderer's cumulative reducer state is torn down before replaying
+      // events[0..target] — otherwise a seek to an earlier point could
+      // never undo forward-only state (like replay phase) that playback
+      // had already applied past the seek target.
       const businessEvents = sentEvents.filter(e => e.channel !== 'replay:progress');
-      expect(businessEvents.map(e => e.payload)).toEqual([{ n: 0 }, { n: 1 }, { n: 2 }]);
+      expect(businessEvents.map(e => e.payload)).toEqual([{ status: 'reset' }, { n: 0 }, { n: 1 }, { n: 2 }]);
     });
 
-    it('seeking to 0 flushes only events at relativeTimestamp 0', () => {
+    it('seeking to 0 flushes a reset followed by only the events at relativeTimestamp 0', () => {
       const recording = freshRecording({
         id: 'rec-seek-zero',
         events: [
@@ -254,7 +259,25 @@ describe('replayEngine.cjs', () => {
 
       replayEngine.seek({ positionMs: 0 });
       const businessEvents = sentEvents.filter(e => e.channel !== 'replay:progress');
-      expect(businessEvents.map(e => e.payload)).toEqual([{ n: 0 }]);
+      expect(businessEvents.map(e => e.payload)).toEqual([{ status: 'reset' }, { n: 0 }]);
+    });
+
+    it('every seek emits a leading mission:status reset so the renderer rebuilds state fresh', () => {
+      const recording = freshRecording({
+        id: 'rec-seek-reset-signal',
+        events: [
+          recordingSchema.createEvent(0, 'recording:init', { n: 0 }),
+          recordingSchema.createEvent(500, 'mission:plan-ready', { n: 1 }),
+        ],
+      });
+      recordingStore.saveRecording(recording);
+      replayEngine.start({ recordingId: recording.id, speed: 1 });
+      replayEngine.pause();
+      sentEvents.length = 0;
+
+      replayEngine.seek({ positionMs: 500 });
+      const businessEvents = sentEvents.filter(e => e.channel !== 'replay:progress');
+      expect(businessEvents[0]).toEqual({ channel: 'replay:mission:status', payload: { status: 'reset' } });
     });
 
     it('seeking past the end flushes all events and keeps paused state as it was', () => {
