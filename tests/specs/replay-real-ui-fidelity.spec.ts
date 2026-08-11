@@ -78,43 +78,28 @@ const PLAN_LINE = JSON.stringify({
 //      Lead (no Completed: line ever retires it) — that alone deadlocks
 //      runFinalQaSweep()'s `.every(t => t.status === 'completed')` gate
 //      forever, since the UI shows "Tasks 0/2" instead of "Tasks 0/1".
-//   2. A second "[Dev] Completed: ..." line (plus filler lines to buy real
-//      wall-clock time for the QC round-trip): the FIRST "Completed:" line
-//      only gets the task to 'pending_qc', which then FAILs QC and flips
-//      back to 'in_progress' — nothing re-completes it without a second
+//   2. A second "[Dev] Completed: ..." line, with a real synchronization
+//      wait (claude.cjs's "__WAIT_QCQA__:qc:1" directive, see
+//      waitForQcQaDone) in between: the FIRST "Completed:" line only gets
+//      the task to 'pending_qc', which then FAILs QC and flips back to
+//      'in_progress' — nothing re-completes it without a second
 //      "Completed:" line, so the retry's QC-pass -> QA-pass -> 'completed'
 //      chain (and thus runFinalQaSweep() ever seeing allCompleted) never
-//      fires.
+//      fires. The wait directive blocks this fixture process until the
+//      first QC invocation has actually finished, instead of guessing a
+//      number of filler lines is "probably enough" wall-clock time.
 const FAKE_CLAUDE_SCRIPT = [
   PLAN_LINE,
   "[Lead] Đang spawning teammate 'Dev'",
   '[Dev] Starting: Tao file cau hinh mau',
   '[Dev] Completed: Tao file cau hinh mau',
-  // Filler lines buy real wall-clock time (each costs fakeClaudeDelayMs) for
-  // the first QC check (FAIL) -> back to in_progress round-trip to land
-  // before the second "Completed:" line is read, so it's recognized as the
-  // same task's retry (mission.cjs's TaskCompleted handler only re-matches
-  // an existing task when it's back to 'in_progress') instead of being
-  // treated as unmatched.
-  '[Lead] Waiting for QC verification to finish (1/6)...',
-  '[Lead] Waiting for QC verification to finish (2/6)...',
-  '[Lead] Waiting for QC verification to finish (3/6)...',
-  '[Lead] Waiting for QC verification to finish (4/6)...',
-  '[Lead] Waiting for QC verification to finish (5/6)...',
-  '[Lead] Waiting for QC verification to finish (6/6)...',
+  '__WAIT_QCQA__:qc:1',
   '[Dev] Completed: Tao file cau hinh mau',
-  // More filler after the retry's "Completed:" line so the deploy process
-  // stays alive long enough for the retry's QC check (PASS) -> QA check
-  // (PASS) -> task 'completed' -> the final whole-picture QA sweep (also
-  // PASS) to all finish before this process exits — runFinalQaSweep() only
-  // runs when the deploy process closes, and silently no-ops (mission stuck
-  // Running forever) if not every task is 'completed' yet at that moment.
-  '[Lead] Waiting for QA verification to finish (1/6)...',
-  '[Lead] Waiting for QA verification to finish (2/6)...',
-  '[Lead] Waiting for QA verification to finish (3/6)...',
-  '[Lead] Waiting for QA verification to finish (4/6)...',
-  '[Lead] Waiting for QA verification to finish (5/6)...',
-  '[Lead] Waiting for QA verification to finish (6/6)...',
+  // Wait for the retry's QA check (the only QA invocation this task goes
+  // through) before this process exits — runFinalQaSweep() only runs once
+  // the deploy process closes, and silently no-ops (mission stuck Running
+  // forever) if not every task is 'completed' yet at that moment.
+  '__WAIT_QCQA__:qa:1',
   '[Lead] Nhiem vu da hoan thanh thanh cong.',
 ];
 

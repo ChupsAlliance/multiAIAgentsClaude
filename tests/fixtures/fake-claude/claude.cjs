@@ -152,6 +152,28 @@ function nextInvocationCount(stage) {
   return count;
 }
 
+// ── Real QC/QA synchronization (replaces the old "guess enough filler
+// lines" approach) ──────────────────────────────────────────────────
+// The main mission transcript (this same fixture, run as a SEPARATE OS
+// process from any QC/QA-check invocation) has no visibility into when a
+// given QC/QA subprocess has actually finished — CI runners are slow and
+// variable enough (Defender scanning, virtualization) that no fixed number
+// of filler lines at a fixed per-line delay can be guaranteed to outlast
+// the real round-trip. Instead, this QC/QA invocation writes a small "done"
+// flag file to FAKE_QCQA_STATE_DIR right before exiting, and the main
+// transcript loop (see waitForQcQaDone below) polls for that exact file —
+// tying the wait to the real event instead of a wall-clock guess.
+function markQcQaDone(stage, attempt) {
+  const stateDir = process.env.FAKE_QCQA_STATE_DIR;
+  if (!stateDir) return;
+  try {
+    fs.mkdirSync(stateDir, { recursive: true });
+    fs.writeFileSync(path.join(stateDir, `__qcqa-done-${stage}-${attempt}.flag`), String(Date.now()), 'utf8');
+  } catch {
+    // ignore — best effort
+  }
+}
+
 // QC/QA verdicts are emitted synchronously and near-instantly (just Node
 // process-startup overhead) unless we deliberately slow them down. Without
 // this, mission.cjs's pending_qc/failed_qc/pending_qa states each last only
@@ -183,15 +205,20 @@ if (promptText && promptText.includes('You are the QC-Agent')) {
   } else {
     process.stdout.write('[QC] VERDICT: PASS\n');
   }
+  markQcQaDone('qc', attempt);
   process.exit(0);
 }
 
 if (promptText && promptText.includes('You are the QA-Agent')) {
   // Both per-task QA and the final whole-picture QA sweep use this same
   // template/prompt opening line — always PASS so the loop can reach
-  // 'completed' / the mission can reach 'Completed'.
+  // 'completed' / the mission can reach 'Completed'. Still counted (even
+  // though the verdict never varies) so waitForQcQaDone's callers can
+  // address a specific QA invocation by attempt number, same as QC.
+  const attempt = nextInvocationCount('qa');
   sleepSync(qcqaDelayMs);
   process.stdout.write('[QA] VERDICT: PASS\n');
+  markQcQaDone('qa', attempt);
   process.exit(0);
 }
 
@@ -294,6 +321,42 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// A script line of the form "__WAIT_QCQA__:qc:1" or "__WAIT_QCQA__:qa:1" is
+// a directive, not part of the transcript — main() below intercepts it
+// (never writes it to stdout) and blocks until markQcQaDone() has written
+// the matching flag file for that stage+attempt, i.e. until that specific
+// QC/QA subprocess invocation has genuinely finished. This is what replaces
+// the old "[Lead] Waiting for QC verification to finish (N/6)..." filler
+// blocks: those bought wall-clock time on a guess; this waits for the real
+// event, so it's correct on a fast machine and a slow, loaded CI runner
+// alike, with no per-environment tuning required.
+const WAIT_MARKER_RE = /^__WAIT_QCQA__:(qc|qa):(\d+)$/;
+const WAIT_POLL_INTERVAL_MS = 100;
+// Generous ceiling so a genuinely broken run fails loudly (see the error
+// thrown below) instead of hanging forever — real waits resolve in well
+// under a second locally and a few seconds on a loaded CI runner.
+const WAIT_TIMEOUT_MS = process.env.CI ? 90000 : 30000;
+// Small buffer after the flag file appears: the flag is written by the
+// QC/QA child process right before it exits, but the PARENT (mission.cjs)
+// still needs its 'close' handler and verdict-parsing .then() callback to
+// run before the resulting state change (e.g. enqueueQaCheck / task status)
+// is actually in effect. That's normally a sub-millisecond JS turnaround,
+// but give CI extra slack for scheduler contention.
+const WAIT_GRACE_MS = process.env.CI ? 1000 : 300;
+
+async function waitForQcQaDone(stage, attempt) {
+  const stateDir = process.env.FAKE_QCQA_STATE_DIR;
+  const flagPath = stateDir ? path.join(stateDir, `__qcqa-done-${stage}-${attempt}.flag`) : null;
+  const deadline = Date.now() + WAIT_TIMEOUT_MS;
+  while (!flagPath || !fs.existsSync(flagPath)) {
+    if (Date.now() >= deadline) {
+      throw new Error(`waitForQcQaDone: timed out after ${WAIT_TIMEOUT_MS}ms waiting for ${stage} attempt ${attempt} (flag: ${flagPath})`);
+    }
+    await sleep(WAIT_POLL_INTERVAL_MS);
+  }
+  await sleep(WAIT_GRACE_MS);
+}
+
 // electron/ipc/mission.cjs spawns `claude` for TWO distinct phases that both
 // read the SAME FAKE_CLAUDE_SCRIPT file (electronApp.ts only wires up one
 // static script per launched app instance):
@@ -335,6 +398,13 @@ async function main() {
     : lines;
 
   for (const line of effectiveLines) {
+    const waitMatch = WAIT_MARKER_RE.exec(line);
+    if (waitMatch) {
+      const [, stage, attemptStr] = waitMatch;
+      await waitForQcQaDone(stage, Number(attemptStr));
+      continue;
+    }
+
     process.stdout.write(line + '\n');
     // Small delay so the app's async readline-based stdout parsing has
     // discrete ticks to process, keeping ordering deterministic without
@@ -346,4 +416,7 @@ async function main() {
   process.exit(0);
 }
 
-main();
+main().catch((err) => {
+  process.stderr.write(`fake-claude: ${err && err.stack ? err.stack : err}\n`);
+  process.exit(1);
+});
