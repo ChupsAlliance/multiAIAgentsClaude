@@ -107,7 +107,7 @@ export function ChangelogModal({ open, onClose, currentVersion, updateInfo }) {
               <Sparkles size={18} className="text-vs-accent" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-vs-heading">What's New</h2>
+              <h2 className="text-sm font-bold text-vs-heading">What&apos;s New</h2>
               <p className="text-[10px] text-vs-muted font-mono">
                 Agent Teams Guide v{currentVersion}
               </p>

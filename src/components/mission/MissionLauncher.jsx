@@ -551,7 +551,7 @@ export function MissionLauncher({ onLaunch, isRecording, onToggleRecording }) {
               <div className="absolute left-0 right-0 bottom-full mb-1
                              bg-vs-panel border border-vs-border rounded-lg shadow-xl z-50 px-3 py-2">
                 <span className="text-[10px] font-mono text-vs-muted">
-                  Không tìm thấy file "{mentionQuery}" trong project
+                  Không tìm thấy file &quot;{mentionQuery}&quot; trong project
                 </span>
               </div>
             )}

@@ -127,6 +127,7 @@ function now() {
 // strip_ansi — remove ANSI escape sequences
 // ─────────────────────────────────────────────────────────────────
 function stripAnsi(s) {
+  // eslint-disable-next-line no-control-regex -- \x1b deliberately matches the ANSI escape control character to strip terminal color codes
   return s.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
 }
 
@@ -333,7 +334,7 @@ function enqueueQcCheck(task, agent) {
 // ~0ms in the same synchronous tick.
 const QC_QA_FAILURE_VISIBILITY_DELAY_MS = 900;
 
-function enqueueQaCheck(task, agent, qcVerdict) {
+function enqueueQaCheck(task, agent, _qcVerdict) {
   task.status = 'pending_qa';
   sendToWindowRef('mission:task-update', {
     task_id: task.id, agent, description: task.title, status: 'pending_qa', timestamp: now(),
@@ -831,7 +832,7 @@ function saveMissionSnapshot(state, extra = {}) {
     }
 
     fs.writeFileSync(filePath, JSON.stringify(snap, null, 2), 'utf8');
-  } catch (e) {
+  } catch {
     // Non-fatal
   }
 }
@@ -2845,7 +2846,6 @@ function readProcessStdout_deploy(proc, sendToWindow, isContMode, attemptCtx = {
               if (tool === 'TaskUpdate' && input && missionState) {
                 const taskIdUpd  = (input.task_id || input.todos || '').toString();
                 const newOwner   = (input.owner || '').toString();
-                const newStatus  = (input.status || '').toString();
                 if (taskIdUpd && newOwner) {
                   const taskObj = missionState.tasks.find(t => t.id === taskIdUpd);
                   if (taskObj && taskObj.assigned_agent && taskObj.assigned_agent !== newOwner) {
@@ -3189,7 +3189,7 @@ function spawnResumeOrFreshAttempt({ missionId, sendToWindow, promptOverride, re
   const attemptCtx = { stdoutText: '', stderrText: '', sessionId: null, backend: resumeBackend };
   const retryInfo = {
     attemptCtx, attempt: 1, maxAttempts: 3, backoffMs: [30000, 60000, 120000],
-    retrySpawn: (nextAttempt) => spawnResumeOrFreshAttempt({
+    retrySpawn: (_nextAttempt) => spawnResumeOrFreshAttempt({
       missionId, sendToWindow, promptOverride: prompt, reasonForLog,
     }),
   };
@@ -3540,7 +3540,7 @@ async function generateDebriefSummary() {
         if (spawned.promptViaStdin) proc.stdin.write(prompt, 'utf8');
         proc.stdin.end();
       } catch (_) {}
-    } catch (err) {
+    } catch {
       childProcess = savedChildProcess;
       childBackend = savedChildBackend;
       resolve(null);
@@ -4597,7 +4597,7 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
     );
 
     // Find all semver-formatted subdirectories (e.g. "5.0.7")
-    let versions = [];
+    let versions;
     try {
       versions = fs.readdirSync(superpowersBase)
         .filter(d => /^\d+\.\d+\.\d+$/.test(d))

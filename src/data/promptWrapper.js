@@ -173,7 +173,7 @@ RULES:
 - ALWAYS end your question batch with <<<QUESTIONS_END>>> marker.`
 
   // Build permission mode section for planning phase
-  let permissionSection = ''
+  let permissionSection
   let phase0Section = ''
 
   if (permissionMode === 'deep_plan') {

@@ -43,6 +43,15 @@ const ALLOWED_EVENTS = [
   'mission:mockup', 'mission:companion-answer',
   // replay playback progress (thanh tua thời gian thực)
   'replay:progress',
+  // replayed business events, re-emitted by replayEngine.cjs on the same
+  // channel names as their live mission:* counterparts but prefixed with
+  // `replay:` (see useReplay.js's `channels` list) — without these, every
+  // replayed mission:* event is silently dropped here and replayMissionState
+  // never advances past its initial empty state.
+  'replay:mission:status', 'replay:mission:agent-spawned', 'replay:mission:log',
+  'replay:mission:file-change', 'replay:mission:task-update', 'replay:mission:raw-line',
+  'replay:mission:plan-ready', 'replay:mission:agent-message', 'replay:mission:agent-stuck',
+  'replay:mission:question', 'replay:mission:answer-sent', 'replay:mission:mockup',
   'claude-output',
 ];
 

@@ -183,7 +183,7 @@ export function Sidebar({ activeSection }) {
                        hover:text-vs-accent hover:bg-vs-accent/10 transition-colors no-drag"
           >
             <Sparkles size={10} />
-            {appVersion ? `v${appVersion}` : '...'} &middot; What's New
+            {appVersion ? `v${appVersion}` : '...'} &middot; What&apos;s New
           </button>
         </div>
       </aside>

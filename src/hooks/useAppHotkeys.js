@@ -32,7 +32,7 @@ export const SHORTCUT_GROUPS = [
  * @param {string} params.scope - 'global' | 'plan-document' | 'plan-review' | 'mission-launcher'
  * @param {Record<string, () => void>} params.handlers - { 'ctrl+s': fn, ... }
  */
-export function useAppHotkeys({ scope, handlers }) {
+export function useAppHotkeys({ scope: _scope, handlers }) {
   const ctrlSHandler = handlers['ctrl+s']
   const questionHandler = handlers['?']
   const escapeHandler = handlers['escape']

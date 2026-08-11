@@ -113,7 +113,7 @@ export function RecordingsPage() {
                 <Film size={32} className="mx-auto text-vs-muted/40 mb-3" />
                 <p className="text-sm font-medium text-vs-heading mb-1">Chưa có bản ghi nào</p>
                 <p className="text-xs text-vs-muted max-w-sm mx-auto">
-                  Bật "Ghi lại phiên chạy" khi khởi chạy mission ở Mission Control để tạo bản ghi đầu tiên.
+                  Bật &quot;Ghi lại phiên chạy&quot; khi khởi chạy mission ở Mission Control để tạo bản ghi đầu tiên.
                   Bản ghi có thể dùng để phát lại demo hoặc trình chiếu cho khách hàng.
                 </p>
               </div>

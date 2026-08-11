@@ -111,7 +111,7 @@ export function TeamInteraction() {
         </div>
 
         <InfoBox type="warning">
-          Task status đôi khi <strong>lag</strong> vài giây — đây là known limitation của experimental feature. Nếu cần update chính xác, hỏi lead: <code className="font-mono bg-vs-overlay/20 px-1 rounded">"What is the status of all tasks?"</code>
+          Task status đôi khi <strong>lag</strong> vài giây — đây là known limitation của experimental feature. Nếu cần update chính xác, hỏi lead: <code className="font-mono bg-vs-overlay/20 px-1 rounded">&quot;What is the status of all tasks?&quot;</code>
         </InfoBox>
       </div>
     </div>

@@ -77,7 +77,6 @@ export function OnboardingPage() {
             const Icon = s.icon
             const isDone   = i < step || (i === step && status === 'ok' && step === 2)
             const isActive = i === step
-            const isFuture = i > step
 
             return (
               <div key={s.id} className={`flex items-center gap-4 p-4 rounded-lg border transition-colors

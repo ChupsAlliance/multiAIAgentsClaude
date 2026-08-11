@@ -76,7 +76,7 @@ describe('QC/QA per-task pipeline', () => {
       log: [], project_path: '/tmp/proj',
     })
     mission.__setSendToWindowForTest(sendToWindow)
-    mission.__setQcQaRunnerForTest(async (opts) => ({ verdict: 'PASS' }))
+    mission.__setQcQaRunnerForTest(async () => ({ verdict: 'PASS' }))
 
     await mission.__enqueueQcCheckForTest(mission.__getMissionStateForTest().tasks[0], 'Dev')
 
@@ -97,7 +97,7 @@ describe('QC/QA per-task pipeline', () => {
       log: [], project_path: '/tmp/proj',
     })
     mission.__setSendToWindowForTest(sendToWindow)
-    mission.__setQcQaRunnerForTest(async (opts) => ({ verdict: 'PASS' }))
+    mission.__setQcQaRunnerForTest(async () => ({ verdict: 'PASS' }))
 
     await mission.__enqueueQcCheckForTest(mission.__getMissionStateForTest().tasks[0], 'Dev')
 

@@ -29,7 +29,7 @@ const EMPTY_STATE = () => ({
   description: '',
   project_path: '',
   status: 'Running',
-  phase: 'Executing',
+  phase: 'Planning',
   execution_mode: 'standard',
   agents: [],
   tasks: [],
@@ -52,7 +52,7 @@ export function useReplay(recordingId) {
   const [currentMs, setCurrentMs] = useState(0)
   const [totalMs, setTotalMs] = useState(0)
   const [stepMarkers, setStepMarkers] = useState([]) // [{ ms, type, label }]
-  const [recordingMeta, setRecordingMeta] = useState(null) // { name, mission_description, ... }
+  const [recordingMeta, setRecordingMeta] = useState(null) // { name, missionDescription, projectPath }
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const unlistenersRef = useRef([])
@@ -66,7 +66,18 @@ export function useReplay(recordingId) {
       case 'mission:status': {
         const { status } = payload
         if (status === 'reset') {
-          setReplayMissionState(EMPTY_STATE())
+          // Every seek() emits this reset so forward-only fields (like phase)
+          // can rebuild deterministically from events[0..target] (see
+          // replayEngine.cjs's seek()) — but description/project_path are
+          // populated once, at replay_start, from recordingMeta, and no
+          // mission:* event ever re-sends them. Blowing them away here would
+          // permanently blank the replayed dashboard's project path after
+          // the first seek. Carry them forward from the state being reset.
+          setReplayMissionState(prev => ({
+            ...EMPTY_STATE(),
+            description: prev?.description ?? '',
+            project_path: prev?.project_path ?? '',
+          }))
           setReplayPlanReady(null)
           setPendingQuestion(null)
           setMockupInfo(null)
@@ -316,8 +327,8 @@ export function useReplay(recordingId) {
         setRecordingMeta(result?.recording || null)
         setReplayMissionState(prev => ({
           ...(prev || EMPTY_STATE()),
-          description: result?.recording?.mission_description || result?.recording?.name || '',
-          project_path: result?.recording?.project_path || '',
+          description: result?.recording?.missionDescription || result?.recording?.name || '',
+          project_path: result?.recording?.projectPath || '',
         }))
         setIsPlaying(true)
         setLoading(false)

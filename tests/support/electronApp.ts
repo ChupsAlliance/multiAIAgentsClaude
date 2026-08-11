@@ -47,6 +47,25 @@ function makeTempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
+// GitHub Actions windows-latest runners spawn child processes markedly
+// slower than a local dev machine (Defender scanning, virtualization,
+// taskkill-based cleanup overhead). Specs that rely on fakeClaudeDelayMs
+// filler lines to buy real wall-clock time for a separate QC/QA
+// subprocess round-trip (electron/lib/qcqa.cjs's runQcQaCheck) need that
+// budget scaled up under CI, or the round-trip loses the race and the
+// mission never reaches its expected state. Local runs are unaffected.
+const CI_TIMING_MULTIPLIER = process.env.CI ? 3 : 1;
+
+/** Scales a fakeClaudeDelayMs value for CI's slower process-spawn overhead. */
+export function ciDelay(ms: number): number {
+  return Math.round(ms * CI_TIMING_MULTIPLIER);
+}
+
+/** Scales a toBeVisible/expect timeout to match a ciDelay()-scaled script's longer real runtime. */
+export function ciTimeout(ms: number): number {
+  return Math.round(ms * CI_TIMING_MULTIPLIER);
+}
+
 /**
  * Launches a fresh, isolated Electron app instance for a single test.
  * Always pair with `cleanup()` (returned on the result) in an afterEach
@@ -69,7 +88,7 @@ export async function launchApp(options: LaunchOptions = {}): Promise<LaunchedAp
     PATH: `${FAKE_CLAUDE_DIR}${pathSep}${process.env.PATH || ''}`,
     // Point recordingStore.cjs at an isolated temp dir for this test only.
     RECORDINGS_DIR_OVERRIDE: recordingsDir,
-    FAKE_CLAUDE_DELAY_MS: String(options.fakeClaudeDelayMs ?? 20),
+    FAKE_CLAUDE_DELAY_MS: String(ciDelay(options.fakeClaudeDelayMs ?? 20)),
     // tests/fixtures/fake-claude/claude.cjs uses this directory to persist a
     // per-stage invocation counter across the separate `claude` subprocesses
     // spawned for QC/QA checks (electron/lib/qcqa.cjs's runQcQaCheck), so it

@@ -13,7 +13,7 @@ const TYPE_LABELS = {
   information: 'Information',
 }
 
-function QuestionTab({ index, question, answer, isActive, onClick }) {
+function QuestionTab({ index, question: _question, answer, isActive, onClick }) {
   const answered = answer != null && answer !== ''
   return (
     <button

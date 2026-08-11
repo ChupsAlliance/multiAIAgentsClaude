@@ -25,7 +25,7 @@ import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { launchApp, type LaunchedApp } from '../support/electronApp';
+import { launchApp, ciTimeout, type LaunchedApp } from '../support/electronApp';
 import { RecordingsPage } from '../pages/RecordingsPage';
 
 const FAKE_PLAN = {
@@ -63,16 +63,14 @@ const PLAN_LINE = JSON.stringify({
 // (not a reactive Lead), that second Completed line has to be scripted in
 // directly to exercise the retry path at all.
 //
-// The trailing filler lines keep the deploy `claude` process alive long
-// enough (each line costs fakeClaudeDelayMs) for the QC-fail -> retry ->
-// QC-pass -> QA-pass chain AND the final whole-picture QA sweep to finish
-// their own (separate, fast) subprocess round-trips before this process
-// exits — runFinalQaSweep() only runs (and only flips the mission to
-// 'Completed') when the deploy process closes, and it no-ops silently
-// (leaving the mission stuck at 'Running') if not every task has reached
-// 'completed' yet at that moment. They are plain "[Lead] ..." lines with no
-// "Starting:"/"Completed:" prefix, so OutputParser only emits harmless
-// AgentMessage/RawLine events for them — no spurious task transitions.
+// The "__WAIT_QCQA__:<stage>:<attempt>" lines below are directives
+// (claude.cjs's waitForQcQaDone), not transcript text — OutputParser never
+// sees them. They keep this deploy `claude` process alive until the real
+// QC-fail -> retry -> QC-pass -> QA-pass chain has genuinely finished
+// before this process exits — runFinalQaSweep() only runs (and only flips
+// the mission to 'Completed') when the deploy process closes, and it
+// no-ops silently (leaving the mission stuck at 'Running') if not every
+// task has reached 'completed' yet at that moment.
 const FAKE_CLAUDE_SCRIPT = [
   PLAN_LINE,
   // NOTE: deliberately no "[Lead] Starting: Build the widget" line here.
@@ -88,40 +86,28 @@ const FAKE_CLAUDE_SCRIPT = [
   '[Lead] Assigning the widget task to Dev.',
   '[Dev] Starting: Build the widget',
   '[Dev] Completed: Build the widget',
-  // Filler lines between the two "Completed:" lines below — TaskCompleted's
-  // handler only re-matches an existing task when it's back to 'in_progress'
-  // (electron/ipc/mission.cjs's handleParsedEvent, case 'TaskCompleted':
-  // `x.assigned_agent === agent && x.status === 'in_progress'`). Right after
-  // the FIRST "Completed:" line above, the task is 'pending_qc', then its QC
-  // check (a separate, fast fake-claude subprocess) fails and flips it back
-  // to 'in_progress' — but that happens asynchronously, off this readline
-  // loop. These filler lines buy real wall-clock time (each costs
-  // fakeClaudeDelayMs) for that QC round-trip to land BEFORE the second
-  // "Completed:" line is read, so the second one is recognized as the same
-  // task's retry (-> pending_qc again -> QC check, which now passes) instead
-  // of being treated as an unmatched/new task. Plain "[Lead] ..." lines with
-  // no "Starting:"/"Completed:" prefix only produce harmless
-  // AgentMessage/RawLine events (no spurious task rows).
-  '[Lead] Waiting for QC verification to finish (1/6)...',
-  '[Lead] Waiting for QC verification to finish (2/6)...',
-  '[Lead] Waiting for QC verification to finish (3/6)...',
-  '[Lead] Waiting for QC verification to finish (4/6)...',
-  '[Lead] Waiting for QC verification to finish (5/6)...',
-  '[Lead] Waiting for QC verification to finish (6/6)...',
+  // Between the two "Completed:" lines: sending the retry's "Completed:"
+  // line while the FIRST QC check is still in flight would make
+  // mission.cjs's TaskCompleted handler call enqueueQcCheck() a second time
+  // concurrently (it re-matches any non-'completed' status, not just
+  // 'in_progress' — see that handler's own comment), spawning two QC
+  // subprocesses at once and desyncing the fixture's FAIL-then-PASS attempt
+  // counter. "__WAIT_QCQA__:qc:1" is a directive (see claude.cjs's
+  // waitForQcQaDone) that blocks this fixture process until the first QC
+  // invocation has actually written its verdict and exited — a real
+  // synchronization signal, not a guessed number of filler lines timed to
+  // fakeClaudeDelayMs, so it's correct regardless of how slow the CI runner
+  // is.
+  '__WAIT_QCQA__:qc:1',
   '[Dev] Completed: Build the widget',
-  // More filler after the retry's "Completed:" line, so the deploy process
-  // stays alive long enough for the retry's QC check (PASS) -> QA check
-  // (PASS) -> task 'completed' -> the final whole-picture QA sweep (also
-  // PASS) to all finish before this process exits. runFinalQaSweep() only
-  // runs when the deploy process closes, and silently no-ops (mission stuck
-  // at 'Running' forever) if not every task is 'completed' yet at that
-  // moment — see runFinalQaSweep()'s allCompleted check.
-  '[Lead] Waiting for QA verification to finish (1/6)...',
-  '[Lead] Waiting for QA verification to finish (2/6)...',
-  '[Lead] Waiting for QA verification to finish (3/6)...',
-  '[Lead] Waiting for QA verification to finish (4/6)...',
-  '[Lead] Waiting for QA verification to finish (5/6)...',
-  '[Lead] Waiting for QA verification to finish (6/6)...',
+  // Likewise, wait for the retry's QA check (the only QA invocation this
+  // task goes through) to actually finish before this process exits.
+  // runFinalQaSweep() only runs once the deploy process closes, and
+  // silently no-ops (mission stuck at 'Running' forever) if not every task
+  // is 'completed' yet at that moment — QA attempt 1 only fires after QC
+  // attempt 2 (the retry) has already passed, so waiting on it also proves
+  // the retry landed.
+  '__WAIT_QCQA__:qa:1',
 ];
 
 test.describe('QC/QA verification loop', () => {
@@ -148,27 +134,27 @@ test.describe('QC/QA verification loop', () => {
       .fill('Build a tiny demo feature for the QC/QA E2E test');
 
     await window.getByRole('button', { name: 'Launch Mission' }).click();
-    await expect(window.getByRole('button', { name: 'Deploy Team' })).toBeVisible({ timeout: 15_000 });
+    await expect(window.getByRole('button', { name: 'Deploy Team' })).toBeVisible({ timeout: ciTimeout(15_000) });
     await window.getByRole('button', { name: 'Deploy Team' }).click();
     await window.getByRole('button', { name: 'Deploy Mission' }).click();
 
     // The task should first show as pending QC review, not immediately completed.
-    await expect(window.getByText(/In QC Review/i)).toBeVisible({ timeout: 15_000 });
+    await expect(window.getByText(/In QC Review/i)).toBeVisible({ timeout: ciTimeout(15_000) });
 
     // Fake-claude fixture (see claude.cjs's QC/QA verdict emulation) is
     // configured to fail the first QC check for the run, then pass — assert
     // the failed_qc badge appears...
-    await expect(window.getByText(/QC Failed/i)).toBeVisible({ timeout: 20_000 });
+    await expect(window.getByText(/QC Failed/i)).toBeVisible({ timeout: ciTimeout(20_000) });
 
     // ...then the retry cycles back through pending_qc (2nd "Completed:" line
     // in the script re-triggers TaskCompleted -> pending_qc -> QC check,
     // which now passes), into pending_qa...
-    await expect(window.getByText(/In QA Review/i)).toBeVisible({ timeout: 20_000 });
+    await expect(window.getByText(/In QA Review/i)).toBeVisible({ timeout: ciTimeout(20_000) });
 
     // ...and the mission only reaches Completed after the final
     // whole-picture QA sweep (fixture always PASSes QA-Agent prompts) runs
     // once the deploy process exits and every task is 'completed' — not
     // merely on process exit code.
-    await expect(window.getByText('Completed', { exact: true })).toBeVisible({ timeout: 20_000 });
+    await expect(window.getByText('Completed', { exact: true })).toBeVisible({ timeout: ciTimeout(20_000) });
   });
 });

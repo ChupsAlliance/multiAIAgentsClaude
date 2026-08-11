@@ -247,7 +247,6 @@ describe('spawnAgentProcess — backend routing (Given/When/Then)', () => {
   test('Given backend=copilot, When launch_mission, Then binary + args từ CopilotAdapter được dùng và output text hiển thị', async () => {
     const proc = makeFakeProc();
     nextFakeProc = proc;
-    const sendCalls = [];
 
     const handler = ipcHandlers.get('launch_mission');
     const resultPromise = handler(null, {

@@ -81,7 +81,7 @@ function nextEscalationTier(qcRound) {
  *   log?: Function,              // optional (message) => void
  * }} opts
  */
-function runQcQaCheck({ spawnFn, buildArgs, promptViaStdin, parseLine, spawnClaude, prompt, projectPath, model, stage, timeoutMs = 180000, backend, log }) {
+function runQcQaCheck({ spawnFn, buildArgs, promptViaStdin, parseLine, spawnClaude, prompt, projectPath, model, stage, timeoutMs = 180000, backend: _backend, log: _log }) {
   return new Promise((resolve) => {
     let proc;
 

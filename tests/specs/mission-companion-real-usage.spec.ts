@@ -28,7 +28,7 @@ import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { launchApp, type LaunchedApp } from '../support/electronApp';
+import { launchApp, ciTimeout, type LaunchedApp } from '../support/electronApp';
 import { RecordingsPage } from '../pages/RecordingsPage';
 
 const FAKE_PLAN = {
@@ -52,25 +52,17 @@ const PLAN_LINE = JSON.stringify({
 // task row for Lead since the plan only assigns the task to Dev), and two
 // "[Dev] Completed: ..." lines (first reaches pending_qc and fails QC/flips
 // back to in_progress; the retry's second Completed line drives it through
-// QC-pass -> QA-pass -> completed -> final sweep -> mission Completed).
+// QC-pass -> QA-pass -> completed -> final sweep -> mission Completed) with
+// real "__WAIT_QCQA__:<stage>:<attempt>" sync directives (claude.cjs's
+// waitForQcQaDone) in between instead of guessed filler-line delays.
 const FAKE_CLAUDE_SCRIPT = [
   PLAN_LINE,
   '[Lead] Assigning the report task to Dev.',
   '[Dev] Starting: Write the report',
   '[Dev] Completed: Write the report',
-  '[Lead] Waiting for QC verification to finish (1/6)...',
-  '[Lead] Waiting for QC verification to finish (2/6)...',
-  '[Lead] Waiting for QC verification to finish (3/6)...',
-  '[Lead] Waiting for QC verification to finish (4/6)...',
-  '[Lead] Waiting for QC verification to finish (5/6)...',
-  '[Lead] Waiting for QC verification to finish (6/6)...',
+  '__WAIT_QCQA__:qc:1',
   '[Dev] Completed: Write the report',
-  '[Lead] Waiting for QA verification to finish (1/6)...',
-  '[Lead] Waiting for QA verification to finish (2/6)...',
-  '[Lead] Waiting for QA verification to finish (3/6)...',
-  '[Lead] Waiting for QA verification to finish (4/6)...',
-  '[Lead] Waiting for QA verification to finish (5/6)...',
-  '[Lead] Waiting for QA verification to finish (6/6)...',
+  '__WAIT_QCQA__:qa:1',
 ];
 
 test.describe('Mission Companion — real usage against a real spawned process', () => {
@@ -84,11 +76,13 @@ test.describe('Mission Companion — real usage against a real spawned process',
     // to land while the mission is still 'running' (pending_qc), before the
     // scripted transcript finishes and the mission flips to 'Completed' —
     // which unmounts the Ask tab (MissionDashboard's showAskTab = !isHistoryView
-    // && isRunning). Now that the fixture's QC/QA detection is fixed (it used
-    // to silently fail and fall through to a much slower full-script replay,
-    // which accidentally gave this test more time), QC/QA round-trips resolve
-    // in just qcqaDelayMs — so the deploy script's own filler-line delays are
-    // what has to carry the timing margin instead.
+    // && isRunning). fakeClaudeDelayMs also drives qcqaDelayMs (claude.cjs
+    // reuses the same env var for the QC/QA verdict-emission delay), so a
+    // wider value here directly widens the pending_qc window the Ask-tab
+    // interaction has to land in — independent of the
+    // "__WAIT_QCQA__" sync directives above, which just make the deploy
+    // script wait exactly as long as that round-trip actually takes rather
+    // than guessing.
     harness = await launchApp({ fakeClaudeLines: FAKE_CLAUDE_SCRIPT, fakeClaudeDelayMs: 1500 });
   });
 
@@ -102,7 +96,7 @@ test.describe('Mission Companion — real usage against a real spawned process',
     // full mission run (16 scripted deploy lines at fakeClaudeDelayMs each),
     // an Ask round-trip, a completion wait, a debrief_summary poll (up to
     // 20s), and a second history-Chat round-trip, all in one test.
-    testInfo.setTimeout(120_000);
+    testInfo.setTimeout(ciTimeout(120_000));
     const { window } = harness;
     const recordings = new RecordingsPage(window);
 
@@ -112,7 +106,7 @@ test.describe('Mission Companion — real usage against a real spawned process',
       .fill('Write a short status report for the Mission Companion E2E test');
 
     await window.getByRole('button', { name: 'Launch Mission' }).click();
-    await expect(window.getByRole('button', { name: 'Deploy Team' })).toBeVisible({ timeout: 15_000 });
+    await expect(window.getByRole('button', { name: 'Deploy Team' })).toBeVisible({ timeout: ciTimeout(15_000) });
     await window.getByRole('button', { name: 'Deploy Team' }).click();
     await window.getByRole('button', { name: 'Deploy Mission' }).click();
 
@@ -126,7 +120,7 @@ test.describe('Mission Companion — real usage against a real spawned process',
     // seconds of delay here just eats into the window the Ask tab is
     // guaranteed to be visible (isRunning) before the mission reaches
     // 'Completed'.
-    await expect(window.getByText(/In QC Review/i)).toBeVisible({ timeout: 15_000 });
+    await expect(window.getByText(/In QC Review/i)).toBeVisible({ timeout: ciTimeout(15_000) });
 
     // Mission is now running — the Ask tab should be visible (showAskTab =
     // !isHistoryView && isRunning in MissionDashboard.jsx). Use exact:true —
@@ -142,13 +136,13 @@ test.describe('Mission Companion — real usage against a real spawned process',
     // Real (non-mocked) child process must actually receive the prompt on
     // stdin and echo it back — proves askMissionLive's stdin.write() fix
     // works end-to-end, not just against a mocked proc in a unit test.
-    await expect(window.getByText(/Fake answer based on received prompt/)).toBeVisible({ timeout: 20_000 });
+    await expect(window.getByText(/Fake answer based on received prompt/)).toBeVisible({ timeout: ciTimeout(20_000) });
     // Explicitly rule out the "stdin was never delivered" sentinel — this is
     // the exact failure mode the Critical bug produced.
     await expect(window.getByText('(fake-claude received no stdin)')).not.toBeVisible();
 
     // Let the mission run to completion (QC fail→retry→QA→final sweep).
-    await expect(window.getByText('Completed', { exact: true })).toBeVisible({ timeout: 25_000 });
+    await expect(window.getByText('Completed', { exact: true })).toBeVisible({ timeout: ciTimeout(25_000) });
 
     // ── Debrief summary: generateDebriefSummary() is fire-and-forget from
     // finalizeDeployExit, so poll get_mission_detail via the app's own IPC
@@ -161,7 +155,7 @@ test.describe('Mission Companion — real usage against a real spawned process',
       });
       expect(detail?.debrief_summary).toBeTruthy();
       expect(detail.debrief_summary.outcome).toBeTruthy();
-    }).toPass({ timeout: 20_000 });
+    }).toPass({ timeout: ciTimeout(20_000) });
 
     // ── History Chat tab: open the just-completed mission from history and
     // ask a question — proves askMissionChat's stdin.write() fix works too.
@@ -194,7 +188,7 @@ test.describe('Mission Companion — real usage against a real spawned process',
     await window.getByPlaceholder('Hỏi mission này...').fill(chatQuestion);
     await window.getByPlaceholder('Hỏi mission này...').press('Enter');
 
-    await expect(window.getByText(/Fake answer based on received prompt/)).toBeVisible({ timeout: 20_000 });
+    await expect(window.getByText(/Fake answer based on received prompt/)).toBeVisible({ timeout: ciTimeout(20_000) });
     await expect(window.getByText('(fake-claude received no stdin)')).not.toBeVisible();
   });
 });

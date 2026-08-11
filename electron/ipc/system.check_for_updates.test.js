@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { checkForUpdates } from './system.cjs'
 
 const REPO_URL = 'https://api.github.com/repos/ChupsAlliance/multiAIAgentsClaude/releases/latest'

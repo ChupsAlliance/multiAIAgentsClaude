@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { Sidebar } from '../components/Sidebar'
 import { CodeBlock } from '../components/CodeBlock'
 import {
   LayoutDashboard, Terminal, CheckCircle2, XCircle,
-  Clock, Play, Trash2, AlertCircle, Settings
+  Clock, Play, AlertCircle, Settings
 } from 'lucide-react'
 
 const setupCode = `// 1. Bật Agent Teams trong ~/.claude/settings.json
@@ -28,7 +28,7 @@ export function DashboardPage() {
   const [claudeStatus, setClaudeStatus] = useState(null)
   const [systemInfo, setSystemInfo] = useState(null)
   const [sessions, setSessions] = useState([])
-  const [output, setOutput] = useState({})
+  const [, setOutput] = useState({})
   const [checkingClaude, setCheckingClaude] = useState(false)
 
   useEffect(() => {
@@ -78,11 +78,6 @@ export function DashboardPage() {
     } catch (err) {
       console.error('Launch failed:', err)
     }
-  }
-
-  const clearSession = (id) => {
-    setSessions(prev => prev.filter(s => s.id !== id))
-    setOutput(prev => { const n = { ...prev }; delete n[id]; return n })
   }
 
   const statusCards = [

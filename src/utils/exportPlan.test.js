@@ -1,6 +1,6 @@
 // src/utils/exportPlan.test.js
 import { describe, it, expect } from 'vitest'
-import { generateSlug, generateFilename, generateHTML, downloadBlob } from './exportPlan'
+import { generateSlug, generateFilename, generateHTML } from './exportPlan'
 
 describe('generateSlug', () => {
   it('lowercases and replaces spaces with dashes', () => {

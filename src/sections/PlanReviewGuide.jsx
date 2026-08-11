@@ -136,11 +136,11 @@ export function PlanReviewGuide() {
             <div className="p-4 space-y-3 text-xs font-mono">
               <div>
                 <span className="text-red-400 font-semibold">BAD:</span>
-                <span className="text-vs-muted ml-2">"Build a login form"</span>
+                <span className="text-vs-muted ml-2">&quot;Build a login form&quot;</span>
               </div>
               <div>
                 <span className="text-vs-green font-semibold">GOOD:</span>
-                <span className="text-vs-string ml-2">"Build login form using React Hook Form + Zod validation. Fields: email (email format), password (min 8 chars). Use shadcn/ui Input + Button. On submit → POST /api/auth/login. Handle 401 → error toast. Files: src/components/LoginForm.tsx, src/schemas/auth.ts"</span>
+                <span className="text-vs-string ml-2">&quot;Build login form using React Hook Form + Zod validation. Fields: email (email format), password (min 8 chars). Use shadcn/ui Input + Button. On submit → POST /api/auth/login. Handle 401 → error toast. Files: src/components/LoginForm.tsx, src/schemas/auth.ts&quot;</span>
               </div>
             </div>
           </div>
@@ -255,7 +255,7 @@ export function PlanReviewGuide() {
             Custom Instructions
           </h3>
           <p className="text-vs-text ml-3 mb-3">
-            Mỗi agent card có textarea <strong>"Custom instructions"</strong> — thêm hướng dẫn đặc biệt.
+            Mỗi agent card có textarea <strong>&quot;Custom instructions&quot;</strong> — thêm hướng dẫn đặc biệt.
             Text này được inject thẳng vào prompt của agent đó.
           </p>
           <div className="rounded-lg border border-vs-border overflow-hidden">
@@ -263,9 +263,9 @@ export function PlanReviewGuide() {
               <span className="text-vs-heading font-medium text-sm">Ví dụ custom instructions</span>
             </div>
             <div className="p-4 space-y-2 text-xs text-vs-text font-mono">
-              <p className="text-vs-string">"Dùng Tailwind CSS thay vì CSS modules. Import từ @/components/."</p>
-              <p className="text-vs-string">"Viết tests với Vitest, không dùng Jest. Coverage tối thiểu 80%."</p>
-              <p className="text-vs-string">"API endpoint phải return JSON với format: {'{ success: boolean, data: T, error?: string }'}"</p>
+              <p className="text-vs-string">&quot;Dùng Tailwind CSS thay vì CSS modules. Import từ @/components/.&quot;</p>
+              <p className="text-vs-string">&quot;Viết tests với Vitest, không dùng Jest. Coverage tối thiểu 80%.&quot;</p>
+              <p className="text-vs-string">&quot;API endpoint phải return JSON với format: {'{ success: boolean, data: T, error?: string }'}&quot;</p>
             </div>
           </div>
         </div>
@@ -274,7 +274,7 @@ export function PlanReviewGuide() {
         <div>
           <h3 className="text-vs-heading font-semibold mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-purple-400 rounded-full inline-block"></span>
-            Skill Files — Thêm "kỹ năng" cho agent
+            Skill Files — Thêm &quot;kỹ năng&quot; cho agent
           </h3>
           <p className="text-vs-text ml-3 mb-3">
             Skill file là file <code className="text-purple-300 bg-purple-500/10 px-1 rounded">.md</code> hoặc{' '}
@@ -382,7 +382,7 @@ export function PlanReviewGuide() {
             Prompt Preview — Xem prompt trước khi deploy
           </h3>
           <p className="text-vs-text ml-3 mb-3">
-            Nút <strong>"Prompt Preview"</strong> mở màn hình xem prompt hoàn chỉnh cho từng agent.
+            Nút <strong>&quot;Prompt Preview&quot;</strong> mở màn hình xem prompt hoàn chỉnh cho từng agent.
             Mỗi agent hiển thị dạng expandable card:
           </p>
           <div className="space-y-2 ml-3">
