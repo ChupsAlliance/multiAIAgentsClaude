@@ -52,7 +52,7 @@ export function useReplay(recordingId) {
   const [currentMs, setCurrentMs] = useState(0)
   const [totalMs, setTotalMs] = useState(0)
   const [stepMarkers, setStepMarkers] = useState([]) // [{ ms, type, label }]
-  const [recordingMeta, setRecordingMeta] = useState(null) // { name, mission_description, ... }
+  const [recordingMeta, setRecordingMeta] = useState(null) // { name, missionDescription, projectPath }
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const unlistenersRef = useRef([])
