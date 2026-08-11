@@ -13,9 +13,16 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/specs',
-  timeout: 60_000,
+  // windows-latest CI runners spawn processes markedly slower than local dev
+  // (see tests/support/electronApp.ts's ciDelay/ciTimeout) — give specs that
+  // scale their fakeClaudeDelayMs filler budget under CI enough test-level
+  // headroom to actually reach their scaled toBeVisible timeouts.
+  timeout: process.env.CI ? 120_000 : 60_000,
   expect: {
-    timeout: 10_000,
+    // Matches tests/support/electronApp.ts's CI_TIMING_MULTIPLIER: specs that
+    // don't pass an explicit per-assertion timeout (e.g. RecordingsPage's
+    // waitForSaveDialog) still need headroom for CI's slower process spawn.
+    timeout: process.env.CI ? 30_000 : 10_000,
   },
   fullyParallel: false, // Electron E2E: one app instance per test, run serially to avoid resource contention
   forbidOnly: !!process.env.CI,

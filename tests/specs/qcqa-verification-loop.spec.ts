@@ -25,7 +25,7 @@ import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { launchApp, type LaunchedApp } from '../support/electronApp';
+import { launchApp, ciTimeout, type LaunchedApp } from '../support/electronApp';
 import { RecordingsPage } from '../pages/RecordingsPage';
 
 const FAKE_PLAN = {
@@ -148,27 +148,27 @@ test.describe('QC/QA verification loop', () => {
       .fill('Build a tiny demo feature for the QC/QA E2E test');
 
     await window.getByRole('button', { name: 'Launch Mission' }).click();
-    await expect(window.getByRole('button', { name: 'Deploy Team' })).toBeVisible({ timeout: 15_000 });
+    await expect(window.getByRole('button', { name: 'Deploy Team' })).toBeVisible({ timeout: ciTimeout(15_000) });
     await window.getByRole('button', { name: 'Deploy Team' }).click();
     await window.getByRole('button', { name: 'Deploy Mission' }).click();
 
     // The task should first show as pending QC review, not immediately completed.
-    await expect(window.getByText(/In QC Review/i)).toBeVisible({ timeout: 15_000 });
+    await expect(window.getByText(/In QC Review/i)).toBeVisible({ timeout: ciTimeout(15_000) });
 
     // Fake-claude fixture (see claude.cjs's QC/QA verdict emulation) is
     // configured to fail the first QC check for the run, then pass — assert
     // the failed_qc badge appears...
-    await expect(window.getByText(/QC Failed/i)).toBeVisible({ timeout: 20_000 });
+    await expect(window.getByText(/QC Failed/i)).toBeVisible({ timeout: ciTimeout(20_000) });
 
     // ...then the retry cycles back through pending_qc (2nd "Completed:" line
     // in the script re-triggers TaskCompleted -> pending_qc -> QC check,
     // which now passes), into pending_qa...
-    await expect(window.getByText(/In QA Review/i)).toBeVisible({ timeout: 20_000 });
+    await expect(window.getByText(/In QA Review/i)).toBeVisible({ timeout: ciTimeout(20_000) });
 
     // ...and the mission only reaches Completed after the final
     // whole-picture QA sweep (fixture always PASSes QA-Agent prompts) runs
     // once the deploy process exits and every task is 'completed' — not
     // merely on process exit code.
-    await expect(window.getByText('Completed', { exact: true })).toBeVisible({ timeout: 20_000 });
+    await expect(window.getByText('Completed', { exact: true })).toBeVisible({ timeout: ciTimeout(20_000) });
   });
 });

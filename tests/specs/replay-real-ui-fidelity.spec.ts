@@ -16,7 +16,7 @@ import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { launchApp, type LaunchedApp } from '../support/electronApp';
+import { launchApp, ciTimeout, type LaunchedApp } from '../support/electronApp';
 import { RecordingsPage } from '../pages/RecordingsPage';
 import { ReplayControlsPage } from '../pages/ReplayControlsPage';
 
@@ -157,7 +157,7 @@ test.describe('Replay on Real UI — full phase fidelity', () => {
 
     // Planning phase: plan-ready arrives once the fake Lead's stream-json
     // line is parsed (tryParsePlanFromBuffer finds the marker + JSON block).
-    await expect(window.getByRole('button', { name: 'Deploy Team' })).toBeVisible({ timeout: 15_000 });
+    await expect(window.getByRole('button', { name: 'Deploy Team' })).toBeVisible({ timeout: ciTimeout(15_000) });
 
     await window.getByRole('button', { name: 'Deploy Team' }).click();
 
@@ -222,7 +222,7 @@ test.describe('Replay on Real UI — full phase fidelity', () => {
     // inert — the Deploy button in the replayed UI must not exist/act since
     // MissionControlPage.jsx forces onDeploy to a no-op for the replay branch.
     await replayControls.seekToRatio(reviewPlanRatio);
-    await expect(window.getByTestId('replay-readonly-overlay')).toBeVisible({ timeout: 10_000 });
+    await expect(window.getByTestId('replay-readonly-overlay')).toBeVisible({ timeout: ciTimeout(10_000) });
     await expect(window.getByText('Tao file cau hinh mau').first()).toBeVisible();
 
     // Seek to the end: mission is Done, MissionDashboard replay wrapper shows.
@@ -241,12 +241,12 @@ test.describe('Replay on Real UI — full phase fidelity', () => {
     await replayControls.expectFinishedAtEnd();
 
     await replayControls.seekToPositionMs(totalMs);
-    await expect(window.getByText('Completed', { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(window.getByText('Completed', { exact: true })).toBeVisible({ timeout: ciTimeout(10_000) });
 
     // Seek backward again: the UI must switch back to the ReviewPlan screen,
     // proving phase state isn't a one-way ratchet and scrubbing works.
     await replayControls.seekToRatio(reviewPlanRatio);
-    await expect(window.getByTestId('replay-readonly-overlay')).toBeVisible({ timeout: 10_000 });
+    await expect(window.getByTestId('replay-readonly-overlay')).toBeVisible({ timeout: ciTimeout(10_000) });
     await expect(replayControls.missionDashboardReplayMode).toBeHidden();
 
     // ReplayControls stays mounted throughout every phase.
