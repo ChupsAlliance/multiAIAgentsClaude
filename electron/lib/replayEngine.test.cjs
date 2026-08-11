@@ -102,6 +102,22 @@ describe('replayEngine.cjs', () => {
       );
     });
 
+    it('returns the recording metadata (name/missionDescription/projectPath) needed to populate the replay dashboard once, up front', () => {
+      const recording = recordingSchema.createRecording(
+        { id: 'rec-meta', name: 'Demo recording', missionId: 'm-1', createdAt: Date.now(), missionDescription: 'Add the record button', projectPath: 'E:/Project/demo' },
+        [recordingSchema.createEvent(0, 'recording:init', { description: 'demo' })]
+      );
+      recordingStore.saveRecording(recording);
+
+      const result = replayEngine.start({ recordingId: recording.id, speed: 'instant' });
+
+      expect(result.recording).toEqual({
+        name: 'Demo recording',
+        missionDescription: 'Add the record button',
+        projectPath: 'E:/Project/demo',
+      });
+    });
+
     it('also accepts the bare Infinity value for instant speed', () => {
       const recording = freshRecording({ id: 'rec-infinity' });
       recordingStore.saveRecording(recording);

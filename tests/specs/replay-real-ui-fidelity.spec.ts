@@ -247,6 +247,21 @@ test.describe('Replay on Real UI — full phase fidelity', () => {
     await expect(window.getByTestId('replay-readonly-overlay')).toBeVisible({ timeout: ciTimeout(10_000) });
     await expect(replayControls.missionDashboardReplayMode).toBeHidden();
 
+    // Regression check: replayEngine's seek() emits a synthetic
+    // mission:status reset before every seek (so useReplay.js's reducer can
+    // rebuild forward-only fields like phase deterministically — see that
+    // module's doc comment). By this point in the test at least 4 seeks have
+    // already fired that reset. useReplay.js's reset branch used to rebuild
+    // replayMissionState from a bare EMPTY_STATE(), which permanently blanked
+    // description/project_path after the first seek (those fields are only
+    // ever populated once, from replay_start's recordingMeta — no mission:*
+    // event re-sends them). Switch to the replay-only Prompts tab (the one
+    // place project_path renders read-only, in PromptPreview.jsx) and assert
+    // the real project directory is still there, proving the reset preserves
+    // it instead of leaving it blank.
+    await window.getByRole('button', { name: 'Prompts' }).click();
+    await expect(window.getByText(projectDir)).toBeVisible();
+
     // ReplayControls stays mounted throughout every phase.
     await replayControls.expectVisible();
   });

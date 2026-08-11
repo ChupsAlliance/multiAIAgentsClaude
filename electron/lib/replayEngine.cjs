@@ -175,7 +175,21 @@ function start({ recordingId, speed }) {
   // speed === Infinity không JSON-serialize được (→ null qua IPC),
   // nên trả 'instant' cho chế độ tức thời để frontend hiểu rõ.
   const speedOut = session.speed === Infinity ? 'instant' : session.speed;
-  return { ok: true, totalMs, eventCount: events.length, speed: speedOut };
+  // recordingSchema.cjs stores name/missionDescription/projectPath at the
+  // recording's top level — the frontend (useReplay.js) needs these once,
+  // up front, since no mission:* event ever re-sends them (they aren't part
+  // of the live mission event stream, only of the recording's own metadata).
+  return {
+    ok: true,
+    totalMs,
+    eventCount: events.length,
+    speed: speedOut,
+    recording: {
+      name: recording.name,
+      missionDescription: recording.missionDescription,
+      projectPath: recording.projectPath,
+    },
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────
