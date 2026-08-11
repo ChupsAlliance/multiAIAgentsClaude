@@ -33,10 +33,15 @@
 // electron/lib/qcqa.cjs's runQcQaCheck() calls the SAME spawnClaude() as the
 // main mission script (it's the identical `claude` binary shadowed on PATH),
 // invoked as: `claude -p <prompt> --dangerously-skip-permissions --model
-// <model> --output-format stream-json --verbose`. Its verdict parser
-// (parseQcQaVerdict) just regexes the raw accumulated stdout text for
-// `[QC] VERDICT: PASS|FAIL` / `[QA] VERDICT: PASS|FAIL` lines — it does NOT
-// require valid stream-json, so plain text output is fine here.
+// <model> --output-format stream-json --verbose`. runQcQaCheck()'s 'close'
+// handler runs extractLastAssistantText(stdoutText, parseLine) first — which
+// JSON-parses each stdout line via the adapter's parseLine and keeps only
+// the last complete `type:'assistant'` message's text — and hands THAT to
+// parseQcQaVerdict(), which regexes it for `[QC] VERDICT: PASS|FAIL` /
+// `[QA] VERDICT: PASS|FAIL` lines. So verdict output below MUST be wrapped
+// in a valid stream-json 'assistant' message (see writeAssistantText); plain
+// text is silently swallowed into an empty extracted string, which
+// parseQcQaVerdict then treats as FAIL regardless of intent.
 //
 // We distinguish a QC/QA invocation from a main-mission-script invocation by
 // scanning argv for the literal prompt-template substrings
@@ -126,6 +131,17 @@ if (isStdinPromptModeEarly) {
 // actual prompt only lives on stdin. Only trust promptArg as the prompt
 // text in the legacy argv-delivered case (isStdinPromptModeEarly === false).
 const promptText = isStdinPromptModeEarly ? earlyStdinText : promptArg;
+if (process.env.FAKE_CLAUDE_DEBUG_LOG) {
+  try {
+    fs.appendFileSync(
+      process.env.FAKE_CLAUDE_DEBUG_LOG,
+      `[pid ${process.pid}] argv=${JSON.stringify(process.argv)} isStdinPromptModeEarly=${isStdinPromptModeEarly} promptText(0..60)=${JSON.stringify(String(promptText).slice(0, 60))}\n`,
+      'utf8'
+    );
+  } catch {
+    // ignore
+  }
+}
 
 function nextInvocationCount(stage) {
   const stateDir = process.env.FAKE_QCQA_STATE_DIR;
@@ -163,14 +179,25 @@ function nextInvocationCount(stage) {
 // flag file to FAKE_QCQA_STATE_DIR right before exiting, and the main
 // transcript loop (see waitForQcQaDone below) polls for that exact file —
 // tying the wait to the real event instead of a wall-clock guess.
+function debugLog(msg) {
+  if (!process.env.FAKE_CLAUDE_DEBUG_LOG) return;
+  try {
+    fs.appendFileSync(process.env.FAKE_CLAUDE_DEBUG_LOG, `[pid ${process.pid}] ${msg}\n`, 'utf8');
+  } catch {
+    // ignore
+  }
+}
+
 function markQcQaDone(stage, attempt) {
   const stateDir = process.env.FAKE_QCQA_STATE_DIR;
+  debugLog(`markQcQaDone(${stage}, ${attempt}) stateDir=${stateDir}`);
   if (!stateDir) return;
   try {
     fs.mkdirSync(stateDir, { recursive: true });
     fs.writeFileSync(path.join(stateDir, `__qcqa-done-${stage}-${attempt}.flag`), String(Date.now()), 'utf8');
-  } catch {
-    // ignore — best effort
+    debugLog(`markQcQaDone(${stage}, ${attempt}) WROTE flag`);
+  } catch (err) {
+    debugLog(`markQcQaDone(${stage}, ${attempt}) FAILED: ${err}`);
   }
 }
 
@@ -191,6 +218,32 @@ function sleepSync(ms) {
   Atomics.wait(sab, 0, 0, ms);
 }
 
+// electron/lib/qcqa.cjs's runQcQaCheck() does NOT regex the raw stdout text
+// (the header comment above claiming that is stale, from before the
+// backend-adapter refactor). Its 'close' handler now runs
+// extractLastAssistantText(stdoutText, parseLine) FIRST — which JSON-parses
+// each stdout line via the adapter's parseLine and keeps only the LAST
+// complete `type:'assistant'` message's text — and hands THAT (not the raw
+// stdout) to parseQcQaVerdict(). Plain '[QC] VERDICT: ...' text lines fail
+// parseLine's JSON.parse, so extractLastAssistantText always returns '',
+// and every QC/QA check silently resolves to the "No verdict line found"
+// FAIL fallback — including ones meant to PASS. This is what stalled the
+// QC/QA retry loop, not the sync-signal mechanism above: the retry's QC
+// check kept "passing" the fixture's own logic while being reported to
+// mission.cjs as FAIL, so enqueueQaCheck() was never reached. Wrap the
+// verdict lines in a valid stream-json 'assistant' message (same shape as
+// the Mission Companion echo emulation below) so extractLastAssistantText
+// can actually recover them. All three FAIL lines must land in ONE message
+// (not three separate stream-json events) since only the LAST text event
+// survives extraction.
+function writeAssistantText(text) {
+  process.stdout.write(JSON.stringify({
+    type: 'assistant',
+    session_id: 'fake-session-qcqa',
+    message: { content: [{ type: 'text', text }] },
+  }) + '\n');
+}
+
 if (promptText && promptText.includes('You are the QC-Agent')) {
   // First QC attempt for a given task: FAIL once, so mission.cjs's
   // handleQcQaFailure() routes the task back through in_progress → pending_qc
@@ -199,11 +252,13 @@ if (promptText && promptText.includes('You are the QC-Agent')) {
   const attempt = nextInvocationCount('qc');
   sleepSync(qcqaDelayMs);
   if (attempt === 1) {
-    process.stdout.write('[QC] VERDICT: FAIL\n');
-    process.stdout.write('[QC] RESPONSIBLE_AGENT: Dev\n');
-    process.stdout.write('[QC] REASON: fake-claude fixture forcing one QC failure to exercise the retry loop\n');
+    writeAssistantText(
+      '[QC] VERDICT: FAIL\n' +
+      '[QC] RESPONSIBLE_AGENT: Dev\n' +
+      '[QC] REASON: fake-claude fixture forcing one QC failure to exercise the retry loop'
+    );
   } else {
-    process.stdout.write('[QC] VERDICT: PASS\n');
+    writeAssistantText('[QC] VERDICT: PASS');
   }
   markQcQaDone('qc', attempt);
   process.exit(0);
@@ -217,7 +272,7 @@ if (promptText && promptText.includes('You are the QA-Agent')) {
   // address a specific QA invocation by attempt number, same as QC.
   const attempt = nextInvocationCount('qa');
   sleepSync(qcqaDelayMs);
-  process.stdout.write('[QA] VERDICT: PASS\n');
+  writeAssistantText('[QA] VERDICT: PASS');
   markQcQaDone('qa', attempt);
   process.exit(0);
 }
@@ -336,24 +391,44 @@ const WAIT_POLL_INTERVAL_MS = 100;
 // thrown below) instead of hanging forever — real waits resolve in well
 // under a second locally and a few seconds on a loaded CI runner.
 const WAIT_TIMEOUT_MS = process.env.CI ? 90000 : 30000;
-// Small buffer after the flag file appears: the flag is written by the
-// QC/QA child process right before it exits, but the PARENT (mission.cjs)
-// still needs its 'close' handler and verdict-parsing .then() callback to
-// run before the resulting state change (e.g. enqueueQaCheck / task status)
-// is actually in effect. That's normally a sub-millisecond JS turnaround,
-// but give CI extra slack for scheduler contention.
-const WAIT_GRACE_MS = process.env.CI ? 1000 : 300;
+// Buffer after the flag file appears, before the deploy script is allowed to
+// send the next transcript line. Two distinct delays must both have cleared:
+//
+// 1. The flag is written by the QC/QA child process right before it exits,
+//    but the PARENT (mission.cjs) still needs its 'close' handler and
+//    verdict-parsing .then() callback to run before the resulting state
+//    change (e.g. enqueueQaCheck / task status) is actually in effect —
+//    normally sub-millisecond, but give CI slack for scheduler contention.
+// 2. On a QC/QA FAIL verdict, mission.cjs's handleQcQaFailure() schedules a
+//    QC_QA_FAILURE_VISIBILITY_DELAY_MS = 900ms setTimeout (there purely so a
+//    human/test can observe the failed_qc/failed_qa badge) before flipping
+//    the task back to 'in_progress'. That timer is independent of when the
+//    QC/QA subprocess exits, so it's STILL PENDING when the flag file
+//    appears. If this fixture's retry "Completed:" line lands (via
+//    TaskCompleted, which correctly re-enqueues on any non-'completed'
+//    status) before that stale timer fires, the timer's callback later
+//    unconditionally overwrites task.status back to 'in_progress' —
+//    clobbering whatever the retry has since done (pending_qc/pending_qa/
+//    completed) and permanently stalling the mission. Waiting comfortably
+//    past 900ms guarantees that timer has already fired and can't stomp
+//    anything the retry set afterward. This mirrors a known, fixed app
+//    constant (not a guess at CI speed), with margin on top for CI slack.
+const QC_FAILURE_VISIBILITY_DELAY_MS = 900; // mirrors mission.cjs's QC_QA_FAILURE_VISIBILITY_DELAY_MS
+const WAIT_GRACE_MS = QC_FAILURE_VISIBILITY_DELAY_MS + (process.env.CI ? 1500 : 400);
 
 async function waitForQcQaDone(stage, attempt) {
   const stateDir = process.env.FAKE_QCQA_STATE_DIR;
   const flagPath = stateDir ? path.join(stateDir, `__qcqa-done-${stage}-${attempt}.flag`) : null;
+  debugLog(`waitForQcQaDone(${stage}, ${attempt}) ENTER stateDir=${stateDir} flagPath=${flagPath}`);
   const deadline = Date.now() + WAIT_TIMEOUT_MS;
   while (!flagPath || !fs.existsSync(flagPath)) {
     if (Date.now() >= deadline) {
+      debugLog(`waitForQcQaDone(${stage}, ${attempt}) TIMED OUT; dir listing=${stateDir && fs.existsSync(stateDir) ? fs.readdirSync(stateDir).join(',') : 'N/A'}`);
       throw new Error(`waitForQcQaDone: timed out after ${WAIT_TIMEOUT_MS}ms waiting for ${stage} attempt ${attempt} (flag: ${flagPath})`);
     }
     await sleep(WAIT_POLL_INTERVAL_MS);
   }
+  debugLog(`waitForQcQaDone(${stage}, ${attempt}) FLAG FOUND, entering grace sleep ${WAIT_GRACE_MS}ms`);
   await sleep(WAIT_GRACE_MS);
 }
 

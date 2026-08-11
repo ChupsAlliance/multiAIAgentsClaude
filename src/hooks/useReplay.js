@@ -29,7 +29,7 @@ const EMPTY_STATE = () => ({
   description: '',
   project_path: '',
   status: 'Running',
-  phase: 'Executing',
+  phase: 'Planning',
   execution_mode: 'standard',
   agents: [],
   tasks: [],
