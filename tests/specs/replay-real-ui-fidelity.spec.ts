@@ -180,7 +180,20 @@ test.describe('Replay on Real UI — full phase fidelity', () => {
     // with both the dashboard wrapper and the ReviewPlan overlay — asserting
     // both are absent (while ReplayControls stays mounted) positively proves
     // we're in Planning specifically, not just "the app didn't crash".
-    await replayControls.seekToRatio(0);
+    //
+    // Deliberately seekToPositionMs(0), NOT seekToRatio(0): seekToRatio
+    // clamps to [0.01, 0.99] of totalMs to dodge an elementFromPoint
+    // edge-pixel bug (see its doc comment), so seekToRatio(0) actually seeks
+    // to 1% of totalMs, not literal ms 0. Locally the Planning phase's
+    // absolute duration (CPU-bound plan detection) is comfortably inside
+    // that 1% window of the whole (short) recording, but on CI the
+    // QC/QA-check IPC round-trips inflate totalMs far more than they inflate
+    // Planning's fixed absolute duration — shrinking Planning's share of
+    // totalMs below 1% and landing the seek in ReviewPlan instead (observed:
+    // CI failure showed the PlanReview screen fully rendered at this seek).
+    // seekToPositionMs bypasses the click/ratio path entirely via the exact-ms
+    // replay_seek IPC call, so it lands at true ms 0 regardless of totalMs.
+    await replayControls.seekToPositionMs(0);
     await expect(replayControls.missionDashboardReplayMode).toBeHidden();
     await expect(window.getByTestId('replay-readonly-overlay')).toBeHidden();
 
