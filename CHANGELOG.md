@@ -10,6 +10,27 @@ Format dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.15.0] — 2026-08-12
+
+### Sửa lỗi — 8 vấn đề nghiêm trọng (Critical Issues Review)
+
+- **#1 Retry timer không bị huỷ khi dừng mission**: timer chờ retry (dangling-question, transient-error) ở cả 4 điểm launch/deploy tiếp tục chạy ngầm sau khi user bấm Stop hoặc Reset, có thể resume nhầm 1 mission đã bị dừng. Giờ mọi timer được track và huỷ đúng lúc `stop_mission`/`reset_mission`; thêm xác nhận trước khi dừng 1 mission đang có retry chờ xử lý.
+- **#2 Command injection trong `launch_in_terminal`** (Critical): tham số đường dẫn dự án/mission được nội suy thẳng vào lệnh `cmd.exe` mà không escape, cho phép chèn lệnh tuỳ ý qua tên thư mục dự án. Đã tách `buildLaunchTerminalPlan` để dựng lệnh an toàn, bổ sung lớp caret-escaping 2 tầng cho `cmd.exe`.
+- **#3 QC/QA verdict parser đọc nhầm text**: verdict PASS/FAIL được trích từ toàn bộ stream-json thay vì chỉ từ message assistant đã hoàn chỉnh, có thể match nhầm placeholder/text tạm thời giữa chừng. Giờ chỉ trích xuất từ assistant message hoàn chỉnh, dùng đúng `parseLine` của adapter.
+- **#4 QC/QA spawn thiếu error listener**: process con của QC/QA không có listener cho event `error` — 1 lỗi spawn (vd. binary không tồn tại) làm crash toàn bộ tiến trình chính thay vì được xử lý gọn.
+- **#5 Export & Plan Version History gọi nhầm API không tồn tại**: `ExportDropdown`, `PlanVersionHistory`, và thao tác lưu version thủ công trong `PlanDocument` gọi `window.electron.*` (API không tồn tại trong Electron thật) thay vì `invoke()` — 3 tính năng này im lặng không hoạt động. Đã nối đúng lại qua `invoke()`.
+- **#6 Rò rỉ sự kiện IPC giữa Replay và mission đang chạy**: khi xem lại (replay) 1 recording trong lúc có mission khác đang chạy thật, cả 2 luồng event `mission:*` bị trộn lẫn do dùng chung channel — có thể khiến dashboard live hiển thị nhầm dữ liệu từ recording. Giờ replay phát qua namespace riêng `replay:mission:*`, tách biệt hoàn toàn khỏi luồng live.
+- **Bonus**: dashboard replay không hiển thị `projectPath` cho tới khi seek lần đầu — đã fix để hiển thị ngay khi bắt đầu phát lại.
+- **#8 (không phải bug của dự án)**: điều tra lỗi vitest runner thất bại ngẫu nhiên trong CI, xác định là race condition thượng nguồn của Vite — đóng issue, không cần fix code.
+
+### Thêm mới — CI Pipeline (Issue #7)
+
+- **GitHub Actions workflow**: tự động chạy lint, unit test, build-check, và e2e test trên mỗi PR/push — chặn merge nếu có lỗi.
+- **ESLint flat config**: thêm `eslint.config.js`, dọn sạch toàn bộ vi phạm hiện có (`no-unused-vars`, `no-useless-assignment`, `preserve-caught-error`, `no-control-regex`, `no-useless-escape`, `react/no-unescaped-entities`).
+- **Ổn định hoá e2e test trong CI**: sửa nhiều race condition chỉ xảy ra trên máy CI (timing fake-claude/Playwright, reset renderer state mỗi lần seek, đồng bộ QC/QA bằng tín hiệu thật thay vì delay đoán mò), loại Playwright specs khỏi glob mặc định của Vitest.
+
+---
+
 ## [0.14.0] — 2026-08-05
 
 ### Thêm mới

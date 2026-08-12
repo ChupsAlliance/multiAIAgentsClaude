@@ -8,6 +8,36 @@
 
 export const changelog = [
   {
+    version: '0.15.0',
+    date: '2026-08-12',
+    title: 'Vá 8 vấn đề nghiêm trọng (bao gồm 1 lỗi command injection) + thêm CI pipeline',
+    highlights: [
+      'Vá xong toàn bộ 8 vấn đề phát hiện qua rà soát bảo mật/độ tin cậy toàn diện, bao gồm 1 lỗi command injection nghiêm trọng',
+      'Thêm CI pipeline tự động (lint, unit test, build-check, e2e) chạy trên mọi PR — chặn merge nếu có lỗi',
+      'Replay và mission đang chạy giờ dùng kênh IPC tách biệt hoàn toàn, không còn rò rỉ dữ liệu chéo',
+    ],
+    items: [
+      { type: 'fixed', badge: 'Agent',
+        text: 'Critical — command injection trong launch_in_terminal: tham số đường dẫn dự án/mission được nội suy thẳng vào lệnh cmd.exe mà không escape, cho phép chèn lệnh tuỳ ý qua tên thư mục dự án. Đã tách buildLaunchTerminalPlan để dựng lệnh an toàn, bổ sung lớp caret-escaping 2 tầng cho cmd.exe' },
+      { type: 'fixed', badge: 'Agent',
+        text: 'Retry timer không bị huỷ khi dừng mission: timer chờ retry (dangling-question, transient-error) ở cả 4 điểm launch/deploy tiếp tục chạy ngầm sau khi bấm Stop/Reset, có thể resume nhầm 1 mission đã dừng — giờ mọi timer được track và huỷ đúng lúc, thêm xác nhận trước khi dừng mission đang có retry chờ xử lý' },
+      { type: 'fixed', badge: 'Agent',
+        text: 'QC/QA verdict parser đọc nhầm text: verdict PASS/FAIL trước đây được trích từ toàn bộ stream-json thay vì chỉ từ message assistant đã hoàn chỉnh, có thể match nhầm text tạm thời giữa chừng — giờ chỉ trích xuất từ assistant message hoàn chỉnh' },
+      { type: 'fixed', badge: 'Agent',
+        text: 'QC/QA spawn thiếu error listener: process con của QC/QA không có listener cho event error, 1 lỗi spawn làm crash toàn bộ tiến trình chính thay vì được xử lý gọn — đã bổ sung listener' },
+      { type: 'fixed', badge: 'Dashboard',
+        text: 'Export & Plan Version History gọi nhầm API không tồn tại: ExportDropdown, PlanVersionHistory, và lưu version thủ công trong PlanDocument gọi window.electron.* (không tồn tại trong Electron thật) thay vì invoke() — 3 tính năng này im lặng không hoạt động, đã nối đúng lại' },
+      { type: 'fixed', badge: 'Dashboard',
+        text: 'Rò rỉ sự kiện IPC giữa Replay và mission đang chạy: xem lại 1 recording trong lúc có mission khác chạy thật khiến 2 luồng event mission:* bị trộn lẫn, có thể khiến dashboard live hiển thị nhầm dữ liệu từ recording — replay giờ phát qua namespace riêng replay:mission:*, tách biệt hoàn toàn khỏi luồng live' },
+      { type: 'fixed', badge: 'Dashboard',
+        text: 'Dashboard replay không hiển thị đường dẫn dự án (projectPath) cho tới khi seek lần đầu — đã fix để hiển thị ngay khi bắt đầu phát lại' },
+      { type: 'added', badge: 'Build',
+        text: 'CI pipeline (GitHub Actions): tự động chạy lint, unit test, build-check, và e2e test trên mỗi PR/push, chặn merge nếu có lỗi' },
+      { type: 'added', badge: 'Build',
+        text: 'ESLint flat config: thêm eslint.config.js, dọn sạch toàn bộ vi phạm hiện có; ổn định hoá nhiều race condition trong e2e test chỉ xảy ra trên máy CI' },
+    ],
+  },
+  {
     version: '0.14.0',
     date: '2026-08-05',
     title: 'Mission Companion: hỏi đáp trực tiếp và chat debrief sau khi hoàn tất',
