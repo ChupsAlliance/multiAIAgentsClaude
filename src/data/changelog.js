@@ -15,6 +15,7 @@ export const changelog = [
       'Vá xong toàn bộ 8 vấn đề phát hiện qua rà soát bảo mật/độ tin cậy toàn diện, bao gồm 1 lỗi command injection nghiêm trọng',
       'Thêm CI pipeline tự động (lint, unit test, build-check, e2e) chạy trên mọi PR — chặn merge nếu có lỗi',
       'Replay và mission đang chạy giờ dùng kênh IPC tách biệt hoàn toàn, không còn rò rỉ dữ liệu chéo',
+      'Giảm ~40% dung lượng installer (259 MB → 150 MB) bằng cách loại bỏ runtime WASM và model cache không cần thiết khỏi build',
     ],
     items: [
       { type: 'fixed', badge: 'Agent',
@@ -35,6 +36,8 @@ export const changelog = [
         text: 'CI pipeline (GitHub Actions): tự động chạy lint, unit test, build-check, và e2e test trên mỗi PR/push, chặn merge nếu có lỗi' },
       { type: 'added', badge: 'Build',
         text: 'ESLint flat config: thêm eslint.config.js, dọn sạch toàn bộ vi phạm hiện có; ổn định hoá nhiều race condition trong e2e test chỉ xảy ra trên máy CI' },
+      { type: 'fixed', badge: 'Build',
+        text: 'Giảm ~40% dung lượng installer (259 MB → 150 MB): loại onnxruntime-web (backend WASM không bao giờ được dùng, vì @huggingface/transformers chỉ chạy trong Electron main process/Node) và model cache lỡ bị cuốn vào node_modules lúc dev ra khỏi build.files trong package.json' },
     ],
   },
   {

@@ -68,7 +68,9 @@
     "files": [
       "dist-electron/**/*",
       "electron/**/*",
-      "!electron/prompts/**/*"
+      "!electron/prompts/**/*",
+      "!node_modules/onnxruntime-web/**/*",
+      "!node_modules/@huggingface/transformers/.cache/**/*"
     ],
     "extraResources": [
       {

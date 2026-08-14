@@ -29,6 +29,10 @@ Format dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **ESLint flat config**: thêm `eslint.config.js`, dọn sạch toàn bộ vi phạm hiện có (`no-unused-vars`, `no-useless-assignment`, `preserve-caught-error`, `no-control-regex`, `no-useless-escape`, `react/no-unescaped-entities`).
 - **Ổn định hoá e2e test trong CI**: sửa nhiều race condition chỉ xảy ra trên máy CI (timing fake-claude/Playwright, reset renderer state mỗi lần seek, đồng bộ QC/QA bằng tín hiệu thật thay vì delay đoán mò), loại Playwright specs khỏi glob mặc định của Vitest.
 
+### 🛠️ Build
+
+- **Giảm ~40% dung lượng installer** (259 MB → 150 MB): `onnxruntime-web` (WASM backend, không bao giờ được dùng vì `@huggingface/transformers` chỉ chạy trong Electron main process/Node) và model cache bị lỡ tay cuốn vào `node_modules` lúc dev đã bị loại khỏi build qua `build.files` trong `package.json`. `app.asar` giảm từ 278 MB xuống còn 63 MB.
+
 ---
 
 ## [0.14.0] — 2026-08-05
