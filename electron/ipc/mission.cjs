@@ -4669,7 +4669,8 @@ Keep all existing tasks that already have detail EXACTLY as they are. Only modif
           const raw = fs.readFileSync(path.join(snapshotsDir, file), 'utf8');
           const snap = JSON.parse(raw);
           const status = (snap.status || '').toString();
-          if (status !== 'Completed' && status !== 'Failed' && status !== 'Stopped') {
+          if (status !== 'Completed' && status !== 'Failed' && status !== 'Stopped'
+              && status !== 'Needs Attention') {
             const age = Date.now() - (snap.started_at || 0);
             if (age < maxAge) {
               incomplete.push({
