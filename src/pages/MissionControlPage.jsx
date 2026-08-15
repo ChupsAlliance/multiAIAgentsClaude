@@ -22,7 +22,8 @@ export function MissionControlPage() {
   const { missionState, isRunning, planReady, setPlanReady, isReplanning, pendingQuestions,
           mockupInfo, recoverableMission, setRecoverableMission,
           isRecording, startRecording, stopRecordingAndSave, discardRecording,
-          launch, deploy, continueM, stop, reset, replan, answerQuestion, respondToMockup, retryAgent } = useMission()
+          launch, deploy, continueM, stop, reset, replan, answerQuestion, respondToMockup, retryAgent,
+          createQaFixMission } = useMission()
   const [elapsed, setElapsed] = useState('0:00')
   const [promptPreview, setPromptPreview] = useState(null) // { agents, tasks }
   const [planViewTab, setPlanViewTab] = useState('visual') // 'visual' | 'document'
@@ -461,6 +462,7 @@ export function MissionControlPage() {
               pendingQuestions={pendingQuestions}
               onAnswerQuestion={answerQuestion}
               onRetryAgent={retryAgent}
+              onCreateQaFixMission={createQaFixMission}
             />
           </div>
         )}

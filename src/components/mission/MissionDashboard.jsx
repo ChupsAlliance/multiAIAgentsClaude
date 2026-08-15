@@ -25,7 +25,7 @@ const baseTabs = [
   { id: 'graph',    label: 'Graph',    icon: GitFork },
 ]
 
-export const MissionDashboard = memo(function MissionDashboard({ state, isRunning, onStop, onContinue, onNewMission, elapsed, isHistoryView, pendingQuestions, onAnswerQuestion, onRetryAgent }) {
+export const MissionDashboard = memo(function MissionDashboard({ state, isRunning, onStop, onContinue, onNewMission, elapsed, isHistoryView, pendingQuestions, onAnswerQuestion, onRetryAgent, onCreateQaFixMission }) {
   const [activeTab, setActiveTab] = useState('tasks')
   const [selectedAgent, setSelectedAgent] = useState(null)
   const [sidebarWidth, setSidebarWidth] = useState(224) // px, default w-56
@@ -181,7 +181,7 @@ export const MissionDashboard = memo(function MissionDashboard({ state, isRunnin
         </div>
       )}
       {/* Header */}
-      <MissionHeader state={state} onStop={isHistoryView ? null : onStop} onNewMission={onNewMission} elapsed={elapsed} />
+      <MissionHeader state={state} onStop={isHistoryView ? null : onStop} onNewMission={onNewMission} elapsed={elapsed} onCreateQaFixMission={isHistoryView ? null : onCreateQaFixMission} />
 
       {/* Main content — split: dashboard left, Virtual Office right */}
       <div className="flex flex-1 overflow-hidden">
