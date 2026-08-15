@@ -1069,6 +1069,27 @@ function buildMissionSummary(state, logLimit = 30) {
   return parts.join('\n\n');
 }
 
+function buildQaFailuresSection(tasks) {
+  const withDetail = (tasks || []).filter(t => t.lastFailureDetail);
+  if (!withDetail.length) {
+    return '- (No per-task failure reason was captured — the final QA sweep itself ' +
+      'reported failures. Re-run or re-derive what is failing before assuming success.)';
+  }
+  return withDetail
+    .map(t => `- ${t.title} (owner: ${t.lastFailureDetail.responsibleAgent || 'unknown'}): ${t.lastFailureDetail.reason || '(no reason given)'}`)
+    .join('\n');
+}
+
+function buildPriorRosterSection(agents) {
+  const devs = (agents || []).filter(a => a.name !== 'Lead');
+  if (!devs.length) {
+    return '- (No prior Dev agents recorded — Lead worked alone.)';
+  }
+  return devs
+    .map(a => `- ${a.name} (${a.role || 'Dev'}), model: ${a.model || 'sonnet'}, backend: ${a.backend || 'claude'}`)
+    .join('\n');
+}
+
 // ─────────────────────────────────────────────────────────────────
 // startFileWatcher — agent_teams mode: poll tasks dir + project dir
 // mirrors watch_agent_teams_mission in Rust
@@ -5039,4 +5060,6 @@ if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
   module.exports.__generateDebriefSummaryForTest = generateDebriefSummary;
   module.exports.__runMockupHtmlForTest = runMockupHtml;
   module.exports.__buildMissionSummaryForTest = (state, logLimit) => buildMissionSummary(state, logLimit);
+  module.exports.__buildQaFailuresSectionForTest = (tasks) => buildQaFailuresSection(tasks);
+  module.exports.__buildPriorRosterSectionForTest = (agents) => buildPriorRosterSection(agents);
 }
