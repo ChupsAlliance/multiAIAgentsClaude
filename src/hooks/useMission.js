@@ -176,7 +176,7 @@ export function useMission() {
           // Any status transition supersedes a pending-retry signal — safety
           // net against ever missing a cancel and showing a stale flag.
           setIsRetryPending(false)
-          const { status } = e.payload
+          const { status, stuck_reason: stuckReasonFromEvent } = e.payload
 
           if (status === 'reset') {
             clearPlanningTimer()
@@ -196,7 +196,11 @@ export function useMission() {
               }
               return prev
             }
-            return { ...prev, status: status.charAt(0).toUpperCase() + status.slice(1) }
+            return {
+              ...prev,
+              status: status.charAt(0).toUpperCase() + status.slice(1),
+              stuckReason: stuckReasonFromEvent ?? null,
+            }
           })
           setPlanReady(prev => {
             if (prev && status === 'completed') return prev

@@ -200,6 +200,24 @@ test('a mission:status event clears a pending-retry flag, so a later stop() does
   confirmSpy.mockRestore()
 })
 
+test('a mission:status event with stuck_reason updates renderer state.stuckReason live (no reload needed)', async () => {
+  const result = await setupMissionWithOneTask()
+
+  await act(async () => {
+    emit('mission:status', { status: 'Needs Attention', stuck_reason: 'final_qa_retry_exhausted' })
+  })
+
+  expect(result.current.missionState.stuckReason).toBe('final_qa_retry_exhausted')
+
+  // And it must clear on the next non-stuck transition (e.g. a manual retry, which
+  // emits mission:status with no stuck_reason field at all):
+  await act(async () => {
+    emit('mission:status', { status: 'running' })
+  })
+
+  expect(result.current.missionState.stuckReason).toBeNull()
+})
+
 test('createQaFixMission calls create_qa_fix_mission and shows a success toast', async () => {
   const { invoke } = await import('@tauri-apps/api/core')
   invoke.mockClear()
