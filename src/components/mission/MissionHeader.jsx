@@ -1,7 +1,7 @@
 import { Clock, Square, CheckCircle2, PlusCircle, FlaskConical } from 'lucide-react'
 import { StatusBadge } from './StatusBadge'
 
-export function MissionHeader({ state, onStop, onNewMission, elapsed }) {
+export function MissionHeader({ state, onStop, onNewMission, elapsed, onCreateQaFixMission }) {
   if (!state) return null
 
   const isActive = ['Running', 'Launching', 'running', 'launching'].includes(state.status)
@@ -9,6 +9,8 @@ export function MissionHeader({ state, onStop, onNewMission, elapsed }) {
   const isFailed = ['Failed', 'failed'].includes(state.status)
   const isStopped = ['Stopped', 'stopped'].includes(state.status)
   const isAgentTeams = state.execution_mode === 'agent_teams'
+  const isStuckOnQaRetry = state.status === 'Needs Attention'
+    && state.stuckReason === 'final_qa_retry_exhausted'
 
   return (
     <div className={`flex items-center justify-between px-4 py-3 border-b transition-colors gap-3 ${
@@ -48,6 +50,16 @@ export function MissionHeader({ state, onStop, onNewMission, elapsed }) {
           >
             <Square size={10} fill="currentColor" />
             Stop
+          </button>
+        )}
+
+        {/* Stop & create fix mission button */}
+        {isStuckOnQaRetry && (
+          <button
+            onClick={onCreateQaFixMission}
+            className="px-3 py-1.5 text-sm rounded-md bg-amber-600 hover:bg-amber-700 text-white"
+          >
+            Stop &amp; create fix mission
           </button>
         )}
 
