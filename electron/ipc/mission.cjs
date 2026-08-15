@@ -372,6 +372,7 @@ function handleQcQaFailure(task, stage, responsibleAgent, reason) {
   task.qcRound = (task.qcRound || 0) + 1;
   task.status = stage === 'qc' ? 'failed_qc' : 'failed_qa';
   const ts = now();
+  task.lastFailureDetail = { stage, reason, responsibleAgent, timestamp: ts };
   sendToWindowRef('mission:task-update', {
     task_id: task.id, agent: responsibleAgent, description: task.title, status: task.status,
     reason, timestamp: ts,
