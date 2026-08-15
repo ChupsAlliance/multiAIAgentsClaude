@@ -931,10 +931,24 @@ export function useMission() {
     }
   }, [toast])
 
+  const createQaFixMission = useCallback(async () => {
+    try {
+      const result = await invoke('create_qa_fix_mission')
+      if (result?.ok === false) {
+        toast.error('Không thể tạo fix mission', result.error)
+      } else {
+        toast.info('Đang tạo mission mới để fix các lỗi QA...')
+      }
+    } catch (err) {
+      toast.error('Không thể tạo fix mission', err?.message)
+    }
+  }, [toast])
+
   return {
     missionState, isRunning, planReady, setPlanReady, isReplanning, pendingQuestions, mockupInfo,
     recoverableMission, setRecoverableMission,
     isRecording, startRecording, stopRecordingAndSave, discardRecording,
     launch, deploy, continueM, stop, reset, replan, answerQuestion, respondToMockup, retryAgent,
+    createQaFixMission,
   }
 }

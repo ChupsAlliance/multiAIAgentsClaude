@@ -199,3 +199,16 @@ test('a mission:status event clears a pending-retry flag, so a later stop() does
 
   confirmSpy.mockRestore()
 })
+
+test('createQaFixMission calls create_qa_fix_mission and shows a success toast', async () => {
+  const { invoke } = await import('@tauri-apps/api/core')
+  invoke.mockClear()
+  invoke.mockResolvedValueOnce({ ok: true, mission_id: 'mission-999' })
+
+  const { result } = renderHook(() => useMission())
+  await act(async () => { await Promise.resolve() })
+
+  await act(async () => { await result.current.createQaFixMission() })
+
+  expect(invoke).toHaveBeenCalledWith('create_qa_fix_mission')
+})

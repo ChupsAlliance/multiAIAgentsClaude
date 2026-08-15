@@ -1,5 +1,5 @@
 import { renderHook, act, cleanup } from '@testing-library/react'
-import { vi } from 'vitest'
+import { afterEach, test, expect, vi } from 'vitest'
 import { useMission } from './useMission'
 import { ToastProvider } from '../components/ui/ToastProvider'
 
@@ -39,4 +39,12 @@ test('respondToMockup failure shows toast warn', async () => {
   expect(alerts.length).toBeGreaterThan(0)
   const text = Array.from(alerts).map(a => a.textContent).join(' ')
   expect(text).toContain('Không gửi được phản hồi mockup')
+})
+
+test('createQaFixMission failure shows toast error', async () => {
+  const { result } = renderHook(() => useMission(), { wrapper })
+  await act(async () => { await result.current.createQaFixMission() })
+  const alerts = document.querySelectorAll('[role="alert"]')
+  expect(alerts.length).toBeGreaterThan(0)
+  expect(alerts[0].textContent).toContain('Không thể tạo fix mission')
 })
