@@ -1,7 +1,7 @@
-import { Clock, Square, CheckCircle2, PlusCircle, FlaskConical } from 'lucide-react'
+import { Clock, Square, CheckCircle2, PlusCircle, FlaskConical, AlertTriangle } from 'lucide-react'
 import { StatusBadge } from './StatusBadge'
 
-export function MissionHeader({ state, onStop, onNewMission, elapsed, onCreateQaFixMission }) {
+export function MissionHeader({ state, onStop, onNewMission, elapsed, onCreateQaFixMission, onNavigateToTasks }) {
   if (!state) return null
 
   const isActive = ['Running', 'Launching', 'running', 'launching'].includes(state.status)
@@ -11,6 +11,8 @@ export function MissionHeader({ state, onStop, onNewMission, elapsed, onCreateQa
   const isAgentTeams = state.execution_mode === 'agent_teams'
   const isStuckOnQaRetry = state.status === 'Needs Attention'
     && state.stuckReason === 'final_qa_retry_exhausted'
+  const failingTaskCount = (state.tasks || [])
+    .filter(t => t.status === 'failed_qc' || t.status === 'failed_qa').length
 
   return (
     <div className={`flex items-center justify-between px-4 py-3 border-b transition-colors gap-3 ${
@@ -26,6 +28,16 @@ export function MissionHeader({ state, onStop, onNewMission, elapsed, onCreateQa
           {state.description || 'Mission'}
         </h2>
         <StatusBadge status={state.status} size="xs" />
+        {failingTaskCount > 0 && (
+          <button
+            onClick={onNavigateToTasks}
+            className="flex items-center gap-1 shrink-0 text-[9px] font-mono px-1.5 py-0.5 rounded
+                       bg-vs-red/15 text-vs-red border border-vs-red/20 hover:bg-vs-red/25 transition-colors"
+          >
+            <AlertTriangle size={9} />
+            QA retry: {failingTaskCount} task đang fail
+          </button>
+        )}
         {isAgentTeams && (
           <span className="flex items-center gap-1 shrink-0 text-[9px] font-mono px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-400 border border-yellow-500/20">
             <FlaskConical size={9} />

@@ -358,7 +358,7 @@ export function useMission() {
 
         // ── Task updates (medium frequency — apply immediately, important for UI) ──
         listen('mission:task-update', (e) => {
-          const { agent, owner, description, status, timestamp, task_id } = e.payload
+          const { agent, owner, description, status, timestamp, task_id, reason, stage, qcRound } = e.payload
           const agentName = agent || owner || ''
           const taskDesc = description || ''
 
@@ -410,6 +410,9 @@ export function useMission() {
                 assigned_agent: agentName || tasks[idx].assigned_agent,
                 completed_at: status === 'completed' ? timestamp : tasks[idx].completed_at,
                 started_at: status === 'in_progress' ? timestamp : tasks[idx].started_at,
+                ...(reason ? {
+                  lastFailureDetail: { stage, reason, responsibleAgent: agentName, qcRound, timestamp },
+                } : {}),
               }
               return { ...prev, tasks }
             } else {

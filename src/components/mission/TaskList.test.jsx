@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { test, expect } from 'vitest'
 import { TaskList } from './TaskList'
 
@@ -52,4 +52,35 @@ test('renders QA Failed status text when task has failed_qa status', () => {
   ]
   render(<TaskList tasks={tasks} logs={[]} />)
   expect(screen.getByText(/QA Failed/i)).toBeInTheDocument()
+})
+
+test('a task with lastFailureDetail reveals the failure reason when clicked', () => {
+  const tasks = [
+    {
+      id: 't5',
+      title: 'Widget fixes',
+      status: 'failed_qc',
+      assigned_agent: 'Dev',
+      lastFailureDetail: {
+        stage: 'qc', reason: 'lint error on line 42', responsibleAgent: 'Dev',
+        qcRound: 2, timestamp: 100,
+      },
+    },
+  ]
+  render(<TaskList tasks={tasks} logs={[]} />)
+
+  expect(screen.queryByText(/lint error on line 42/i)).toBeNull()
+  fireEvent.click(screen.getByText('Widget fixes'))
+  expect(screen.getByText(/lint error on line 42/i)).toBeInTheDocument()
+  expect(screen.getAllByText(/attempt 2\/8/i).length).toBeGreaterThan(0)
+})
+
+test('a task without lastFailureDetail is not clickable/expandable', () => {
+  const tasks = [
+    { id: 't6', title: 'Plain task', status: 'in_progress', assigned_agent: 'Dev' },
+  ]
+  render(<TaskList tasks={tasks} logs={[]} />)
+
+  fireEvent.click(screen.getByText('Plain task'))
+  expect(screen.queryByText(/attempt/i)).toBeNull()
 })

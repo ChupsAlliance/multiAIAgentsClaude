@@ -378,7 +378,7 @@ function handleQcQaFailure(task, stage, responsibleAgent, reason) {
   task.lastFailureDetail = { stage, reason, responsibleAgent, timestamp: ts };
   sendToWindowRef('mission:task-update', {
     task_id: task.id, agent: responsibleAgent, description: task.title, status: task.status,
-    reason, timestamp: ts,
+    reason, stage, qcRound: task.qcRound, timestamp: ts,
   });
 
   const { tier } = nextEscalationTier(task.qcRound);
@@ -402,7 +402,7 @@ function handleQcQaFailure(task, stage, responsibleAgent, reason) {
     task.status = 'in_progress';
     sendToWindowRef('mission:task-update', {
       task_id: task.id, agent: responsibleAgent, description: task.title, status: 'in_progress',
-      reason, timestamp: now(),
+      reason, stage, qcRound: task.qcRound, timestamp: now(),
     });
   }, QC_QA_FAILURE_VISIBILITY_DELAY_MS);
 }

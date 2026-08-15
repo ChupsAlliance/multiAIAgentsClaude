@@ -197,6 +197,36 @@ describe('QC/QA per-task pipeline', () => {
     }
   })
 
+  test('QC FAIL and its retry bounce-back both emit stage and qcRound on mission:task-update', async () => {
+    vi.useFakeTimers()
+    try {
+      const sendToWindow = vi.fn()
+      mission.__setMissionStateForTest({
+        tasks: [{ id: 't1', title: 'Build it', status: 'pending_qc', assigned_agent: 'Dev', qcRound: 0 }],
+        agents: [{ name: 'Dev', status: 'Idle', current_task: null }],
+        log: [], project_path: '/tmp/proj',
+      })
+      mission.__setSendToWindowForTest(sendToWindow)
+      mission.__setQcQaRunnerForTest(async () => ({
+        verdict: 'FAIL', responsibleAgent: 'Dev', reason: 'build broke',
+      }))
+
+      const donePromise = mission.__enqueueQcCheckForTest(mission.__getMissionStateForTest().tasks[0], 'Dev')
+      await vi.advanceTimersByTimeAsync(1000)
+      await donePromise
+
+      const taskUpdateCalls = sendToWindow.mock.calls.filter(c => c[0] === 'mission:task-update')
+      const failedCall = taskUpdateCalls.find(c => c[1].status === 'failed_qc')
+      const inProgressCall = taskUpdateCalls.find(c => c[1].status === 'in_progress')
+      expect(failedCall[1].stage).toBe('qc')
+      expect(failedCall[1].qcRound).toBe(1)
+      expect(inProgressCall[1].stage).toBe('qc')
+      expect(inProgressCall[1].qcRound).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   test('a second QC/QA failure overwrites lastFailureDetail rather than accumulating', async () => {
     vi.useFakeTimers()
     try {

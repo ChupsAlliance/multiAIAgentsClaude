@@ -181,7 +181,7 @@ export const MissionDashboard = memo(function MissionDashboard({ state, isRunnin
         </div>
       )}
       {/* Header */}
-      <MissionHeader state={state} onStop={isHistoryView ? null : onStop} onNewMission={onNewMission} elapsed={elapsed} onCreateQaFixMission={isHistoryView ? null : onCreateQaFixMission} />
+      <MissionHeader state={state} onStop={isHistoryView ? null : onStop} onNewMission={onNewMission} elapsed={elapsed} onCreateQaFixMission={isHistoryView ? null : onCreateQaFixMission} onNavigateToTasks={() => setActiveTab('tasks')} />
 
       {/* Main content — split: dashboard left, Virtual Office right */}
       <div className="flex flex-1 overflow-hidden">

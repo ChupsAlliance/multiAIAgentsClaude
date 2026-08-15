@@ -1,4 +1,4 @@
-import { useMemo, memo } from 'react'
+import { useMemo, useState, memo } from 'react'
 import { CheckCircle2, Circle, Loader2, AlertCircle, Clock, AlertTriangle } from 'lucide-react'
 import { StatusBadge } from './StatusBadge'
 
@@ -120,6 +120,7 @@ function buildAgentLogIndex(logs) {
 }
 
 const TaskItem = memo(function TaskItem({ task, agentLogs }) {
+  const [expanded, setExpanded] = useState(false)
   const phase = inferPhase(task, agentLogs)
   const lastActivityAt = agentLogs.length > 0
     ? agentLogs[agentLogs.length - 1]?.timestamp
@@ -135,9 +136,13 @@ const TaskItem = memo(function TaskItem({ task, agentLogs }) {
     }
   }
 
+  const failureDetail = task.lastFailureDetail
+  const isExpandable = Boolean(failureDetail)
+
   return (
     <div
-      className={`px-3 py-2 rounded-md text-xs ${
+      onClick={isExpandable ? () => setExpanded(e => !e) : undefined}
+      className={`px-3 py-2 rounded-md text-xs ${isExpandable ? 'cursor-pointer' : ''} ${
         task.status === 'completed'
           ? 'bg-vs-green/5 text-vs-muted'
           : task.status === 'in_progress'
@@ -176,6 +181,11 @@ const TaskItem = memo(function TaskItem({ task, agentLogs }) {
               </span>
             )}
             <StuckBadge task={task} lastActivityAt={lastActivityAt} />
+            {isExpandable && (
+              <span className="text-[9px] font-mono text-vs-muted">
+                {expanded ? '▲' : '▼'} attempt {failureDetail.qcRound}/8
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -186,6 +196,15 @@ const TaskItem = memo(function TaskItem({ task, agentLogs }) {
         <p className="text-[9px] font-mono text-vs-function/70 mt-1 truncate" title={currentAction}>
           ↳ {currentAction}
         </p>
+      )}
+      {expanded && failureDetail && (
+        <div className="mt-1.5 px-2 py-1.5 rounded bg-vs-red/5 border border-vs-red/20 text-[10px] font-mono">
+          <p className="text-vs-red">
+            {failureDetail.stage === 'qc' ? 'QC' : 'QA'} failed — attempt {failureDetail.qcRound}/8
+            {failureDetail.responsibleAgent ? ` (${failureDetail.responsibleAgent})` : ''}
+          </p>
+          <p className="text-vs-muted mt-1 whitespace-pre-wrap">{failureDetail.reason}</p>
+        </div>
       )}
     </div>
   )

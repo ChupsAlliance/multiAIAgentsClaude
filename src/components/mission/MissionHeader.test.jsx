@@ -49,3 +49,39 @@ describe('MissionHeader — Stop & create fix mission button', () => {
     expect(screen.queryByRole('button', { name: /fix mission/i })).toBeNull()
   })
 })
+
+describe('MissionHeader — QA retry failing-tasks badge', () => {
+  test('renders a badge with the count of failed_qc/failed_qa tasks and navigates on click', () => {
+    const onNavigateToTasks = vi.fn()
+    render(
+      <MissionHeader
+        state={baseState({
+          status: 'Running',
+          tasks: [
+            { id: 't1', status: 'failed_qc' },
+            { id: 't2', status: 'failed_qa' },
+            { id: 't3', status: 'completed' },
+          ],
+        })}
+        onStop={vi.fn()} onNewMission={vi.fn()} elapsed={0}
+        onCreateQaFixMission={vi.fn()} onNavigateToTasks={onNavigateToTasks}
+      />
+    )
+
+    const badge = screen.getByText(/QA retry: 2 task/i)
+    fireEvent.click(badge)
+    expect(onNavigateToTasks).toHaveBeenCalledTimes(1)
+  })
+
+  test('does not render when no tasks are failed_qc/failed_qa', () => {
+    render(
+      <MissionHeader
+        state={baseState({ status: 'Running', tasks: [{ id: 't1', status: 'in_progress' }] })}
+        onStop={vi.fn()} onNewMission={vi.fn()} elapsed={0}
+        onCreateQaFixMission={vi.fn()} onNavigateToTasks={vi.fn()}
+      />
+    )
+
+    expect(screen.queryByText(/QA retry:/i)).toBeNull()
+  })
+})

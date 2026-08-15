@@ -80,11 +80,42 @@ test('a failed_qc update on an existing pending_qc task updates it in place', as
     emit('mission:task-update', { agent: 'Dev', description: 'Build it', status: 'pending_qc', timestamp: 5 })
   })
   act(() => {
-    emit('mission:task-update', { agent: 'Dev', description: 'Build it', status: 'failed_qc', reason: 'x', timestamp: 6 })
+    emit('mission:task-update', {
+      agent: 'Dev', description: 'Build it', status: 'failed_qc',
+      reason: 'x', stage: 'qc', qcRound: 1, timestamp: 6,
+    })
   })
 
   expect(result.current.missionState.tasks).toHaveLength(1)
   expect(result.current.missionState.tasks[0].status).toBe('failed_qc')
+  expect(result.current.missionState.tasks[0].lastFailureDetail).toEqual({
+    stage: 'qc', reason: 'x', responsibleAgent: 'Dev', qcRound: 1, timestamp: 6,
+  })
+})
+
+test('lastFailureDetail survives the retry bounce-back to in_progress', async () => {
+  const result = await setupMissionWithOneTask()
+
+  act(() => {
+    emit('mission:task-update', { agent: 'Dev', description: 'Build it', status: 'pending_qc', timestamp: 5 })
+  })
+  act(() => {
+    emit('mission:task-update', {
+      agent: 'Dev', description: 'Build it', status: 'failed_qc',
+      reason: 'x', stage: 'qc', qcRound: 1, timestamp: 6,
+    })
+  })
+  act(() => {
+    emit('mission:task-update', {
+      agent: 'Dev', description: 'Build it', status: 'in_progress',
+      reason: 'x', stage: 'qc', qcRound: 1, timestamp: 7,
+    })
+  })
+
+  expect(result.current.missionState.tasks[0].status).toBe('in_progress')
+  expect(result.current.missionState.tasks[0].lastFailureDetail).toEqual({
+    stage: 'qc', reason: 'x', responsibleAgent: 'Dev', qcRound: 1, timestamp: 7,
+  })
 })
 
 test('a completed update with no description still matches a pending_qa task via the agent-only fallback', async () => {
