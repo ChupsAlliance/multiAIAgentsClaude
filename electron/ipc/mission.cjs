@@ -1050,6 +1050,13 @@ function buildMissionSummary(state, logLimit = 30) {
   if (inProg.length) parts.push(`In Progress:\n${inProg.join('\n')}`);
   if (pend.length)   parts.push(`Pending:\n${pend.join('\n')}`);
 
+  const failedQa = tasks.filter(t =>
+    (t.status === 'failed_qc' || t.status === 'failed_qa') && t.lastFailureDetail
+  ).map(t =>
+    `- ${t.title} (owner: ${t.lastFailureDetail.responsibleAgent || 'unknown'}, stage: ${t.lastFailureDetail.stage}): ${t.lastFailureDetail.reason || '(no reason given)'}`
+  );
+  if (failedQa.length) parts.push(`QA/QC failures:\n${failedQa.join('\n')}`);
+
   const logs = (state.log || []).filter(l => l.log_type !== 'raw').slice(-logLimit)
     .map(l => `[${l.agent}] ${(l.message || '').slice(0, 300)}`);
   if (logs.length) parts.push(`Recent activity:\n${logs.join('\n')}`);
@@ -5022,4 +5029,5 @@ if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
   module.exports.__askMissionLiveForTest = (args) => askMissionLive(args, () => {});
   module.exports.__generateDebriefSummaryForTest = generateDebriefSummary;
   module.exports.__runMockupHtmlForTest = runMockupHtml;
+  module.exports.__buildMissionSummaryForTest = (state, logLimit) => buildMissionSummary(state, logLimit);
 }
