@@ -3264,6 +3264,8 @@ function autoResumeAfterFinalQaFailure(missionId, sendToWindow, ts) {
   missionState.autoResumeCount = (missionState.autoResumeCount || 0) + 1;
 
   if (missionState.autoResumeCount > 3) {
+    missionState.status = 'Needs Attention';
+    missionState.stuckReason = 'final_qa_retry_exhausted';
     const entry = makeLogEntry(ts, 'System',
       'Final QA sweep scheduled a retry after the driving process already exited — ' +
       'mission is awaiting that retry, but no process is currently driving it. ' +
@@ -3272,6 +3274,11 @@ function autoResumeAfterFinalQaFailure(missionId, sendToWindow, ts) {
       'info');
     missionState.log.push(entry);
     sendToWindow('mission:log', entry);
+    sendToWindow('mission:status', {
+      mission_id: missionState.id, status: 'Needs Attention',
+      stuck_reason: 'final_qa_retry_exhausted',
+    });
+    saveMissionSnapshot(missionState);
     return;
   }
 

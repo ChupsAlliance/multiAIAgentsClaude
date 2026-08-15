@@ -99,6 +99,23 @@ describe('autoResumeAfterFinalQaFailure', () => {
     expect(statusCalls.length).toBe(0)
   })
 
+  test('give-up branch marks status Needs Attention with stuckReason and persists a snapshot', () => {
+    const sendToWindow = vi.fn()
+    setupMissionState({ autoResumeCount: 3 })
+    mission.__setSendToWindowForTest(sendToWindow)
+
+    mission.__autoResumeAfterFinalQaFailureForTest('m1', sendToWindow, Date.now())
+
+    const state = mission.__getMissionStateForTest()
+    expect(state.status).toBe('Needs Attention')
+    expect(state.stuckReason).toBe('final_qa_retry_exhausted')
+
+    const statusCalls = sendToWindow.mock.calls.filter(c => c[0] === 'mission:status')
+    expect(statusCalls.some(c =>
+      c[1].status === 'Needs Attention' && c[1].stuck_reason === 'final_qa_retry_exhausted'
+    )).toBe(true)
+  })
+
   test('autoResumeCount resets to 0 after retryAgentCore', () => {
     const sendToWindow = vi.fn()
     setupMissionState({
