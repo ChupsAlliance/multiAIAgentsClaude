@@ -1402,11 +1402,19 @@ async function runMockupHtml(prompt) {
 
     proc.on('close', () => {
       clearTimeout(timer);
-      const match = /<<<HTML>>>([\s\S]*?)<<<END_HTML>>>/.exec(stdout);
+      // stdout is `--output-format stream-json` JSONL (adapter.buildLaunchArgs
+      // always requests it) — the real text lives inside each line's JSON
+      // string, so matching markers against raw stdout captures the
+      // JSON-escaped form (literal "\n", "\"" etc.) instead of real
+      // characters. Decode via extractAssistantText first; fall back to raw
+      // stdout for backends/paths whose output isn't stream-json JSONL.
+      const decoded = extractAssistantText(stdout);
+      const searchText = decoded !== null ? decoded : stdout;
+      const match = /<<<HTML>>>([\s\S]*?)<<<END_HTML>>>/.exec(searchText);
       if (match) {
         resolve(match[1].trim());
       } else {
-        reject(new Error(`No <<<HTML>>> markers in output. First 300 chars: ${stdout.slice(0, 300)}`));
+        reject(new Error(`No <<<HTML>>> markers in output. First 300 chars: ${searchText.slice(0, 300)}`));
       }
     });
 
@@ -5012,4 +5020,5 @@ if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
   module.exports.__getPendingRetryTimerForTest = () => pendingRetryTimer;
   module.exports.__askMissionLiveForTest = (args) => askMissionLive(args, () => {});
   module.exports.__generateDebriefSummaryForTest = generateDebriefSummary;
+  module.exports.__runMockupHtmlForTest = runMockupHtml;
 }
