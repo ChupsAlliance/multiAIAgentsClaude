@@ -57,7 +57,8 @@ export function MissionHeader({ state, onStop, onNewMission, elapsed, onCreateQa
         {isStuckOnQaRetry && (
           <button
             onClick={onCreateQaFixMission}
-            className="px-3 py-1.5 text-sm rounded-md bg-amber-600 hover:bg-amber-700 text-white"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-vs-orange/15 text-vs-orange rounded-md
+                       text-xs font-mono hover:bg-vs-orange/25 transition-colors"
           >
             Stop &amp; create fix mission
           </button>
