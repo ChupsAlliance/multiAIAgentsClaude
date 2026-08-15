@@ -112,16 +112,45 @@ describe('create_qa_fix_mission', () => {
     expect(result.ok).toBe(false);
   });
 
+  test('rejects when status is Needs Attention but stuckReason does not match', async () => {
+    mission.__setMissionStateForTest({ id: 'm1', status: 'Needs Attention', stuckReason: 'escalation_ceiling' });
+    const handlerA = ipcHandlers.get('create_qa_fix_mission');
+    const resultA = await handlerA(null, {});
+    expect(resultA.ok).toBe(false);
+
+    mission.__setMissionStateForTest({ id: 'm2', status: 'Needs Attention', stuckReason: null });
+    const handlerB = ipcHandlers.get('create_qa_fix_mission');
+    const resultB = await handlerB(null, {});
+    expect(resultB.ok).toBe(false);
+  });
+
   test('stops the old mission, forks a new one, and seeds the prompt with QA failures and roster', async () => {
+    const fs = require('fs');
+    const os = require('os');
+    const path = require('path');
+
     const proc = makeFakeProc();
     nextFakeProc = proc;
-    mission.__setMissionStateForTest(stuckMissionState());
+    const oldMission = stuckMissionState();
+    mission.__setMissionStateForTest(oldMission);
+
+    const snapshotPath = path.join(os.homedir(), '.claude', 'agent-teams-snapshots', 'old-mission-1.json');
+    try { fs.unlinkSync(snapshotPath); } catch (_) {}
 
     const handler = ipcHandlers.get('create_qa_fix_mission');
     const result = await handler(null, {});
 
     expect(result.ok).toBe(true);
     expect(spawnCalls.length).toBe(1);
+
+    // Old mission must be stopped in-memory before the fork replaces missionState.
+    expect(oldMission.status).toBe('Stopped');
+
+    // saveMissionSnapshot() should have persisted the stopped old mission to disk.
+    const savedSnapshot = JSON.parse(fs.readFileSync(snapshotPath, 'utf8'));
+    expect(savedSnapshot.status).toBe('Stopped');
+    expect(savedSnapshot.id).toBe('old-mission-1');
+    try { fs.unlinkSync(snapshotPath); } catch (_) {}
 
     const newState = mission.__getMissionStateForTest();
     expect(newState.id).not.toBe('old-mission-1');
