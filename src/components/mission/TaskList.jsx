@@ -136,8 +136,12 @@ const TaskItem = memo(function TaskItem({ task, agentLogs }) {
     }
   }
 
-  const failureDetail = task.lastFailureDetail
-  const isExpandable = Boolean(failureDetail)
+  const history = task.failureHistory && task.failureHistory.length
+    ? task.failureHistory
+    : (task.lastFailureDetail ? [task.lastFailureDetail] : [])
+  const isExpandable = history.length > 0
+  const latestFailure = history[history.length - 1]
+  const historyMostRecentFirst = [...history].reverse()
 
   return (
     <div
@@ -183,7 +187,8 @@ const TaskItem = memo(function TaskItem({ task, agentLogs }) {
             <StuckBadge task={task} lastActivityAt={lastActivityAt} />
             {isExpandable && (
               <span className="text-[9px] font-mono text-vs-muted">
-                {expanded ? '▲' : '▼'} attempt {failureDetail.qcRound}/8
+                {expanded ? '▲' : '▼'} attempt {latestFailure.qcRound}/8
+                {history.length > 1 ? ` (${history.length} rounds)` : ''}
               </span>
             )}
           </div>
@@ -197,13 +202,20 @@ const TaskItem = memo(function TaskItem({ task, agentLogs }) {
           ↳ {currentAction}
         </p>
       )}
-      {expanded && failureDetail && (
-        <div className="mt-1.5 px-2 py-1.5 rounded bg-vs-red/5 border border-vs-red/20 text-[10px] font-mono">
-          <p className="text-vs-red">
-            {failureDetail.stage === 'qc' ? 'QC' : 'QA'} failed — attempt {failureDetail.qcRound}/8
-            {failureDetail.responsibleAgent ? ` (${failureDetail.responsibleAgent})` : ''}
-          </p>
-          <p className="text-vs-muted mt-1 whitespace-pre-wrap">{failureDetail.reason}</p>
+      {expanded && historyMostRecentFirst.length > 0 && (
+        <div className="mt-1.5 flex flex-col gap-1.5">
+          {historyMostRecentFirst.map((entry, i) => (
+            <div
+              key={`${entry.qcRound}-${entry.stage}-${i}`}
+              className="px-2 py-1.5 rounded bg-vs-red/5 border border-vs-red/20 text-[10px] font-mono"
+            >
+              <p className="text-vs-red">
+                {entry.stage === 'qc' ? 'QC' : 'QA'} failed — attempt {entry.qcRound}/8
+                {entry.responsibleAgent ? ` (${entry.responsibleAgent})` : ''}
+              </p>
+              <p className="text-vs-muted mt-1 whitespace-pre-wrap">{entry.reason}</p>
+            </div>
+          ))}
         </div>
       )}
     </div>

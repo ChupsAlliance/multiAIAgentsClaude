@@ -75,6 +75,36 @@ test('a task with lastFailureDetail reveals the failure reason when clicked', ()
   expect(screen.getAllByText(/attempt 2\/8/i).length).toBeGreaterThan(0)
 })
 
+test('a task with multi-round failureHistory shows every round, most-recent-first, when clicked', () => {
+  const tasks = [
+    {
+      id: 't7',
+      title: 'Widget rewrite',
+      status: 'failed_qc',
+      assigned_agent: 'Dev',
+      lastFailureDetail: {
+        stage: 'qc', reason: 'second failure', responsibleAgent: 'Dev',
+        qcRound: 2, timestamp: 200,
+      },
+      failureHistory: [
+        { stage: 'qc', reason: 'first failure', responsibleAgent: 'Dev', qcRound: 1, timestamp: 100 },
+        { stage: 'qc', reason: 'second failure', responsibleAgent: 'Dev', qcRound: 2, timestamp: 200 },
+      ],
+    },
+  ]
+  render(<TaskList tasks={tasks} logs={[]} />)
+
+  fireEvent.click(screen.getByText('Widget rewrite'))
+
+  expect(screen.getByText(/first failure/i)).toBeInTheDocument()
+  expect(screen.getByText(/second failure/i)).toBeInTheDocument()
+  expect(screen.getAllByText(/attempt 2\/8/i).length).toBeGreaterThan(0)
+  expect(screen.getByText(/\(2 rounds\)/i)).toBeInTheDocument()
+
+  const reasons = screen.getAllByText(/failure$/i).map(el => el.textContent)
+  expect(reasons).toEqual(['second failure', 'first failure'])
+})
+
 test('a task without lastFailureDetail is not clickable/expandable', () => {
   const tasks = [
     { id: 't6', title: 'Plain task', status: 'in_progress', assigned_agent: 'Dev' },

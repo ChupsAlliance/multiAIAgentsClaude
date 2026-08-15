@@ -255,6 +255,39 @@ describe('QC/QA per-task pipeline', () => {
       vi.useRealTimers()
     }
   })
+
+  test('failureHistory accumulates every round instead of overwriting', async () => {
+    vi.useFakeTimers()
+    try {
+      const sendToWindow = vi.fn()
+      mission.__setMissionStateForTest({
+        tasks: [{ id: 't1', title: 'Build it', status: 'pending_qc', assigned_agent: 'Dev', qcRound: 0 }],
+        agents: [{ name: 'Dev', status: 'Idle', current_task: null }],
+        log: [], project_path: '/tmp/proj',
+      })
+      mission.__setSendToWindowForTest(sendToWindow)
+      mission.__setQcQaRunnerForTest(async () => ({
+        verdict: 'FAIL', responsibleAgent: 'Dev', reason: 'first failure',
+      }))
+
+      await mission.__enqueueQcCheckForTest(mission.__getMissionStateForTest().tasks[0], 'Dev')
+      await vi.advanceTimersByTimeAsync(1000)
+
+      mission.__setQcQaRunnerForTest(async () => ({
+        verdict: 'FAIL', responsibleAgent: 'Dev', reason: 'second failure',
+      }))
+      await mission.__enqueueQcCheckForTest(mission.__getMissionStateForTest().tasks[0], 'Dev')
+      await vi.advanceTimersByTimeAsync(1000)
+
+      const state = mission.__getMissionStateForTest()
+      expect(state.tasks[0].failureHistory).toEqual([
+        { stage: 'qc', reason: 'first failure', responsibleAgent: 'Dev', qcRound: 1, timestamp: expect.any(Number) },
+        { stage: 'qc', reason: 'second failure', responsibleAgent: 'Dev', qcRound: 2, timestamp: expect.any(Number) },
+      ])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
 
 describe('runFinalQaSweep gating', () => {

@@ -91,6 +91,37 @@ test('a failed_qc update on an existing pending_qc task updates it in place', as
   expect(result.current.missionState.tasks[0].lastFailureDetail).toEqual({
     stage: 'qc', reason: 'x', responsibleAgent: 'Dev', qcRound: 1, timestamp: 6,
   })
+  expect(result.current.missionState.tasks[0].failureHistory).toEqual([
+    { stage: 'qc', reason: 'x', responsibleAgent: 'Dev', qcRound: 1, timestamp: 6 },
+  ])
+})
+
+test('failureHistory accumulates across rounds without duplicating on the retry bounce-back', async () => {
+  const result = await setupMissionWithOneTask()
+
+  act(() => {
+    emit('mission:task-update', {
+      agent: 'Dev', description: 'Build it', status: 'failed_qc',
+      reason: 'first', stage: 'qc', qcRound: 1, timestamp: 6,
+    })
+  })
+  act(() => {
+    emit('mission:task-update', {
+      agent: 'Dev', description: 'Build it', status: 'in_progress',
+      reason: 'first', stage: 'qc', qcRound: 1, timestamp: 7,
+    })
+  })
+  act(() => {
+    emit('mission:task-update', {
+      agent: 'Dev', description: 'Build it', status: 'failed_qc',
+      reason: 'second', stage: 'qc', qcRound: 2, timestamp: 8,
+    })
+  })
+
+  expect(result.current.missionState.tasks[0].failureHistory).toEqual([
+    { stage: 'qc', reason: 'first', responsibleAgent: 'Dev', qcRound: 1, timestamp: 6 },
+    { stage: 'qc', reason: 'second', responsibleAgent: 'Dev', qcRound: 2, timestamp: 8 },
+  ])
 })
 
 test('lastFailureDetail survives the retry bounce-back to in_progress', async () => {

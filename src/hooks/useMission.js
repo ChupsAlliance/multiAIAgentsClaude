@@ -404,6 +404,7 @@ export function useMission() {
 
             if (idx >= 0) {
               const tasks = [...prev.tasks]
+              const isFailureEvent = status === 'failed_qc' || status === 'failed_qa'
               tasks[idx] = {
                 ...tasks[idx],
                 status,
@@ -412,6 +413,12 @@ export function useMission() {
                 started_at: status === 'in_progress' ? timestamp : tasks[idx].started_at,
                 ...(reason ? {
                   lastFailureDetail: { stage, reason, responsibleAgent: agentName, qcRound, timestamp },
+                } : {}),
+                ...(isFailureEvent ? {
+                  failureHistory: [
+                    ...(tasks[idx].failureHistory || []),
+                    { stage, reason, responsibleAgent: agentName, qcRound, timestamp },
+                  ],
                 } : {}),
               }
               return { ...prev, tasks }
