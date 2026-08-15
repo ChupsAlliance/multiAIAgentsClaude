@@ -8,6 +8,37 @@
 
 export const changelog = [
   {
+    version: '0.16.0',
+    date: '2026-08-16',
+    title: 'Gỡ kẹt mission "Needs Attention" + xem chi tiết QC/QA failure theo từng vòng',
+    highlights: [
+      'Mission kẹt ở "Needs Attention" sau khi auto-resume final-QA hết 3 lần giờ có nút "Stop & create fix mission" — fork 1 mission mới chỉ tập trung sửa đúng các task đã fail, kèm lý do fail thật sự',
+      'Xem trực tiếp lý do QC/QA fail ngay trên dashboard khi mission đang chạy: click vào task để mở chi tiết, có badge đếm số task đang fail',
+      'Lịch sử fail được lưu đầy đủ theo từng vòng (round-by-round), không chỉ vòng gần nhất — xem lại được cả trong mission đang chạy lẫn sau khi đã xong',
+      'Thêm toggle headed/headless cho Playwright khi QA chạy kiểm tra',
+    ],
+    items: [
+      { type: 'added', badge: 'Agent',
+        text: 'Nút "Stop & create fix mission": xuất hiện khi mission "Needs Attention" vì auto-resume final-QA đã hết 3 lần thử — dừng mission cũ và fork ngay 1 mission mới, prompt chỉ chứa các task đã fail QA kèm lý do, để agent tập trung sửa đúng vấn đề thay vì lặp lại toàn bộ context cũ đã cạn' },
+      { type: 'added', badge: 'Agent',
+        text: 'Phân biệt rõ nguyên nhân "Needs Attention" qua stuck_reason (final_qa_retry_exhausted so với per-task escalation ceiling) — trạng thái được đánh dấu đúng, lưu bền trên đĩa (snapshot), và không còn bị crash-recovery scan hiểu nhầm là mission bị crash' },
+      { type: 'added', badge: 'Dashboard',
+        text: 'Click vào 1 task để mở/đóng chi tiết QC/QA failure ngay trên dashboard đang chạy (stage, agent chịu trách nhiệm, lý do fail) — không cần đợi mission xong mới xem được' },
+      { type: 'added', badge: 'Dashboard',
+        text: 'Badge đếm số task đang failed_qc/failed_qa trên header mission, click để nhảy thẳng tới danh sách task' },
+      { type: 'added', badge: 'Dashboard',
+        text: 'Lịch sử fail theo từng vòng (failureHistory): mỗi lần QC/QA fail được lưu thành 1 entry riêng thay vì ghi đè lên lần trước — panel chi tiết giờ liệt kê đủ mọi vòng, mới nhất trước, cả trong mission đang chạy lẫn khi xem lại lịch sử' },
+      { type: 'added', badge: 'Agent',
+        text: 'Toggle headed/headless cho Playwright khi QA-Agent chạy kiểm tra giao diện — hỗ trợ debug trực quan khi cần' },
+      { type: 'fixed', badge: 'Agent',
+        text: 'stream-json stdout của runMockupHtml bị đọc ở dạng thô (JSON-escaped) khi tìm marker HTML, làm hỏng mockup render ra — giờ decode đúng trước khi match marker' },
+      { type: 'fixed', badge: 'Agent',
+        text: 'stuckReason không tự xoá khi mission được resume/retry thủ công, khiến trạng thái cũ còn sót lại trên UI — giờ xoá đúng lúc và cập nhật renderer ngay khi mission:status phát ra, không cần reload' },
+      { type: 'fixed', badge: 'Dashboard',
+        text: 'Mission "Needs Attention" (không phải do crash) từng bị crash-recovery scan liệt kê nhầm vào danh sách mission bị crash — đã loại trừ đúng' },
+    ],
+  },
+  {
     version: '0.15.0',
     date: '2026-08-12',
     title: 'Vá 8 vấn đề nghiêm trọng (bao gồm 1 lỗi command injection) + thêm CI pipeline',

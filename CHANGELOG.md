@@ -10,6 +10,28 @@ Format dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.16.0] — 2026-08-16
+
+### Thêm mới — Gỡ kẹt mission "Needs Attention" (final-QA auto-resume exhausted)
+
+- **Nút "Stop & create fix mission"**: khi mission chuyển "Needs Attention" vì `autoResumeAfterFinalQaFailure` đã tự thử resume 3 lần liên tiếp mà vẫn không đạt `Completed`, dashboard giờ hiện nút riêng để dừng mission cũ và fork ngay 1 mission fix-only mới — prompt của mission mới chỉ chứa các task đã fail QA cùng lý do fail thật sự, thay vì bắt agent lặp lại toàn bộ context của mission cũ đã cạn.
+- **`stuck_reason` durable và chính xác**: trạng thái kẹt giờ được đánh dấu rõ nguyên nhân (`final_qa_retry_exhausted` so với per-task escalation ceiling), lưu bền vào snapshot ngay tại thời điểm give-up (trước đây `autosave` đã tắt nên có thể mất), và cập nhật live trên renderer qua `mission:status` — không cần reload để thấy.
+- **Loại trừ khỏi crash-recovery scan**: mission "Needs Attention" do dừng có chủ đích (không phải crash) không còn bị `get_incomplete_missions` liệt kê nhầm vào danh sách mission bị crash.
+- **Xoá `stuckReason` đúng lúc khi resume/retry thủ công**: tránh badge/trạng thái cũ còn sót lại trên UI sau khi mission đã được resume.
+
+### Thêm mới — Xem chi tiết QC/QA failure, theo từng vòng
+
+- **Click-to-expand trên dashboard đang chạy**: click vào 1 task để mở/đóng panel chi tiết QC/QA failure (stage, agent chịu trách nhiệm, lý do) ngay khi mission còn đang chạy, không cần đợi xong.
+- **Badge đếm task đang fail**: header mission hiện số lượng task `failed_qc`/`failed_qa`, click để nhảy tới danh sách task.
+- **`failureHistory` — lịch sử đầy đủ theo từng vòng**: mỗi lần QC/QA fail giờ được append thành 1 entry riêng (stage, lý do, agent, số vòng, thời điểm) thay vì ghi đè lên lần fail trước — panel chi tiết liệt kê mọi vòng, mới nhất trước. Áp dụng cho cả dashboard đang chạy lẫn màn hình xem lại lịch sử mission (dùng chung 1 component `TaskList`), có fallback cho mission cũ tạo trước khi field này tồn tại.
+- **Toggle headed/headless cho Playwright**: khi QA-Agent chạy kiểm tra giao diện, giờ có thể chọn chạy headed để debug trực quan.
+
+### Sửa lỗi
+
+- **`runMockupHtml` đọc nhầm stdout thô**: Claude CLI luôn chạy với `--output-format stream-json`, nên stdout là JSONL đã JSON-escape newline/quote. Việc match marker HTML trực tiếp trên stdout thô bắt phải dạng đã escape, làm hỏng mockup render ra — đã decode đúng trước khi match.
+
+---
+
 ## [0.15.0] — 2026-08-12
 
 ### Sửa lỗi — 8 vấn đề nghiêm trọng (Critical Issues Review)
