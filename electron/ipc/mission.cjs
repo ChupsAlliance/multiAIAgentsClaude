@@ -436,6 +436,7 @@ function retryAgentCore(agentName, sendToWindow) {
 
   if (missionState.status === 'Needs Attention') {
     missionState.status = 'Running';
+    missionState.stuckReason = null;
     sendToWindow('mission:status', { mission_id: missionState.id, status: 'Running' });
   }
 

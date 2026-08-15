@@ -116,6 +116,26 @@ describe('autoResumeAfterFinalQaFailure', () => {
     )).toBe(true)
   })
 
+  test('retryAgentCore clears stuckReason set by the auto-resume give-up branch', () => {
+    const sendToWindow = vi.fn()
+    setupMissionState({
+      autoResumeCount: 4,
+      status: 'Needs Attention',
+      stuckReason: 'final_qa_retry_exhausted',
+      agents: [
+        { name: 'Lead', status: 'Done', model: 'sonnet', current_task: null },
+        { name: 'Dev', status: 'Working', current_task: 'Implement feature', error: null },
+      ],
+    })
+    mission.__setSendToWindowForTest(sendToWindow)
+
+    mission.__retryAgentForTest('Dev')
+
+    const state = mission.__getMissionStateForTest()
+    expect(state.stuckReason).toBe(null)
+    expect(state.status).toBe('Running')
+  })
+
   test('autoResumeCount resets to 0 after retryAgentCore', () => {
     const sendToWindow = vi.fn()
     setupMissionState({
