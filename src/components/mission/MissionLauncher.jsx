@@ -87,6 +87,9 @@ export function MissionLauncher({ onLaunch, isRecording, onToggleRecording }) {
   const [permissionMode, setPermissionMode] = useState(() =>
     localStorage.getItem('permission_mode') || 'auto'
   )
+  const [qaHeadedMode, setQaHeadedMode] = useState(() =>
+    localStorage.getItem('qa_headed_mode') === 'true'
+  )
   const [launching, setLaunching] = useState(false)
   const [history, setHistory] = useState([])
   const [showPrompt, setShowPrompt] = useState(false)
@@ -374,7 +377,7 @@ export function MissionLauncher({ onLaunch, isRecording, onToggleRecording }) {
         }
       }).catch(() => {})
 
-      await onLaunch({ projectPath, prompt, description: requirement, model, backend, executionMode, permissionMode })
+      await onLaunch({ projectPath, prompt, description: requirement, model, backend, executionMode, permissionMode, qaHeadedMode })
     } catch (err) {
       console.error('Launch failed:', err)
       toast.error(`Launch thất bại: ${err.message || 'Lỗi không xác định'}`)
@@ -808,6 +811,22 @@ export function MissionLauncher({ onLaunch, isRecording, onToggleRecording }) {
               🧠 Lead sẽ hỏi 3–5 câu clarifying questions trước khi lên plan. Mỗi câu hỏi hiện trong QuestionCard — bạn trả lời, Lead hỏi tiếp hoặc lên plan ngay. Tốn thêm ~1–2 phút nhưng plan và sub-agent prompts sẽ chính xác hơn.
             </p>
           )}
+          <button
+            onClick={() => {
+              setQaHeadedMode(v => {
+                const next = !v
+                localStorage.setItem('qa_headed_mode', String(next))
+                return next
+              })
+            }}
+            className="w-full flex items-center gap-2 text-[10px] font-mono text-vs-muted hover:text-vs-text transition-colors px-3 py-2 rounded-lg border border-vs-border bg-vs-bg hover:border-vs-text/30"
+          >
+            <div className={`relative w-7 h-3.5 rounded-full transition-colors shrink-0 ${qaHeadedMode ? 'bg-vs-accent' : 'bg-vs-border'}`}>
+              <div className={`absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white transition-transform ${qaHeadedMode ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+            </div>
+            {qaHeadedMode ? <Eye size={11} className="text-vs-accent shrink-0" /> : <EyeOff size={11} className="shrink-0" />}
+            <span className={qaHeadedMode ? 'text-vs-accent' : ''}>Hiện browser khi chạy QA test</span>
+          </button>
         </div>
 
         {/* Team size */}

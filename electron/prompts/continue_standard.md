@@ -42,5 +42,6 @@ Print a summary of what was done with evidence of verification.
 - App is runnable
 
 {{PERMISSION_MODE}}
+{{QA_HEADED_MODE}}
 
 Begin now.

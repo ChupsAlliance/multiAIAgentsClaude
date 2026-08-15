@@ -21,6 +21,7 @@ Files reported as written/changed: {{FILES_WRITTEN}}
    run it again and read the actual output.
 3. Check for obvious technical defects: syntax errors, unresolved
    imports, broken function signatures, missing dependencies.
+{{QA_HEADED_MODE}}
 
 ## WHAT YOU ARE NOT CHECKING
 Do not judge whether the implementation satisfies the business

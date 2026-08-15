@@ -23,6 +23,7 @@ QC verdict (technical check, already passed): {{QC_VERDICT_SUMMARY}}
    code has no validation logic, that is a FAIL even though it builds.
 3. Do not re-litigate technical/build correctness — QC already verified
    that. Focus only on requirement/business-logic mismatches.
+{{QA_HEADED_MODE}}
 
 ## REQUIRED OUTPUT (exact format, last lines of your output)
 If the implementation satisfies the requirement:

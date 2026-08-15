@@ -63,5 +63,6 @@ When all teammates have reported completion OR been reassigned/timed out:
 - App is runnable
 
 {{PERMISSION_MODE}}
+{{QA_HEADED_MODE}}
 
 Begin now.

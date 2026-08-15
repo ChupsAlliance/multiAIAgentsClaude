@@ -156,5 +156,6 @@ When ALL agents have reported completion OR been reassigned/timed out:
 - README.md exists
 
 {{PERMISSION_MODE}}
+{{QA_HEADED_MODE}}
 
 Begin now.

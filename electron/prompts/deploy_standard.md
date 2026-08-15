@@ -134,5 +134,6 @@ After all agents report PASS:
 - README.md exists
 
 {{PERMISSION_MODE}}
+{{QA_HEADED_MODE}}
 
 Begin now. Spawn all agents in parallel.

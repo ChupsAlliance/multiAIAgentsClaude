@@ -624,7 +624,7 @@ export function useMission() {
     }
   }, [flushBuffers, scheduleFlush, startPlanningTimer, clearPlanningTimer])
 
-  const launch = useCallback(async ({ projectPath, prompt, description, model, backend, executionMode, historyContext, permissionMode }) => {
+  const launch = useCallback(async ({ projectPath, prompt, description, model, backend, executionMode, historyContext, permissionMode, qaHeadedMode }) => {
     setPlanReady(null)
     setPendingQuestions(null)
     try {
@@ -637,6 +637,7 @@ export function useMission() {
         executionMode: executionMode || 'standard',
         historyContext: historyContext || '',
         permissionMode: permissionMode || 'auto',
+        qaHeadedMode: !!qaHeadedMode,
       })
       setMissionState(initialState)
       setIsRunning(true)

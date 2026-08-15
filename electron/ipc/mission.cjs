@@ -315,6 +315,7 @@ function enqueueQcCheck(task, agent) {
     FILES_WRITTEN: (task.files_written || []).join(', ') || '(none reported)',
     BUILD_HINT: detectProjectType(missionState.project_path || '.'),
     RESPONSIBLE_AGENT: agent,
+    QA_HEADED_MODE: buildQaHeadedModeSection(missionState.qa_headed_mode),
   });
 
   qcQaRunner({
@@ -351,6 +352,7 @@ function enqueueQaCheck(task, agent, _qcVerdict) {
     QC_VERDICT_SUMMARY: 'PASS',
     RESPONSIBLE_AGENT: agent,
     SCOPE_NOTE: '',
+    QA_HEADED_MODE: buildQaHeadedModeSection(missionState.qa_headed_mode),
   });
 
   qcQaRunner({
@@ -550,6 +552,7 @@ function runFinalQaSweepCore() {
       QC_VERDICT_SUMMARY: 'N/A — every task already passed its own QC/QA',
       RESPONSIBLE_AGENT: '(see REASON — name the specific agent at fault)',
       SCOPE_NOTE: 'This is the FINAL WHOLE-PICTURE review: judge the mission as an integrated whole, not one task in isolation. Look specifically for cross-task mismatches (e.g. backend and frontend each correct alone but not correctly wired together).',
+      QA_HEADED_MODE: buildQaHeadedModeSection(missionState.qa_headed_mode),
     });
 
     return qcQaRunner({
@@ -801,6 +804,20 @@ RULES:
 You are running in autonomous mode. Make all decisions independently.
 Choose the most optimal approach that best fits the current project architecture.
 Do NOT output <<<QUESTION>>> markers.
+`;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// buildQaHeadedModeSection — prompt injection to run Playwright/E2E
+// tests with a visible browser window instead of the default headless run.
+// ─────────────────────────────────────────────────────────────────
+function buildQaHeadedModeSection(headed) {
+  if (!headed) return '';
+  return `
+## HEADED BROWSER MODE
+When running Playwright/E2E tests, always add the \`--headed\` flag (e.g.
+\`npx playwright test --headed\`) so the browser window is visible during
+test execution instead of running in the background.
 `;
 }
 
@@ -3662,7 +3679,7 @@ module.exports = function registerMission(getMainWindow) {
 
   // ── launch_mission ─────────────────────────────────────────────
   ipcMain.handle('launch_mission', async (_event, args) => {
-    const { projectPath, prompt, description, model, executionMode, historyContext, permissionMode, team_size, backend } = args || {};
+    const { projectPath, prompt, description, model, executionMode, historyContext, permissionMode, qaHeadedMode, team_size, backend } = args || {};
 
     // Prevent double-launch
     if (missionState &&
@@ -3685,6 +3702,7 @@ module.exports = function registerMission(getMainWindow) {
     const modelArg  = model || 'sonnet';
     const execMode  = executionMode || 'standard';
     const permMode  = permissionMode || 'auto';
+    const qaHeaded  = !!qaHeadedMode;
 
     // Build "previous work" summary if continuing from history
     let previousWorkSection = '';
@@ -3738,6 +3756,7 @@ module.exports = function registerMission(getMainWindow) {
       messages: [],
       execution_mode: execMode,
       permission_mode: permMode,
+      qa_headed_mode: qaHeaded,
       team_size: team_size !== undefined ? team_size : null,
       question_history: [],
       plan_versions: [],
@@ -3951,12 +3970,14 @@ module.exports = function registerMission(getMainWindow) {
 
     // Build deploy prompt — substitute static vars first, user content last
     const permModeSection = buildPermissionModeSection(missionState.permission_mode);
+    const qaHeadedSection = buildQaHeadedModeSection(missionState.qa_headed_mode);
     const deployPrompt = (execMode === 'agent_teams' ? PROMPT_DEPLOY_AGENT_TEAMS : PROMPT_DEPLOY_STANDARD)
       .replace('{{PROJECT_PATH}}', proj)
       .replace('{{PROJECT_TYPE}}', projectTypeHint)
       .replace('{{LANG_RULE}}',    viRule)
       .replace('{{TOTAL_AGENTS}}', total)
       .replace('{{PERMISSION_MODE}}', permModeSection)
+      .replace('{{QA_HEADED_MODE}}', qaHeadedSection)
       .replace('{{SPAWN_WAVES}}', spawnWavesStr)
       .replace('{{AGENT_BLOCKS}}', agentsStr);  // last — user content may contain {{ }}
 
@@ -4082,6 +4103,7 @@ module.exports = function registerMission(getMainWindow) {
         phase:           'Deploying',
         execution_mode:  forkedExecMode,
         permission_mode: historyState.permission_mode || 'auto',
+        qa_headed_mode:  historyState.qa_headed_mode || false,
         backend:         forkedBackend,
         question_history: [],
         started_at:      ts,
@@ -4161,10 +4183,14 @@ module.exports = function registerMission(getMainWindow) {
     const contPermModeSection = buildPermissionModeSection(
       missionState ? missionState.permission_mode : 'auto'
     );
+    const contQaHeadedSection = buildQaHeadedModeSection(
+      missionState ? missionState.qa_headed_mode : false
+    );
     const continuePrompt = continueTemplate
       .replace('{{PROJECT_PATH}}', projectPath.replace(/\\/g, '/'))
       .replace('{{PROJECT_TYPE}}', projectTypeHint)
       .replace('{{PERMISSION_MODE}}', contPermModeSection)
+      .replace('{{QA_HEADED_MODE}}', contQaHeadedSection)
       .replace('{{SUMMARY}}', completedSummary || 'No previous work recorded.')
       .replace('{{MESSAGE}}', message);
 
@@ -4239,6 +4265,7 @@ module.exports = function registerMission(getMainWindow) {
     const oldProjectPath = oldState.project_path || '';
     const oldExecMode = oldState.execution_mode || 'standard';
     const oldPermissionMode = oldState.permission_mode || 'auto';
+    const oldQaHeadedMode = oldState.qa_headed_mode || false;
     const oldBackend = oldState.backend || 'claude';
     const oldAgents = oldState.agents || [];
     const oldLeadAgent = oldAgents.find(a => a.name === 'Lead') || {};
@@ -4283,6 +4310,7 @@ module.exports = function registerMission(getMainWindow) {
       phase:           'Deploying',
       execution_mode:  oldExecMode,
       permission_mode: oldPermissionMode,
+      qa_headed_mode:  oldQaHeadedMode,
       backend:         oldBackend,
       question_history: [],
       started_at:      ts,
@@ -4315,10 +4343,12 @@ module.exports = function registerMission(getMainWindow) {
     // 4. Build the fix-only prompt and spawn.
     const projectTypeHint = detectProjectTypeCont(oldProjectPath);
     const permModeSection = buildPermissionModeSection(oldPermissionMode);
+    const qaHeadedSection = buildQaHeadedModeSection(oldQaHeadedMode);
     const fixPrompt = PROMPT_FIX_QA_FAILURES
       .replace('{{PROJECT_PATH}}', oldProjectPath.replace(/\\/g, '/'))
       .replace('{{PROJECT_TYPE}}', projectTypeHint)
       .replace('{{PERMISSION_MODE}}', permModeSection)
+      .replace('{{QA_HEADED_MODE}}', qaHeadedSection)
       .replace('{{SUMMARY}}', oldSummary || 'No previous work recorded.')
       .replace('{{QA_FAILURES}}', qaFailuresSection)
       .replace('{{PRIOR_ROSTER}}', priorRosterSection);
@@ -5207,4 +5237,12 @@ if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
   module.exports.__buildMissionSummaryForTest = (state, logLimit) => buildMissionSummary(state, logLimit);
   module.exports.__buildQaFailuresSectionForTest = (tasks) => buildQaFailuresSection(tasks);
   module.exports.__buildPriorRosterSectionForTest = (agents) => buildPriorRosterSection(agents);
+  module.exports.__buildPermissionModeSectionForTest = (mode) => buildPermissionModeSection(mode);
+  module.exports.__buildQaHeadedModeSectionForTest = (headed) => buildQaHeadedModeSection(headed);
+  // Unlike __enqueueQcCheckForTest (a hardcoded double that predates
+  // QA_HEADED_MODE and does not fill it), these call the REAL production
+  // functions so tests can assert on the exact prompt agents receive.
+  module.exports.__enqueueQcCheckRealForTest = (task, agent) => enqueueQcCheck(task, agent);
+  module.exports.__enqueueQaCheckRealForTest = (task, agent, qcVerdict) => enqueueQaCheck(task, agent, qcVerdict);
+  module.exports.__runFinalQaSweepCoreForTest = () => runFinalQaSweepCore();
 }
