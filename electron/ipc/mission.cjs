@@ -86,6 +86,7 @@ const PROMPT_CONTINUE_STANDARD = fs.readFileSync(promptPath('continue_standard.m
 const PROMPT_REPLAN = fs.existsSync(promptPath('replan.md'))
   ? fs.readFileSync(promptPath('replan.md'), 'utf8')
   : null;
+const PROMPT_FIX_QA_FAILURES = fs.readFileSync(promptPath('fix_qa_failures.md'), 'utf8');
 
 // ── Module-level state (equivalent to Rust's MissionManager) ───
 let missionState  = null;   // Option<MissionState>
@@ -4219,6 +4220,150 @@ module.exports = function registerMission(getMainWindow) {
     attemptSpawnContinue(1, null);
 
     return null; // Ok(())
+  });
+
+  // ── create_qa_fix_mission ───────────────────────────────────────
+  // Stops a mission stuck in the final-QA-retry-exhausted state and forks a
+  // fresh "fix-only" mission seeded with the QA failure details and the
+  // prior agent roster (Lead only — Devs are recreated by the fix prompt).
+  ipcMain.handle('create_qa_fix_mission', async () => {
+    if (!missionState || missionState.status !== 'Needs Attention' ||
+        missionState.stuckReason !== 'final_qa_retry_exhausted') {
+      return { ok: false, error: 'Mission is not in the final-QA-retry-exhausted stuck state' };
+    }
+
+    // 1. Snapshot the old mission's relevant fields before cleanup mutates them.
+    const oldState = missionState;
+    const oldId = oldState.id;
+    const oldDesc = oldState.description || '';
+    const oldProjectPath = oldState.project_path || '';
+    const oldExecMode = oldState.execution_mode || 'standard';
+    const oldPermissionMode = oldState.permission_mode || 'auto';
+    const oldBackend = oldState.backend || 'claude';
+    const oldAgents = oldState.agents || [];
+    const oldLeadAgent = oldAgents.find(a => a.name === 'Lead') || {};
+    const oldLeadModel = oldLeadAgent.model || 'sonnet';
+    const oldLeadBackend = oldLeadAgent.backend || oldBackend;
+    let oldSummary = buildMissionSummary(oldState);
+    if (oldSummary.length > 40_000) {
+      oldSummary = oldSummary.slice(0, 40_000) + '\n... (context truncated to fit API limits)';
+    }
+    const qaFailuresSection = buildQaFailuresSection(oldState.tasks);
+    const priorRosterSection = buildPriorRosterSection(oldAgents);
+
+    // 2. Reuse stop_mission's cleanup; mark the OLD mission Stopped and snapshot it.
+    discardActiveRecording();
+    stopWatcher();
+    stopAutosave();
+    stopStuckChecker();
+    clearAgentTeamsTimer();
+    clearPendingRetryTimer();
+    killChild();
+    for (const server of Object.values(mockupServers)) {
+      try { server.close(); } catch { /* ignore */ }
+    }
+    Object.keys(mockupServers).forEach(k => delete mockupServers[k]);
+
+    oldState.status = 'Stopped';
+    for (const a of oldState.agents) {
+      if (a.status === 'Working' || a.status === 'Spawning') {
+        a.status = 'Idle';
+        a.current_task = null;
+      }
+    }
+    saveMissionSnapshot(oldState);
+
+    // 3. Create the new missionState, forked from the old one.
+    const ts = now();
+    missionState = {
+      id:              `mission-${ts}`,
+      description:     oldDesc,
+      project_path:    oldProjectPath,
+      status:          'Running',
+      phase:           'Deploying',
+      execution_mode:  oldExecMode,
+      permission_mode: oldPermissionMode,
+      backend:         oldBackend,
+      question_history: [],
+      started_at:      ts,
+      ended_at:        null,
+      forked_from:     oldId,
+      forked_from_desc: oldDesc,
+      agents: [{
+        name: 'Lead', role: 'Orchestrator',
+        status: 'Working', current_task: 'Starting QA fix mission...',
+        model: oldLeadModel, spawned_at: ts, model_reason: null,
+        backend: oldLeadBackend,
+      }],
+      tasks:           [],
+      log:             [makeLogEntry(ts, 'System', `QA fix mission forked from stuck mission: ${oldId}`, 'info')],
+      file_changes:    [],
+      raw_output:      [],
+      messages:        [],
+      team_name:       null,
+    };
+
+    sendToWindow('mission:agent-spawned', {
+      agent_name: 'Lead', role: 'Orchestrator', timestamp: ts, reset: true,
+    });
+    sendToWindow('mission:log', {
+      timestamp: ts, agent: 'System',
+      message: `QA fix mission forked from stuck mission: ${oldId}`, log_type: 'info',
+    });
+    sendToWindow('mission:status', { status: 'running', mission_id: missionState.id, forked_from: oldId });
+
+    // 4. Build the fix-only prompt and spawn.
+    const projectTypeHint = detectProjectTypeCont(oldProjectPath);
+    const permModeSection = buildPermissionModeSection(oldPermissionMode);
+    const fixPrompt = PROMPT_FIX_QA_FAILURES
+      .replace('{{PROJECT_PATH}}', oldProjectPath.replace(/\\/g, '/'))
+      .replace('{{PROJECT_TYPE}}', projectTypeHint)
+      .replace('{{PERMISSION_MODE}}', permModeSection)
+      .replace('{{SUMMARY}}', oldSummary || 'No previous work recorded.')
+      .replace('{{QA_FAILURES}}', qaFailuresSection)
+      .replace('{{PRIOR_ROSTER}}', priorRosterSection);
+
+    const fixBackend = agentBackendOf(missionState.agents.find(a => a.name === 'Lead'));
+    const attemptSpawnFix = (attempt, resumeSessionId) => {
+      const { proc, promptViaStdin } = spawnAgentProcess({
+        backendId: fixBackend, model: oldLeadModel, prompt: fixPrompt,
+        resumeSessionId, maxTurns: 200, useAgentTeams: true,
+        cwd: oldProjectPath, sendToWindow,
+      });
+
+      try {
+        if (!resumeSessionId && promptViaStdin) {
+          proc.stdin.write(fixPrompt, 'utf8');
+        }
+        proc.stdin.end();
+      } catch (e) {
+        const entry = makeLogEntry(now(), 'System', `Failed to write QA fix prompt: ${e.message}`, 'error');
+        if (missionState) missionState.log.push(entry);
+        sendToWindow('mission:log', entry);
+        return;
+      }
+
+      childProcess = proc;
+      if (missionState) missionState.phase = 'Executing';
+      startAutosave();
+      startStuckChecker(sendToWindow, false);
+      startFileWatcher(oldProjectPath, sendToWindow);
+
+      const attemptCtx = { stdoutText: '', stderrText: '', sessionId: null, backend: fixBackend };
+      const missionIdForWatch = missionState ? missionState.id : 'unknown';
+      const retryInfo = {
+        attemptCtx, attempt, maxAttempts: 3, backoffMs: [30000, 60000, 120000],
+        retrySpawn: (nextAttempt, nextSessionId) => attemptSpawnFix(nextAttempt, nextSessionId),
+      };
+      attemptCtx.retryInfo = retryInfo;
+
+      readProcessStdout_deploy(proc, sendToWindow, true, attemptCtx);
+      readProcessStderr(proc, sendToWindow, attemptCtx);
+      watchProcessExit_deploy(proc, missionIdForWatch, sendToWindow, retryInfo);
+    };
+    attemptSpawnFix(1, null);
+
+    return { ok: true, mission_id: missionState.id };
   });
 
   // ── answer_question ─────────────────────────────────────────
